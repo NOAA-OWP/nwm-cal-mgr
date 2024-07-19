@@ -28,6 +28,7 @@ unit-test-job:
     - echo "Running unit tests..."
     - docker start ngen-cal-build-container
     - docker exec ngen-cal-build-container bash -c "
+        export LD_LIBRARY_PATH=/ngen-app/opt/lib:$LD_LIBRARY_PATH &&
         source /ngen-app/ngen-cal-python/bin/activate &&
         cd /ngen-app/ngen-cal &&
         pytest --log-cli-level 0 ./python/ngen_cal/tests/ &&
