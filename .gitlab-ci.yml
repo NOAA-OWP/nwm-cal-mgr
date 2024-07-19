@@ -30,8 +30,8 @@ unit-test-job:
     - docker exec ngen-cal-build-container bash -c "
         source /ngen-app/ngen-cal-python/bin/activate &&
         cd /ngen-app/ngen-cal &&
-        pytest --log-cli-level 0 ./python/ngen_cal/tests/
-        pytest --log-cli-level 0 ./python/ngen_conf/tests/
+        pytest --log-cli-level 0 ./python/ngen_cal/tests/ &&
+        pytest --log-cli-level 0 ./python/ngen_conf/tests/ &&
         pytest --log-cli-level 0 ./python/ngen_init_config/test/""
     - echo "Unit tests complete"
 
