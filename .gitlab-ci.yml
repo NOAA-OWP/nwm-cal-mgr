@@ -1,0 +1,113 @@
+# GitLab CI/CD configuration file for ngen-cal repository
+
+stages:
+  - build
+  - unit_test
+  - sonarqube
+  - deploy_test
+  - ver_test
+  - deploy_oe
+
+build-job:
+  stage: build
+  script:
+    - echo "Building NGEN-cal..."
+    - sudo chmod 666 /var/run/docker.sock
+    - docker rm -f ngen-cal-build-container || true
+    - docker run --name ngen-cal-build-container -v .:/ngen-app/ngen-cal -e GITLAB_TOKEN=$GITLAB_TOKEN rockylinux:8 bash -c "cd /ngen-app/ngen-cal &&
+        ./scripts/build.sh"
+    - sudo chown -R `whoami` .
+    - tar -czf ../ngen-cal.tar.gz .
+    - echo "Build complete." 
+
+unit-test-job:
+  stage: unit_test
+  variables:
+    GIT_STRATEGY: none
+  script:
+    - echo "Running unit tests..."
+    - docker start ngen-cal-build-container
+    - docker exec ngen-cal-build-container bash -c "
+        source /ngen-app/ngen-cal-python/bin/activate &&
+        cd /ngen-app/ngen-cal &&
+        pytest --log-cli-level 0 ./python/ngen_cal/tests/
+        pytest --log-cli-level 0 ./python/ngen_conf/tests/
+        pytest --log-cli-level 0 ./python/ngen_init_config/test/""
+    - echo "Unit tests complete"
+
+sonarqube-job:
+  stage: sonarqube
+  variables:
+    GIT_STRATEGY: none
+  image: 
+    name: sonarsource/sonar-scanner-cli:latest
+    entrypoint: [""]
+  variables:
+    SONAR_USER_HOME: "${CI_PROJECT_DIR}/.sonar"  # Defines the location of the analysis task cache
+    GIT_DEPTH: "0"  # Tells git to fetch all the branches of the project, required by the analysis task
+  cache:
+    key: "${CI_JOB_NAME}"
+    paths:
+      - .sonar/cache
+  script: 
+    - echo "Running Sonarqube scan..."
+    - ~/sonar-scanner-4.8.0.2856-linux/bin/sonar-scanner
+
+deploy-test-job:
+  stage: deploy_test
+  variables:
+    GIT_STRATEGY: none
+  environment: test # NGEN_TEST_COPY
+  before_script:
+    - chmod 400 $SSH_KEY
+    - ssh-agent
+  script:
+    - echo "Deploying NGEN-cal to TEST..."
+    - ssh -o StrictHostKeyChecking=no -i $SSH_KEY christina.osumi@10.105.130.50 "
+        sudo rm -rf /ngen-app/archive/ngen-cal || true &&
+        sudo mv /ngen-app/ngen-cal /ngen-app/archive || true &&
+        sudo mkdir -p /ngen-app/ngen-cal &&
+        sudo chown -R `whoami` /ngen-app/ngen-cal"
+    - scp ../ngen-cal.tar.gz christina.osumi@10.105.130.50:/ngen-app/ngen-cal
+    - ssh -o StrictHostKeyChecking=no -i $SSH_KEY christina.osumi@10.105.130.50 "
+        cd /ngen-app/ngen-cal &&
+        tar -xzf ngen-cal.tar.gz . &&
+        rm ngen-cal.tar.gz"
+    - echo "NGEN-cal deployed to TEST"
+#  rules:
+#    - if: '$CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "development" && $CI_MERGE_REQUEST_STATE == "merged"'
+
+ver-test-job:
+  stage: ver_test
+  variables:
+    GIT_STRATEGY: none
+  before_script:
+    - chmod 400 $SSH_KEY
+    - ssh-agent
+  script:
+    - echo "Running verification tests..."
+    # If there are any automated tests to run, add them there
+  rules:
+    - if: '$CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "development" && $CI_MERGE_REQUEST_STATE == "merged"'
+
+deploy-oe-job:
+  stage: deploy_oe
+  when: manual
+  variables:
+    GIT_STRATEGY: none
+  environment: oe # NGEN-HYDRO-OE
+  before_script:
+    - chmod 400 $SSH_KEY
+    - ssh-agent
+  script:
+    - echo "Deploying NGEN-cal to OE..."
+    - scp ../ngen-cal.tar.gz christina.osumi@10.203.104.196:~/ngen-app
+    - ssh -o StrictHostKeyChecking=no -i $SSH_KEY christina.osumi@10.203.104.196 "
+        cd ~/ngen-app &&
+        rm -rf ngen-cal &&
+        mkdir -p ngen-cal &&
+        tar -xzf ngen-cal.tar.gz -C ngen-cal &&
+        rm ngen-cal.tar.gz"
+    - echo "NGEN-cal deployed to OE"
+  rules:
+    - if: '$CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "development" && $CI_MERGE_REQUEST_STATE == "merged"'
