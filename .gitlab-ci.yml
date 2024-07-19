@@ -34,6 +34,7 @@ unit-test-job:
         pytest --log-cli-level 0 ./python/ngen_cal/tests/ &&
         pytest --log-cli-level 0 ./python/ngen_conf/tests/ &&
         pytest --log-cli-level 0 ./python/ngen_init_config/test/"
+    - sudo chown -R `whoami` .
     - echo "Unit tests complete"
 
 sonarqube-job:
