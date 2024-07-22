@@ -19,7 +19,7 @@ build-job:
     - sudo chown -R `whoami` .
     - tar -czf ../ngen-cal.tar.gz .
     - docker cp ngen-cal-build-container:/ngen-app/ngen-cal-python ..
-    - cd ngen-cal-python
+    - cd ../ngen-cal-python
     - tar -czf ../ngen-cal-python.tar.gz .
     - echo "Build complete." 
 
