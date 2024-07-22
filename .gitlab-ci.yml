@@ -59,7 +59,7 @@ deploy-test-job:
   stage: deploy_test
   variables:
     GIT_STRATEGY: none
-  environment: test # NGEN_TEST_COPY
+  environment: test # NGEN-TEST-COPY
   before_script:
     - chmod 400 $SSH_KEY
     - ssh-agent
@@ -89,27 +89,30 @@ ver-test-job:
   script:
     - echo "Running verification tests..."
     # If there are any automated tests to run, add them there
-  rules:
-    - if: '$CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "development" && $CI_MERGE_REQUEST_STATE == "merged"'
+#  rules:
+#    - if: '$CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "development" && $CI_MERGE_REQUEST_STATE == "merged"'
 
 deploy-oe-job:
   stage: deploy_oe
-  when: manual
+#  when: manual
   variables:
     GIT_STRATEGY: none
-  environment: oe # NGEN-HYDRO-OE
+  environment: oe # NGEN-HYDRO-OE-COPY
   before_script:
     - chmod 400 $SSH_KEY
     - ssh-agent
   script:
     - echo "Deploying NGEN-cal to OE..."
-    - scp ../ngen-cal.tar.gz christina.osumi@10.203.104.196:~/ngen-app
-    - ssh -o StrictHostKeyChecking=no -i $SSH_KEY christina.osumi@10.203.104.196 "
-        cd ~/ngen-app &&
-        rm -rf ngen-cal &&
-        mkdir -p ngen-cal &&
-        tar -xzf ngen-cal.tar.gz -C ngen-cal &&
+    - ssh -o StrictHostKeyChecking=no -i $SSH_KEY christina.osumi@10.203.102.60 "
+        sudo rm -rf /ngen-app/archive/ngen-cal || true &&
+        sudo mv /ngen-app/ngen-cal /ngen-app/archive || true &&
+        sudo mkdir -p /ngen-app/ngen-cal &&
+        sudo chown -R `whoami` /ngen-app/ngen-cal"
+    - scp ../ngen-cal.tar.gz christina.osumi@10.203.102.60:/ngen-app/ngen-cal
+    - ssh -o StrictHostKeyChecking=no -i $SSH_KEY christina.osumi@10.203.102.60 "
+        cd /ngen-app/ngen-cal &&
+        tar -xzf ngen-cal.tar.gz . &&
         rm ngen-cal.tar.gz"
     - echo "NGEN-cal deployed to OE"
-  rules:
-    - if: '$CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "development" && $CI_MERGE_REQUEST_STATE == "merged"'
+#  rules:
+#    - if: '$CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "development" && $CI_MERGE_REQUEST_STATE == "merged"'
