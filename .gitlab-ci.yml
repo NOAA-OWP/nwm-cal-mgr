@@ -78,7 +78,7 @@ deploy-test-job:
     - ssh -o StrictHostKeyChecking=no -i $SSH_KEY christina.osumi@10.105.140.252 "
         cd /ngen-app/ngen-cal &&
         tar -xzf ngen-cal.tar.gz . &&
-        rm ngen-cal.tar.gz
+        rm ngen-cal.tar.gz &&
         cd /ngen-app/ngen-cal-python &&
         tar -xzf ngen-cal-python.tar.gz . &&
         rm ngen-cal-python.tar.gz"
