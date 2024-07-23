@@ -116,10 +116,14 @@ deploy-oe-job:
         sudo mkdir -p /ngen-app/ngen-cal &&
         sudo chown -R `whoami` /ngen-app/ngen-cal"
     - scp ../ngen-cal.tar.gz christina.osumi@10.203.110.34:/ngen-app/ngen-cal
+    - scp ../ngen-cal-python.tar.gz christina.osumi@10.203.110.34:/ngen-app/ngen-cal-python
     - ssh -o StrictHostKeyChecking=no -i $SSH_KEY christina.osumi@10.203.110.34 "
         cd /ngen-app/ngen-cal &&
         tar -xzf ngen-cal.tar.gz . &&
-        rm ngen-cal.tar.gz"
+        rm ngen-cal.tar.gz &&
+        cd /ngen-app/ngen-cal-python &&
+        tar -xzf ngen-cal-python.tar.gz . &&
+        rm ngen-cal-python.tar.gz"
     - echo "NGEN-cal deployed to OE"
 #  rules:
 #    - if: '$CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "development" && $CI_MERGE_REQUEST_STATE == "merged"'
