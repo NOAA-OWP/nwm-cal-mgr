@@ -58,7 +58,7 @@ sonarqube-job:
     - echo "Running Sonarqube scan..."
     - |
       if [[ "$CI_COMMIT_BRANCH" != "$CI_DEFAULT_BRANCH" ]]; then
-        ~/sonar-scanner-4.8.0.2856-linux/bin/sonar-scanner -Dsonar.projectKey=ngen-$CI_COMMIT_BRANCH
+        ~/sonar-scanner-4.8.0.2856-linux/bin/sonar-scanner -Dsonar.projectKey=ngen-cal-$CI_COMMIT_BRANCH
       else
         ~/sonar-scanner-4.8.0.2856-linux/bin/sonar-scanner
       fi
