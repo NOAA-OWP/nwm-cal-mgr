@@ -56,7 +56,12 @@ sonarqube-job:
       - .sonar/cache
   script: 
     - echo "Running Sonarqube scan..."
-    - ~/sonar-scanner-4.8.0.2856-linux/bin/sonar-scanner
+    - |
+      if [[ "$CI_COMMIT_BRANCH" =! "$CI_DEFAULT_BRANCH" ]]; then
+        ~/sonar-scanner-4.8.0.2856-linux/bin/sonar-scanner -Dsonar.projectKey=ngen-$CI_COMMIT_BRANCH
+      else
+        ~/sonar-scanner-4.8.0.2856-linux/bin/sonar-scanner
+      fi
 
 deploy-test-job:
   stage: deploy_test
