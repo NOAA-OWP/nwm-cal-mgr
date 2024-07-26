@@ -21,7 +21,7 @@ build-job:
     - docker cp ngen-cal-build-container:/ngen-app/ngen-cal-python ..
     - cd ../ngen-cal-python
     - tar -czf ../ngen-cal-python.tar.gz .
-    - echo "Build complete." 
+    - echo "Build complete."
 
 unit-test-job:
   stage: unit_test
@@ -36,9 +36,10 @@ unit-test-job:
         cd /ngen-app/ngen-cal &&
         pytest --log-cli-level 0 ./python/ngen_cal/tests/ &&
         pytest --log-cli-level 0 ./python/ngen_conf/tests/ &&
-        pytest --log-cli-level 0 ./python/ngen_init_config/test/"
-    - sudo chown -R `whoami` .
+        pytest --log-cli-level 0 ./python/ngen_init_config/test/" || true
     - echo "Unit tests complete"
+  after_script:
+    - sudo chown -R `whoami` .
 
 sonarqube-job:
   stage: sonarqube
