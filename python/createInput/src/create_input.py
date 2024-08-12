@@ -21,29 +21,16 @@ import pandas as pd
 
 from createInput import ginputfunc as gfun
 
-def main():
-    # Create command line parser to supply input config file 
-    parser = argparse.ArgumentParser()
-    parser.add_argument('input_config', nargs=1, type=str, help='input configuration file') 
-    args = parser.parse_args()
-
-    file_exists = False
-    for f in args.input_config:
-    	if os.path.isfile(f):
-    	    file_exists = True
-    	    break;
-    if not file_exists:
-        print(f'None of the files in {args.input_config} can be found')
-        return
-        
+def create_input(filename):
+    if not os.path.isfile(filename):
+        raise ValueError(f'File {filename} does not exist')
         
     # Read input config file
     config  = configparser.ConfigParser()
-    config.read(args.input_config)
+    config.read(filename)
     
     if not {section: dict(config[section]) for section in config.sections()}:
-        print('Config file is empty')
-        return
+        raise ValueError('Config file is empty')
 
     # General section
     section = 'General'
@@ -133,7 +120,13 @@ def main():
                     'topmodel_noah': {'topmodel': topmd_lib, 'noah': noah_lib, 'sloth': sloth_lib}, 
                     'lasam_noah_sft': {'lasam': lasam_lib, 'noah': noah_lib, 'sft': sft_lib, 'smp': smp_lib, 'sloth': sloth_lib},
                    }
-    lib_file = library_file[model]
+    
+    if not model:
+        raise ValueError('Model must be specified')
+    try:
+        lib_file = library_file[model]
+    except:
+        raise ValueError(f'Invalid model [{model}] specified')
 
     # Create Input directory 
     run_dir = os.path.join(main_dir, '_'.join([objective, algorithm]))
@@ -240,6 +233,20 @@ def main():
     general_dict['yaml_file'] = calib_config_file 
     gfun.create_calib_config_file(calib_params_file, work_dir, general_dict, model_dict, calib_config_file)
 
+def main():
+    # Create command line parser to supply input config file
+    parser = argparse.ArgumentParser()
+    parser.add_argument('input_config', type=str, help='input configuration file')
+    args = parser.parse_args()
+
+    try:
+        create_input(args.input_config)
+    except Exception as e:
+        print(f"ERROR: uncaught exception: {e}")
+        return 1
+    return 0
+
+
 
 if __name__ == "__main__":
-   main()
+   sys.exit(main())

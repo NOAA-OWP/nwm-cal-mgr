@@ -13,6 +13,10 @@ from .ginputfunc import (
     create_calib_config_file,
 )
 
+from .create_input import (
+    create_input
+)
+
 from ._version import __version__
 
 
