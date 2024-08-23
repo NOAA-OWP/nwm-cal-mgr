@@ -83,7 +83,9 @@ def _calc_metrics(
     if eval_range:
         df = df.loc[eval_range[0]:eval_range[1]]
 
-    df.reset_index(inplace=True)
+    # we need to keep the time index for calculation of event-based metrics
+    #df.reset_index(inplace=True)
+
     df = treat_values(df, remove_neg = True, remove_na = True)
     obsflow = df['obs_flow']
     simflow = df['sim_flow']
@@ -110,7 +112,7 @@ def _evaluate(i: int, calibration_object: 'Evaluatable', agent: 'Agent', info: b
     metrics = _calc_metrics(calibration_object.output, calibration_object.observed, calibration_object.evaluation_range, calibration_object.threshold)
     metric_objective_function = metrics[calibration_object.objective.value.upper()] 
     obj_group1 = ['kge','nse','nnse','nselog','corr','csi','pod']
-    obj_group2 = ['rmse','mae','rsr','far']
+    obj_group2 = ['rmse','mae','rsr','far','pkbias','pkte','evbias']
     obj_group3 = ['pbias','lseg_fdc','hseg_fdc']
     if calibration_object.eval_params.objective in obj_group1:
         score = 1 - metric_objective_function if calibration_object.target == 'min' else metric_objective_function

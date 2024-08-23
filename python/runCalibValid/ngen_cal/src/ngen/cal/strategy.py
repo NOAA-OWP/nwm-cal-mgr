@@ -38,7 +38,10 @@ class Objective(str, Enum):
                     "hseg_fdc":metric_functions.pbias_fdc,
                     "csi": metric_functions.categorical_score,
                     "far": metric_functions.categorical_score,
-                    "pod": metric_functions.categorical_score
+                    "pod": metric_functions.categorical_score,
+                    "pkbias": metric_functions.event_based_metrics,
+                    "pkte": metric_functions.event_based_metrics,
+                    "evbias": metric_functions.event_based_metrics,
                 }
 
     kge = "kge"
@@ -55,6 +58,9 @@ class Objective(str, Enum):
     csi = "csi"
     far = "far"
     pod = "pod"
+    pkbias = "pkbias"
+    pkte = "pkte"
+    evbias = "evbias"
 
     def __call__(self, *args, **kwargs):
         return self.__func_map__[self.value](*args, **kwargs)

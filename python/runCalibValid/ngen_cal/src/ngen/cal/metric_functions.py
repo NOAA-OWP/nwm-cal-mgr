@@ -6,6 +6,7 @@ This module contains functions to process model output and compute statistical m
 import math
 from typing import Union, Optional, Dict
 import warnings
+warnings.simplefilter(action='ignore', category=FutureWarning)
 
 import numpy as np
 import pandas as pd
@@ -13,6 +14,8 @@ import scipy.stats as sp
 from scipy.stats import pearsonr
 
 from hydrotools.metrics import metrics as hm
+#from hydrotools.events.event_detection import decomposition as ev
+from .event_metric_functions import identify_events, separate_compound_events, pair_events, compute_event_metrics
 
 __all__ = ['treat_values',
            'pearson_corr',
@@ -25,7 +28,8 @@ __all__ = ['treat_values',
            'Weighted_NSE',
            'KGE',
            'categorical_score',
-           'pbias_fdc'
+           'pbias_fdc',
+           'event_based_metrics',
           ]
 
 
@@ -454,6 +458,93 @@ def categorical_score(
 
     return {'POD':pod, 'FAR':far, 'CSI':csi, 'FBIAS':fbias}
 
+# def event_detection(
+#     data:pd.Series,
+#     halflife:Optional[str] = '6h', 
+#     window: Optional[str] = '7d', 
+#     minimum_event_duration: Optional[str] = '6h',
+#     start_radius: Optional[str] = '6h',
+# ) -> pd.DataFrame:
+#     """ Conduct first-round event detection using hydrotools.evens.event_detection
+
+#     Parameters
+#     ----------
+#     data : streamflow time series 
+#     halflife: parameter for event detection
+#     window: parameter for event detection
+#     minimum_event_duration: parameter for event detection
+#     start_radius: parameter for event detection 
+
+#     Returns
+#     -------
+#     DataFrame of events with start, end, and peak times, as well as peak flow value
+
+#     """
+    
+#     pd.set_option('future.no_silent_downcasting', True)
+
+#     # Detect events
+#     #data = data.resample('h').first().ffill()
+
+#     # data1 = pd.read_csv("/home/yuqiong.liu/work/Gitlab/run/obs_flow.csv")
+#     # data1['index'] = pd.to_datetime(data1['index'])
+#     # data1 = data1.set_index("index")   
+#     # print(data1)
+#     # events = ev.list_events(data1['obs_flow'], halflife='6h', window='7d', minimum_event_duration='6h',start_radius='6h')
+#     # print('------------------')
+#     # print(events)
+
+#     events = ev.list_events(data, halflife=halflife, window=window, 
+#        minimum_event_duration=minimum_event_duration,start_radius=start_radius)
+
+#     # Compute peak timing
+#     events['peak'] = events.apply(lambda e: data.loc[e.start:e.end].idxmax(), axis=1)
+
+#     # Compute peak discharge for each event
+#     events['peak_value'] = events.apply(lambda e: data.loc[e.start:e.end].max(), axis=1)
+
+#     return events
+
+def event_based_metrics(
+    y_true:pd.Series, 
+    y_pred:pd.Series, 
+    threshold:Optional[float] = 0.9,
+    aggregation:Optional[str] = 'median',
+
+) -> Dict[str, float]:
+    """Compute event-based metrics, including 1) absolute peak flow bias (PKBIAS), 2)absolute peak timing error (PKTE), and
+    3) absolute event volume bias (EVBIAS).
+
+    Parameters
+    ----------
+    y_true : Ground truth or observations
+    y_pred : Modeled values or simulations
+    threshold : threshold value in terms of non-exceedance probabilities for defining events;
+                events with peak values smaller than this threshold are not considered in calculating the metrics
+    aggregation: method for aggrating the event-based metrics (mean or median)
+
+    Returns
+    -------
+    Dictionary of event-based metrics
+
+    """
+    # step 1: initial event detection for observed and model streamflows
+    events_obs = identify_events(y_true)
+    events_mod = identify_events(y_pred)
+
+    # step 2: event discretization based on initial events for model and observations
+    events_obs_new = separate_compound_events(events_obs, y_true)
+    events_mod_new = separate_compound_events(events_mod, y_pred)
+
+    # step 3: event pairing
+    thresh_val = y_true.quantile(threshold)
+    events_paired = pair_events(events_obs_new, events_mod_new, thresh_val)
+
+    # step 4: compute event-based metrics (and aggregate by median by default)
+    metrics = compute_event_metrics(events_paired, y_true, y_pred, aggregation)
+
+    return {'PKBIAS': metrics['peak_bias'], 'PKTE': metrics['ptime_err'], 'EVBIAS': metrics['event_bias']}
+    #return {'PKBIAS': np.nan, 'PKTE': np.nan, 'EVBIAS': np.nan}
 
 _all_metrics = [
     pearson_corr,
@@ -466,6 +557,7 @@ _all_metrics = [
     KGE,
     categorical_score,
     pbias_fdc,
+    event_based_metrics,
 ]
 
 
@@ -473,6 +565,7 @@ def calculate_all_metrics(
     y_true: pd.Series, 
     y_pred: pd.Series, 
     threshold: Optional[float] = None,
+    threshold_event: Optional[float] = 0.9,
 ) -> Dict[str, float]:
     """Compute All Statistical Metrics between simulation and observation.
 
@@ -481,6 +574,7 @@ def calculate_all_metrics(
     y_true : Ground truth or observations
     y_pred : Modeled values or simulations 
     threshold : threshold value for calculating categorical scores
+    thershold_event : non-exceedance probability threshold for defining events
 
     Returns
     ----------
@@ -493,18 +587,20 @@ def calculate_all_metrics(
     result = {}
     for f in _all_metrics:
         if f.__name__ == "pearson_corr":
-             result.update({metric_name[f.__name__]: f(y_true, y_pred)[0]})
+            result.update({metric_name[f.__name__]: f(y_true, y_pred)[0]})
         elif f.__name__ == "NSE":
-             result.update({f.__name__: f(y_true, y_pred)})
-             result.update({"NSELOG": f(y_true, y_pred, fun = "log", epsilon = "Pushpalatha2012")})
-             result.update({"NNSE": f(y_true, y_pred, normalized=True)})
+            result.update({f.__name__: f(y_true, y_pred)})
+            result.update({"NSELOG": f(y_true, y_pred, fun = "log", epsilon = "Pushpalatha2012")})
+            result.update({"NNSE": f(y_true, y_pred, normalized=True)})
         elif f.__name__ == "categorical_score":
-             if threshold:
-                 result.update(f(y_true, y_pred, threshold))
-             else:
-                 result.update({'POD': np.nan, 'FAR': np.nan, 'CSI': np.nan, 'FBIAS': np.nan})
+            if threshold:
+                result.update(f(y_true, y_pred, threshold))
+            else:
+                result.update({'POD': np.nan, 'FAR': np.nan, 'CSI': np.nan, 'FBIAS': np.nan})
         elif f.__name__ == "pbias_fdc":
-             result.update(f(y_true, y_pred))
+            result.update(f(y_true, y_pred))
+        elif f.__name__ == "event_based_metrics":
+            result.update(f(y_true, y_pred, threshold_event))
         else:
-             result.update({metric_name[f.__name__]: f(y_true, y_pred)})
+            result.update({metric_name[f.__name__]: f(y_true, y_pred)})
     return result
