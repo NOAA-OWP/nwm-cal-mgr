@@ -88,6 +88,8 @@ def create_input(filename):
     sft_lib = config.get(section, 'sft_lib')
     smp_lib = config.get(section, 'smp_lib')
     lasam_lib = config.get(section, 'lasam_lib')
+    pet_lib = config.get(section, 'pet_lib')
+    snow17_lib = config.get(section, 'snow17_lib')
 
     # Time period 
     time_period={"run_time_period": {"calib": [calib_start_period, calib_end_period], 
@@ -119,6 +121,7 @@ def create_input(filename):
                     'cfe_xaj_noah_sft': {'cfe': cfe_lib, 'noah': noah_lib, 'sft': sft_lib, 'smp': smp_lib, 'sloth': sloth_lib},
                     'topmodel_noah': {'topmodel': topmd_lib, 'noah': noah_lib, 'sloth': sloth_lib}, 
                     'lasam_noah_sft': {'lasam': lasam_lib, 'noah': noah_lib, 'sft': sft_lib, 'smp': smp_lib, 'sloth': sloth_lib},
+                    'pet_cfe_snow17': {'pet': pet_lib, 'cfe': cfe_lib, 'snow17': snow17_lib, 'sloth': sloth_lib},
                    }
     
     if not model:
@@ -163,8 +166,14 @@ def create_input(filename):
 
     # Create cfe input
     cfe_input_dir = os.path.join(input_dir, 'cfe_input')
-    if model in ['cfe_noah', 'cfe_noah_sft', 'cfe_xaj_noah', 'cfe_xaj_noah_sft']:
+    if model in ['cfe_noah', 'cfe_noah_sft', 'cfe_xaj_noah', 'cfe_xaj_noah_sft', 'pet_cfe_snow17']:
         gfun.create_cfe_input(catids, attr_file, cfe_input_dir)
+
+
+    # Create snow17 input
+    snow17_input_dir = os.path.join(input_dir, 'snow17_input')
+    if model in ['pet_cfe_snow17']:
+        gfun.create_snow17_input(catids, attr_file, snow17_input_dir)
 
     # Create noah input
     noah_input_dir = os.path.join(input_dir, 'noah_input')
@@ -204,7 +213,7 @@ def create_input(filename):
     # Create model realization file
     realization_file = work_dir + '/{}'.format(basin) + '_realization_config_bmi_calib.json' 
     routing_config_file = os.path.join(work_dir + '/Input', '{}'.format(basin) + run_configs[0])
-    bmi_dir = {"cfe": cfe_input_dir, "topmodel": topmd_input_dir, "noah": noah_input_dir, 'sft': sft_dir, 'smp': smp_dir, 'lasam': lasam_dir}
+    bmi_dir = {"cfe": cfe_input_dir, "topmodel": topmd_input_dir, "noah": noah_input_dir, 'sft': sft_dir, 'smp': smp_dir, 'lasam': lasam_dir, "snow17": snow17_input_dir}
     rt_dict = {"routing": {"t_route_config_file_with_path": routing_config_file}} 
     gfun.create_realization_file(work_dir, lib_file, bmi_dir, forcing_path, realization_file, model, time_period, rt_dict)
 

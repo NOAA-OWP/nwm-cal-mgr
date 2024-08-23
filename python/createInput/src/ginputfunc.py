@@ -372,6 +372,92 @@ def create_sft_smp_input(
             f.writelines('\n'.join(smp_lst))
 
 
+def create_snow17_input(
+    catids: List[str],
+    snow17_input_dir: str,
+    snow17_bmi_dir: Union[str, Path],
+)->None:
+
+    """ Create BMI configuration file for Snow17
+
+    Parameters
+    ----------
+    catids : catchment IDs in the basin
+    cfe_bmi_dir : directory for the cfe bmi configuration file
+    snow17_param_file : soil hydraulic parameter file
+    snow17_bmi_dir : directory for the lasam bmi configuration file
+
+    Returns
+    ----------
+    None
+
+    """
+
+    param_list = ['hru_id HHWM8IL HHWM8IU',
+            'hru_area 2994.7 1271.3',
+            'hru_area 2994.7 1271.3',
+            'latitude 47.78 47.78',
+            'elev 1612.50 2153.35',
+            'scf 2.15177 1.86124',
+            'mfmax 0.930472 0.754924',
+            'mfmin 0.137 0.160',
+            'uadj 0.003103 0.208042',
+            'si 1515.00 1515.00',
+            'pxtemp 0.713424 0.220934',
+            'nmf 0.150 0.150',
+            'tipm 0.200 0.050',
+            'mbase 0.000 0.000',
+            'plwhc 0.030 0.030',
+            'daygm 0.300 0.200',
+            'adc1 0.050 0.050',
+            'adc2 0.090 0.090',
+            'adc3 0.160 0.160',
+            'adc4 0.310 0.310',
+            'adc5 0.540 0.540',
+            'adc6 0.740 0.740',
+            'adc7 0.840 0.840',
+            'adc8 0.890 0.890',
+            'adc9 0.930 0.930',
+            'adc10 0.970 0.970',
+            'adc11 1.000 1.000']
+
+    for catID in catids:
+        input_file = os.path.join(snow17_input_dir, 'snow17-init-' +catID + '.namelist.input')
+        param_file = os.path.join(snow17_input_dir, 'snow17_params-' +catID + '.HHWM8.txt')
+
+        with open(param_file, "w") as f:
+            f.writelines('\n'.join(param_list))
+
+        input_list = ['&SNOW17_CONTROL',
+                '! === run control file for snow17bmi v. 1.x ===',
+                '',
+                '! -- basin config and path information',
+                'main_id             = "' + catID + '"     ! basin label or gage id',
+                'n_hrus              = 1            ! number of sub-areas in model',
+                'forcing_root        = "extern/snow17/test_cases/ex1/input/forcing/forcing.snow17bmi."',
+                'output_root         = "data/output/output.snow17bmi."',
+                'snow17_param_file   = "' + param_file + '"',
+                'output_hrus         = 1            ! output HRU results? (1=yes; 0=no)',
+                '',
+                '! -- run period information',
+                'start_datehr        = 2015120101   ! start date time, backward looking (check)',
+                'end_datehr          = 2015123023   ! end date time',
+                'model_timestep      = 3600        ! in seconds (86400 seconds = 1 day)',
+                '',
+                '! -- state start/write flags and files',
+                'warm_start_run      = 0  ! is this run started from a state file?  (no=0 yes=1)',
+                "write_states        = 0  ! write restart/state files for 'warm_start' runs (no=0 yes=1)",
+                '',
+                '! -- filenames only needed if warm_start_run = 1',
+                'snow_state_in_root  = "data/state/snow17_states."  ! input state filename root',
+                '',
+                '! -- filenames only needed if write_states = 1',
+                'snow_state_out_root = "data/state/snow17_states."  ! output states filename root',
+                '/']
+        input_file = "test_{}.input".format(catID)        
+        with open(input_file, "w") as f:
+            f.writelines('\n'.join(input_list))
+
 def create_lasam_input(
     catids: List[str],
     cfe_bmi_dir: Union[str, Path], 
