@@ -372,6 +372,232 @@ def create_sft_smp_input(
             f.writelines('\n'.join(smp_lst))
 
 
+def create_snow17_input(
+    catids: List[str],
+    attr_file: Union[str, Path],
+    snow17_input_dir: str
+)->None:
+
+    """ Create BMI configuration file for Snow17
+
+    Parameters
+    ----------
+    catids : catchment IDs in the basin
+    cfe_bmi_dir : directory for the cfe bmi configuration file
+    snow17_param_file : soil hydraulic parameter file
+    snow17_bmi_dir : directory for the lasam bmi configuration file
+
+    Returns
+    ----------
+    None
+
+   """
+    os.makedirs(snow17_input_dir, exist_ok=True)
+
+    # Read hydrofabric attribute file
+    dfa = pd.read_parquet(attr_file)
+    dfa.set_index("divide_id", inplace=True)
+
+    param_list = ['hru_id HHWM8IL HHWM8IU',
+            'hru_area 2994.7 1271.3',
+            'latitude 47.78 47.78',
+            'elev 1612.50 2153.35',
+            'scf 2.15177 1.86124',
+            'mfmax 0.930472 0.754924',
+            'mfmin 0.137 0.160',
+            'uadj 0.003103 0.208042',
+            'si 1515.00 1515.00',
+            'pxtemp 0.713424 0.220934',
+            'nmf 0.150 0.150',
+            'tipm 0.200 0.050',
+            'mbase 0.000 0.000',
+            'plwhc 0.030 0.030',
+            'daygm 0.300 0.200',
+            'adc1 0.050 0.050',
+            'adc2 0.090 0.090',
+            'adc3 0.160 0.160',
+            'adc4 0.310 0.310',
+            'adc5 0.540 0.540',
+            'adc6 0.740 0.740',
+            'adc7 0.840 0.840',
+            'adc8 0.890 0.890',
+            'adc9 0.930 0.930',
+            'adc10 0.970 0.970',
+            'adc11 1.000 1.000']
+
+    for catID in catids:
+        input_file = os.path.join(snow17_input_dir, 'snow17-init-' +catID + '.namelist.input')
+        param_file = os.path.join(snow17_input_dir, 'snow17_params-' +catID + '.HHWM8.txt')
+
+        with open(param_file, "w") as f:
+            f.writelines('\n'.join(param_list))
+
+        input_list = ['&SNOW17_CONTROL',
+                '! === run control file for snow17bmi v. 1.x ===',
+                '',
+                '! -- basin config and path information',
+                'main_id             = "' + catID + '"     ! basin label or gage id',
+                'n_hrus              = 1            ! number of sub-areas in model',
+                'forcing_root        = "extern/snow17/test_cases/ex1/input/forcing/forcing.snow17bmi."',
+                'output_root         = "data/output/output.snow17bmi."',
+                'snow17_param_file   = "' + param_file + '"',
+                'output_hrus         = 1            ! output HRU results? (1=yes; 0=no)',
+                '',
+                '! -- run period information',
+                'start_datehr        = 2017120101   ! start date time, backward looking (check)',
+                'end_datehr          = 2017120123   ! end date time',
+                'model_timestep      = 3600        ! in seconds (86400 seconds = 1 day)',
+                '',
+                '! -- state start/write flags and files',
+                'warm_start_run      = 0  ! is this run started from a state file?  (no=0 yes=1)',
+                "write_states        = 0  ! write restart/state files for 'warm_start' runs (no=0 yes=1)",
+                '',
+                '! -- filenames only needed if warm_start_run = 1',
+                'snow_state_in_root  = "data/state/snow17_states."  ! input state filename root',
+                '',
+                '! -- filenames only needed if write_states = 1',
+                'snow_state_out_root = "data/state/snow17_states."  ! output states filename root',
+                '/',
+                ''
+                ]
+        with open(input_file, "w") as f:
+            f.writelines('\n'.join(input_list))
+
+def create_sac_input(
+    catids: List[str],
+    attr_file: Union[str, Path],
+    sac_input_dir: str
+)->None:
+
+    """ Create BMI configuration file for Snow17
+
+    Parameters
+    ----------
+    catids : catchment IDs in the basin
+    sac_param_file : sac parameter file
+    sac_bmi_dir : directory for the sac bmi configuration file
+
+    Returns
+    ----------
+    None
+
+    """
+    os.makedirs(sac_input_dir, exist_ok=True)
+
+    # Read hydrofabric attribute file
+    dfa = pd.read_parquet(attr_file)
+    dfa.set_index("divide_id", inplace=True)
+
+    param_list = ['hru_id HHWM8IL HHWM8IU',
+            'hru_area 2994.7 1271.3',
+            'uztwm 29.7257 31.9842',
+            'uzfwm 22.8335 86.7465',
+            'lztwm 18.6968 105.763',
+            'lzfpm 419.418 956.052',
+            'lzfsm 215.932 212.664',
+            'adimp 0.0000 0.0000',
+            'uzk 0.8910 0.9266',
+            'lzpk 0.0032 0.0037',
+            'lzsk 0.2551 0.2633',
+            'zperc 281.8200 267.7290',
+            'rexp 5.2353 5.0608',
+            'pctim 0.0000 0.0000',
+            'pfree 0.3142 0.2880',
+            'riva 0.0100 0.0100',
+            'side 0.0000 0.0000',
+            'rserv 0.3000 0.3000']
+
+    for catID in catids:
+        input_file = os.path.join(sac_input_dir, 'sac-init-' +catID + '-HHWM8.namelist.input')
+        param_file = os.path.join(sac_input_dir, 'sac_params-' +catID + '.HHWM8.txt')
+
+        with open(param_file, "w") as f:
+            f.writelines('\n'.join(param_list))
+
+        input_list = ['&SAC_CONTROL',
+                '! === run control file for sacbmi v. 1.x ===',
+                '',
+                '! -- basin config and path information',
+                'main_id             = "' + catID + '"     ! basin label or gage id',
+                'n_hrus              = 1            ! number of sub-areas in model',
+                'forcing_root        = "extern/sac-sma/sac-sma/test_cases/ex1/input/forcing/forcing.snow17bmi."',
+                'output_root         = ""',
+                'sac_param_file   = "' + param_file + '"',
+                'output_hrus         = 0            ! output HRU results? (1=yes; 0=no)',
+                '',
+                '! -- run period information',
+                'start_datehr        = 2015120112   ! start date time, backward looking (check)',
+                'end_datehr          = 2015123012   ! end date time',
+                'model_timestep      = 3600        ! in seconds (86400 seconds = 1 day)',
+                '',
+                '! -- state start/write flags and files',
+                'warm_start_run      = 0  ! is this run started from a state file?  (no=0 yes=1)',
+                "write_states        = 0  ! write restart/state files for 'warm_start' runs (no=0 yes=1)",
+                '',
+                '! -- filenames only needed if warm_start_run = 1',
+                'sac_state_in_root  = "../state/sac_states."  ! input state filename root',
+                '',
+                '! -- filenames only needed if write_states = 1',
+                'sac_state_out_root = "../state/sac_states."  ! output states filename root',
+                '/',
+                ''
+                ]
+        with open(input_file, "w") as f:
+            f.writelines('\n'.join(input_list))
+
+def create_pet_input(
+    catids: List[str],
+    attr_file: Union[str, Path],
+    pet_input_dir: str
+)->None:
+
+    """ Create BMI configuration file for pet
+
+    Parameters
+    ----------
+    catids : catchment IDs in the basin
+    pet_input_dir : directory for the pet input files
+
+    Returns
+    ----------
+    None
+
+    """
+    os.makedirs(pet_input_dir, exist_ok=True)
+
+    # Read hydrofabric attribute file
+    dfa = pd.read_parquet(attr_file)
+    dfa.set_index("divide_id", inplace=True)
+
+    ini_list = ['verbose=0',
+                'pet_method=5',
+                'forcing_file=BMI',
+                'run_unit_tests=0',
+                'yes_aorc=1',
+                'yes_wrf=0',
+                'wind_speed_measurement_height_m=10.0',
+                'humidity_measurement_height_m=2.0',
+                'vegetation_height_m=0.12',
+                'zero_plane_displacement_height_m=0.0003',
+                'momentum_transfer_roughness_length=0.0',
+                'heat_transfer_roughness_length_m=0.0',
+                'surface_longwave_emissivity=1.0',
+                'surface_shortwave_albedo=0.22',
+                'cloud_base_height_known=FALSE',
+                'latitude_degrees=37.25',
+                'longitude_degrees=-97.5554',
+                'site_elevation_m=303.33',
+                'time_step_size_s=3600',
+                'num_timesteps=720',
+                'shortwave_radiation_provided=0']
+
+    for catID in catids:
+        ini_file = os.path.join(pet_input_dir, catID + '_bmi_config.ini')
+
+        with open(ini_file, "w") as f:
+            f.writelines('\n'.join(ini_list))
+            
+
 def create_lasam_input(
     catids: List[str],
     cfe_bmi_dir: Union[str, Path], 
@@ -722,8 +948,48 @@ def create_realization_file(
                                     "water_potential_evaporation_flux": "EVAPOTRANS"},
                                 "registration_function": "register_bmi_topmodel"}}
 
+    # sac-sma
+    if model in ["sac_snow17_pet", "sac_pet"]:
+        sac_dict = {"name": "bmi_fortran",
+                    "params": {
+                                "model_type_name": "sac",
+                                "library_file": lib_mod['sac'],
+                                "init_config": os.path.join(bmi_dir['sac'], 'sac-init-{{id}}-HHWM8.namelist.input'),
+                                "allow_exceed_end_time": True, "fixed_time_step": False, "uses_forcing_file": False,
+                                "main_output_variable": "tci",
+                                "variables_names_map": {
+                                    "precip": "atmosphere_water__liquid_equivalent_precipitation_rate",
+                                    "tair": "land_surface_air__temperature",
+                                    "pet": "water_potential_evaporation_flux"
+                                }}}
+    # snow17
+    if model in ["sac_snow17_pet", "snow17_pet"]:
+        snow17_dict = {"name": "bmi_fortran",
+                      "params": {
+                                "model_type_name": "snow17",
+                                "library_file": lib_mod['snow17'],
+                                "init_config": os.path.join(bmi_dir['snow17'], 'snow17-init-{{id}}.namelist.input'),
+                                "allow_exceed_end_time": True, "fixed_time_step": False, "uses_forcing_file": False,
+                                "main_output_variable": "raim",
+                                "variables_names_map": {
+                                    "precip": "atmosphere_water__liquid_equivalent_precipitation_rate",
+                                    "tair": "land_surface_air__temperature"
+                                }}}
+
+
+    #pet 
+    if model in ["sac_snow17_pet", "sac_pet", "snow17_pet"]:
+        pet_dict = {"name": "bmi_c",
+                      "params": {
+                                "model_type_name": "PET",
+                                "library_file": lib_mod['pet'],
+                                "init_config": os.path.join(bmi_dir['pet'], '{{id}}_bmi_config.ini'),
+                                "allow_exceed_end_time": True, "fixed_time_step": False, "uses_forcing_file": False,
+                                "main_output_variable": "water_potential_evaporation_flux",
+                                "registration_function": "register_bmi_pet"
+                                }}
     # sloth
-    if model in ["cfe_noah", "topmodel_noah", "cfe_xaj_noah"]:
+    if model in ["cfe_noah", "sac_snow17_pet", "sac_pet", "snow17_pet", "topmodel_noah", "cfe_xaj_noah"]:
         sloth_dict = {"name": "bmi_c++",
                       "params": {"name": "bmi_c++", 
                                  "model_type_name": "SLOTH", 
@@ -837,6 +1103,18 @@ def create_realization_file(
         main_output_variable = "Q_OUT"        
         sub_module = [noah_dict, *[cfe_dict, sloth_dict]]
 
+    elif model in ["sac_snow17_pet"]:
+        model_type_name = "sac_snow17_pet"
+        main_output_variable = "tci"
+        sub_module = [sloth_dict, snow17_dict, sac_dict, pet_dict]
+    elif model in ["sac_pet"]:
+        model_type_name = "sac_pet"
+        main_output_variable = "tci"
+        sub_module = [sloth_dict, sac_dict, pet_dict]    
+    elif model in ["snow17_pet"]:
+        model_type_name = "snow17_pet"
+        main_output_variable = "raim"
+        sub_module = [sloth_dict, snow17_dict]
     elif model == "topmodel_noah":
         model_type_name = "NoahOWP_TOPMODEL"
         main_output_variable = "Qout"        
