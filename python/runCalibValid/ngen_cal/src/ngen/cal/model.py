@@ -385,93 +385,85 @@ class EvaluationOptions(BaseModel):
         d['model']['realization'] = os.path.join(valid_run_path, valid_config_file)
         with open(d['general']['yaml_file'], 'w') as yfile:
             yaml.dump(d, yfile, sort_keys=False, default_flow_style=False, indent=2)
+        print("Config file for {} is created at {}".format(valid_run_name, d['general']['yaml_file']))
 
-
-    def create_valid_realization_file(self, agent: 'Agent', params: 'pd.DataFrame') -> None:
+    def create_valid_realization_file(self, agent: 'Agent', params: 'pd.DataFrame', valid_run_name: str) -> None:
         """Create model realization file for valiation control and best runs.
 
         Parameters:
         ----------
         agent : Agent object
         params :  calibration parameters
+        valid_run_name: name for validation run (valid_best,valid_control,valid_worker#_iter#)
 
         """
-        # Create realization file for control run
-        agent.model.update_config(0, params, path = Path(agent.valid_path))
-        configfl = os.path.join(agent.valid_path, os.path.basename(str(agent.realization_file)))
-        config_valid_control_file = os.path.join(agent.valid_path, os.path.basename(configfl).replace("calib","valid_control"))
-        shutil.move(configfl, config_valid_control_file)
-        with open(config_valid_control_file)  as fl:
-            config_valid_control = json.load(fl)
 
-        # Create realization file for best run
-        if agent.algorithm!="dds":
-            agent.model.update_config("global_best", params, path = Path(agent.valid_path))
+        # 
+        if valid_run_name == "valid_control":
+            agent.model.update_config(0, params, path = Path(agent.valid_path))
+        elif valid_run_name == "valid_best":
+            if agent.algorithm!="dds":
+                agent.model.update_config("global_best", params, path = Path(agent.valid_path))
+            else:
+                agent.model.update_config(self._best_params_iteration, params, path = Path(agent.valid_path))
         else:
-            agent.model.update_config(self._best_params_iteration, params, path = Path(agent.valid_path))
-        config_valid_best_file = os.path.join(agent.valid_path, os.path.basename(configfl).replace("calib","valid_best"))
-        shutil.move(configfl, config_valid_best_file)
-        with open(config_valid_best_file)  as fl:
-            config_valid_best = json.load(fl)
+            agent.model.update_config(valid_run_name, params, path = Path(agent.valid_path))
+
+        # Create realization file for validation run
+        #agent.model.update_config(0, params, path = Path(agent.valid_path))
+        configfl = os.path.join(agent.valid_path, os.path.basename(str(agent.realization_file)))
+        config_valid_file = os.path.join(agent.valid_path, os.path.basename(configfl).replace("calib",valid_run_name))
+        shutil.move(configfl, config_valid_file)
+        with open(config_valid_file)  as fl:
+            config_valid = json.load(fl)
 
         # Replace calib simulation time period with valid sumulation period
-        config_valid_control['time']['start_time'] = datetime.strftime(self._valid_range[0], '%Y-%m-%d %H:%M:%S')
-        config_valid_control['time']['end_time'] = datetime.strftime(self._valid_range[1], '%Y-%m-%d %H:%M:%S')
-        config_valid_best['time']['start_time'] = datetime.strftime(self._valid_range[0], '%Y-%m-%d %H:%M:%S')
-        config_valid_best['time']['end_time'] = datetime.strftime(self._valid_range[1], '%Y-%m-%d %H:%M:%S')
+        config_valid['time']['start_time'] = datetime.strftime(self._valid_range[0], '%Y-%m-%d %H:%M:%S')
+        config_valid['time']['end_time'] = datetime.strftime(self._valid_range[1], '%Y-%m-%d %H:%M:%S')
 
         # Replace namelist of Noah-OWP-Modular and add output variables to SFT related model for control and best run
-        for cf in [config_valid_control, config_valid_best]:
-             for m in cf['global']['formulations'][0]['params']['modules']:
-                 if m['params']['model_type_name'] == 'NoahOWP':
-                     m1 = m['params']['init_config']
-                     m['params']['init_config'] = os.path.join(os.path.dirname(m1), os.path.basename(m1).replace('calib', 'valid'))
+        for m in config_valid['global']['formulations'][0]['params']['modules']:
+            if m['params']['model_type_name'] == 'NoahOWP':
+                m1 = m['params']['init_config']
+                m['params']['init_config'] = os.path.join(os.path.dirname(m1), os.path.basename(m1).replace('calib', 'valid'))
 
-        # Replace t-route ymal file
-        rt_control = os.path.basename(config_valid_control['routing']['t_route_config_file_with_path']).replace('calib','valid_control')
-        rt_control = os.path.join(os.path.dirname(config_valid_control['routing']['t_route_config_file_with_path']), rt_control)
-        config_valid_control['routing']['t_route_config_file_with_path'] = rt_control
-        rt_best = os.path.basename(config_valid_best['routing']['t_route_config_file_with_path']).replace('calib','valid_best')
-        rt_best = os.path.join(os.path.dirname(config_valid_best['routing']['t_route_config_file_with_path']), rt_best)
-        config_valid_best['routing']['t_route_config_file_with_path'] = rt_best
+        # Replace t-route yaml file
+        rt = os.path.basename(config_valid['routing']['t_route_config_file_with_path']).replace('calib',valid_run_name)
+        rt = os.path.join(os.path.dirname(config_valid['routing']['t_route_config_file_with_path']), rt)
+        config_valid['routing']['t_route_config_file_with_path'] = rt
 
         # Add output variables and headers to sft related run 
-        for cf in [config_valid_control, config_valid_best]:
-             cf1 = cf['global']['formulations'][0]['params'].popitem()
-             output_variables = list()      
-             output_header_fields = list()
-             if cf['global']['formulations'][0]['params']['model_type_name'] in ["NoahOWP_CFE_SK_SFT_SMP", "NoahOWP_CFE_XAJ_SFT_SMP"]:
-                 output_variables = ["soil_ice_fraction", "TGS", "RAIN_RATE", "DIRECT_RUNOFF", "GIUH_RUNOFF",
-                                     "NASH_LATERAL_RUNOFF", "DEEP_GW_TO_CHANNEL_FLUX", "Q_OUT", "SOIL_STORAGE",
-                                     "ice_fraction_schaake", "POTENTIAL_ET", "ACTUAL_ET", "soil_moisture_fraction"]
-                 output_header_fields = ["soil_ice_fraction", "ground_temperature", "rain_rate", "direct_runoff",
-                                         "giuh_runoff", "nash_lateral_runoff", "deep_gw_to_channel_flux", "q_out",
-                                         "soil_storage", "ice_fraction_schaake", "PET", "AET", "soil_moisture_fraction"]
-             if cf['global']['formulations'][0]['params']['model_type_name'] == "NoahOWP_CFE_XAJ_SFT_SMP":
-                 output_variables[9] = "ice_fraction_xinanjiang"
-                 output_header_fields[9] = "ice_fraction_xinanjiang"
-             if cf['global']['formulations'][0]['params']['model_type_name'] == "NoahOWP_LASAM_SFT_SMP":
-                 output_variables = ["soil_ice_fraction", "TGS", "precipitation", "potential_evapotranspiratio", "actual_evapotranspiration",
-                                     "soil_storage", "surface_runoff", "giuh_runoff", "groundwater_to_stream_recharge",  "percolation", 
-                                     "total_discharge", "infiltration", "EVAPOTRAN", "soil_moisture_fraction"]
-                 output_header_fields = ["soil_ice_fraction", "ground_temperature", "rain_rate", "PET_rate", "actual_ET",
-                                         "soil_storage", "direct_runoff", "giuh_runoff", "deep_gw_to_channel_flux", 
-                                         "soil_to_gw_flux", "q_out", "infiltration", "PET_NOM", "soil_moisture_fraction"]
-             if len(output_variables)>1 and len(output_header_fields)>1:
-                 cf['global']['formulations'][0]['params']['output_variables'] = output_variables
-                 cf['global']['formulations'][0]['params']['output_header_fields'] = output_header_fields
-             cf['global']['formulations'][0]['params']['modules'] = cf1[1]
+        cf1 = config_valid['global']['formulations'][0]['params'].popitem()
+        output_variables = list()      
+        output_header_fields = list()
+        if config_valid['global']['formulations'][0]['params']['model_type_name'] in ["NoahOWP_CFE_SK_SFT_SMP", "NoahOWP_CFE_XAJ_SFT_SMP"]:
+            output_variables = ["soil_ice_fraction", "TGS", "RAIN_RATE", "DIRECT_RUNOFF", "GIUH_RUNOFF",
+                                "NASH_LATERAL_RUNOFF", "DEEP_GW_TO_CHANNEL_FLUX", "Q_OUT", "SOIL_STORAGE",
+                                "ice_fraction_schaake", "POTENTIAL_ET", "ACTUAL_ET", "soil_moisture_fraction"]
+            output_header_fields = ["soil_ice_fraction", "ground_temperature", "rain_rate", "direct_runoff",
+                                    "giuh_runoff", "nash_lateral_runoff", "deep_gw_to_channel_flux", "q_out",
+                                    "soil_storage", "ice_fraction_schaake", "PET", "AET", "soil_moisture_fraction"]
+        if config_valid['global']['formulations'][0]['params']['model_type_name'] == "NoahOWP_CFE_XAJ_SFT_SMP":
+            output_variables[9] = "ice_fraction_xinanjiang"
+            output_header_fields[9] = "ice_fraction_xinanjiang"
+        if config_valid['global']['formulations'][0]['params']['model_type_name'] == "NoahOWP_LASAM_SFT_SMP":
+            output_variables = ["soil_ice_fraction", "TGS", "precipitation", "potential_evapotranspiratio", "actual_evapotranspiration",
+                                "soil_storage", "surface_runoff", "giuh_runoff", "groundwater_to_stream_recharge",  "percolation", 
+                                "total_discharge", "infiltration", "EVAPOTRAN", "soil_moisture_fraction"]
+            output_header_fields = ["soil_ice_fraction", "ground_temperature", "rain_rate", "PET_rate", "actual_ET",
+                                    "soil_storage", "direct_runoff", "giuh_runoff", "deep_gw_to_channel_flux", 
+                                    "soil_to_gw_flux", "q_out", "infiltration", "PET_NOM", "soil_moisture_fraction"]
+        if len(output_variables)>1 and len(output_header_fields)>1:
+            config_valid['global']['formulations'][0]['params']['output_variables'] = output_variables
+            config_valid['global']['formulations'][0]['params']['output_header_fields'] = output_header_fields
+        config_valid['global']['formulations'][0]['params']['modules'] = cf1[1]
 
-        # Write realization file for control and best run
-        with open(config_valid_control_file, 'w') as outfile:
-            json.dump(config_valid_control, outfile, indent=4, separators=(", ", ": "), sort_keys=False)
-        with open(config_valid_best_file, 'w') as outfile:
-            json.dump(config_valid_best, outfile, indent=4, separators=(", ", ": "), sort_keys=False)
+        # Write realization file for validation run
+        with open(config_valid_file, 'w') as outfile:
+            json.dump(config_valid, outfile, indent=4, separators=(", ", ": "), sort_keys=False)
 
-        # Write yaml configuration file for control and best run
-        for valid_run_name, config_valid_file in zip(['valid_control', 'valid_best'], [config_valid_control_file, config_valid_best_file]):
-            self.create_valid_config_file(agent.yaml_file, agent.valid_path, config_valid_file, valid_run_name)
-
+        # Write yaml configuration file for validation run
+        self.create_valid_config_file(agent.yaml_file, agent.valid_path, config_valid_file, valid_run_name)
 
     def write_valid_metric_file(self, valid_run_path: Path, valid_run_name: str, metrics: float) -> None:
         """Write metrics from validation run into csv file.

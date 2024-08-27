@@ -292,7 +292,8 @@ def dds_set(start_iteration: int, iterations: int, agent: 'Agent')->None:
             calibration_set.check_point(agent.job.workdir)
 
         # Create configuration files for validation run
-        calibration_object.create_valid_realization_file(agent, calibration_object.adf)
+        calibration_object.create_valid_realization_file(agent, calibration_object.adf,'valid_control')
+        calibration_object.create_valid_realization_file(agent, calibration_object.adf,'valid_best')
 
         # Indicate completion
         calibration_object.write_run_complete_file(agent.run_name, agent.workdir)
@@ -415,7 +416,8 @@ def pso_search(start_iteration: int, iterations: int,  agent: 'Agent') -> None:
         calibration_object.df[str(iterations)] = calibration_object.df['global_best']
         calibration_object.df_fill(iterations)
         calibration_object.adf['global_best'] = calibration_object.adf[str(iterations)]
-        calibration_object.create_valid_realization_file(agent, calibration_object.adf)
+        calibration_object.create_valid_realization_file(agent, calibration_object.adf,'valid_control')
+        calibration_object.create_valid_realization_file(agent, calibration_object.adf,'valid_best')
 
         # Indicate completion 
         calibration_object.write_run_complete_file(agent.run_name, agent.workdir)
@@ -482,7 +484,9 @@ def gwo_search(start_iteration: int, iterations: int,  agent)->None:
         calibration_object.df[str(iterations)] = calibration_object.df['global_best']
         calibration_object.df_fill(iterations)
         calibration_object.adf['global_best'] = calibration_object.adf[str(iterations)]
-        calibration_object.create_valid_realization_file(agent, calibration_object.adf)        
+        calibration_object.create_valid_realization_file(agent, calibration_object.adf,'valid_control')  
+        calibration_object.create_valid_realization_file(agent, calibration_object.adf,'valid_best')   
+
         # Indicate completion
         calibration_object.write_run_complete_file(agent.run_name, agent.workdir)
         complete_msg(calibration_object.basinID, agent.run_name, agent.workdir, calibration_object.user)

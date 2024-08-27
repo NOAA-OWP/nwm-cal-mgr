@@ -110,7 +110,9 @@ class Agent(BaseAgent):
 
         if log and 'valid' in self._run_name:
             self._valid_path_output = os.path.join(self._job.workdir, 'Output_Valid') 
-            self._valid_path_plot = os.path.join(self._workdir, 'Plot_Valid') 
+            self._valid_path_plot = os.path.join(self._workdir, 'Plot_Valid')
+            if self._run_name not in ['valid_control','valid_best']:
+                self._valid_path_plot = os.path.join(self._workdir, 'Plot_Valid' + self._run_name.replace('valid_','_'))
             os.makedirs(self._valid_path_output, exist_ok=True)
             os.makedirs(self._valid_path_plot, exist_ok=True)
             self._calib_path_output = None

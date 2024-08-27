@@ -158,7 +158,7 @@ def plot_calib_output(
         plf.scatterplot_var(calibration_object.param_iter_file, plotfile, int(float(calibration_object.best_params)), title)    
         plot_cost_func(calibration_object, agent, os.path.join(agent.workdir, calibration_object.cost_iter_file), agent.algorithm, calib_iter=False)
 
-def plot_valid_output(
+def plot_valid_output_old(
     calibration_object: 'Evaluatable',
     agent: 'Agent',
     time_period: Optional[Dict[str,str]] = None,
@@ -231,6 +231,74 @@ def plot_valid_output(
     plotfile = os.path.join(fig_path, calibration_object.basinID + '_barplot_metrics_valid_run.png')
     title  = 'Metrics from Different Simulation Time Period'  + '\n' + calibration_object.station_name
     plf.barplot_metric(mdf, plotfile, title)
+
+def plot_valid_output(
+    calibration_object: 'Evaluatable',
+    agent: 'Agent',
+    runs: 'list',
+    time_period: Optional[Dict[str,str]] = None,
+) -> None:
+    """Plot streamflow and other model output as well as metrics for validation runs: control, best, and alternative parameter set.
+
+    Parameters
+    ----------
+    calibration_object : catchment object 
+    calibration_object : calibration_object object 
+    time_period : calib, valid and full time periods 
+
+    Returns
+    ----------
+    None
+
+    """
+    # Output files from different validation runs
+    df0 = [calibration_object.observed]
+    for run1 in runs:
+        outfile = os.path.join(agent.valid_path, calibration_object.basinID + '_output_' + run1 + '.csv')
+        df1 = pd.read_csv(outfile)
+        df1['Time'] = pd.DatetimeIndex(df1['Time'])
+        df1 = df1[['Time', calibration_object.streamflow_name]]
+        df1 = df1.rename(columns={calibration_object.streamflow_name: run1})
+        df1.set_index('Time', inplace=True)
+        df0.append(df1)
+
+    df_merged = reduce(lambda left, right: pd.merge(left, right, left_index=True, right_index=True, how='right'), df0)
+    df_merged = df_merged.rename(columns={'obs_flow': 'Observation'})
+    #df_merged[['Control Run','Best Run']] = df_merged[['Control Run','Best Run']] 
+    df_merged.reset_index(inplace=True)
+    df_merged = df_merged.rename(columns={'index': 'Time'})
+    df_merged = mf.treat_values(df_merged, remove_neg = True)
+    df_merged_copy1 = copy.deepcopy(df_merged)
+
+    # Plot hydrograph
+    fig_path = agent.valid_path_plot
+    plotfile = os.path.join(fig_path, calibration_object.basinID + '_hydrograph_valid_run.png')
+    title  = 'Hydrograph during Calibration and Validation period'  + '\n' + calibration_object.station_name
+    plf.plot_streamflow(df_merged_copy1, plotfile, title, calibration_object.evaluation_range[0], calibration_object.evaluation_range[1],
+                        calibration_object.valid_evaluation_range[0], calibration_object.valid_evaluation_range[1])
+
+    # Plot flow duration curve
+    df_merged_copy2 = copy.deepcopy(df_merged)
+    plotfile = os.path.join(fig_path, calibration_object.basinID + '_fdc_valid_run.png')
+    title  = 'Flow Duration Curve during Calibration and Validation period'  + '\n' + calibration_object.station_name
+    plf.plot_fdc_valid(df_merged_copy2, plotfile, title, time_period)
+
+    # Plot time series of streamflow and precipitation 
+    df_merged_copy3 = copy.deepcopy(df_merged)
+    plotfile = os.path.join(fig_path, calibration_object.basinID + '_streamflow_precip_valid_run.png')
+    title  = 'Streamflow and Total Precipitation during Calibration and Validation Period ' + '\n' + calibration_object.station_name
+    plf.plot_streamflow_precipitation(df_merged_copy3, agent.df_precip, plotfile, title, calibration_object.evaluation_range[0], 
+        calibration_object.evaluation_range[1], calibration_object.valid_evaluation_range[0], calibration_object.valid_evaluation_range[1])
+
+    # Plot metrics
+    mdf = pd.DataFrame()
+    for run1 in runs:
+        outfile = os.path.join(agent.valid_path, calibration_object.basinID + '_metrics_' + run1 + '.csv')
+        mdf = pd.concat([mdf,pd.read_csv(outfile)],ignore_index=True)
+    plotfile = os.path.join(fig_path, calibration_object.basinID + '_barplot_metrics_valid_run.png')
+    title  = 'Metrics from Different Simulation Time Period'  + '\n' + calibration_object.station_name
+    plf.barplot_metric(mdf, plotfile, title)
+
 
 def plot_cost_func(
     calibration_object: 'Evaluatable', 

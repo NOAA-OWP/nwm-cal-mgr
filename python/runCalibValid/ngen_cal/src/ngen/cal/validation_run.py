@@ -51,8 +51,15 @@ def run_valid_ctrl_best(agent: 'Agent') -> None:
             calibration_object.save_valid_output(calibration_object.basinID, agent.run_name, agent.valid_path, agent.job.workdir, agent.valid_path_output)
 
             # Plot
-            if agent.run_name=='valid_best':
-                plot_valid_output(calibration_object, agent, time_period)
+            if agent.run_name == 'valid_control':
+                pass
+            elif agent.run_name == 'valid_best':
+                runs = ['valid_control', 'valid_best']
+                plot_valid_output(calibration_object, agent, runs, time_period)
+            else:
+                runs = ['valid_control', 'valid_best', agent.run_name]
+                plot_valid_output(calibration_object, agent, runs, time_period)
+        
 
             # Indicate completion 
             calibration_object.write_run_complete_file(agent.run_name, agent.workdir)
