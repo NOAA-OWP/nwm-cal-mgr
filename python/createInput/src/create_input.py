@@ -116,7 +116,7 @@ def create_input(filename):
     # 5. lasam_noah_sft: LASAM coupled with NOM, SFT and SMP
     # 6. topmodel_noah: TOPMODEL coupled with NOM
     library_file = {
-                    'cfe_noah': {'cfe': cfe_lib, 'noah': noah_lib, 'sloth': sloth_lib}, 
+                    'cfe_noah': {'sloth': sloth_lib,'noah': noah_lib, 'cfe': cfe_lib}, 
                     'cfe_noah_sft': {'cfe': cfe_lib, 'noah': noah_lib, 'sft': sft_lib, 'smp': smp_lib, 'sloth': sloth_lib},
                     'cfe_xaj_noah': {'cfe': cfe_lib, 'noah': noah_lib, 'sloth': sloth_lib}, 
                     'cfe_xaj_noah_sft': {'cfe': cfe_lib, 'noah': noah_lib, 'sft': sft_lib, 'smp': smp_lib, 'sloth': sloth_lib},
@@ -126,6 +126,7 @@ def create_input(filename):
                     'sac_snow17_pet': {'sac': sac_lib, 'snow17': snow17_lib, 'sloth': sloth_lib, 'pet': pet_lib},
                     'sac_pet': {'sac': sac_lib, 'sloth': sloth_lib, 'pet': pet_lib},
                     'snow17_pet': {'snow17': snow17_lib, 'sloth': sloth_lib, 'pet': pet_lib},
+                    'sac_noah': {'sac': sac_lib, 'noah': noah_lib}
                    }
     
     if not model:
@@ -170,44 +171,44 @@ def create_input(filename):
 
     # Create cfe input
     cfe_input_dir = os.path.join(input_dir, 'cfe_input')
-    if model in ['cfe_noah', 'cfe_noah_sft', 'cfe_xaj_noah', 'cfe_xaj_noah_sft', 'pet_cfe_snow17']:
+    if 'cfe' in model:
         gfun.create_cfe_input(catids, attr_file, cfe_input_dir)
 
 
     # Create snow17 input
     snow17_input_dir = os.path.join(input_dir, 'snow17_input')
-    if model in ['pet_cfe_snow17', 'sac_snow17_pet', 'snow17_pet']:
+    if 'snow17' in model:
         gfun.create_snow17_input(catids, attr_file, snow17_input_dir)
 
     # Create pet input
     pet_input_dir = os.path.join(input_dir, 'pet_input')
-    if model in ['pet_cfe_snow17', 'sac_snow17_pet', 'sac_pet', 'snow17_pet']:
+    if 'pet' in model:
         gfun.create_pet_input(catids, attr_file, pet_input_dir)
 
     # Create sac input
     sac_input_dir = os.path.join(input_dir, 'sac_input')
-    if model in ['sac_snow17_pet', 'sac_pet']:
+    if 'sac' in model:
         gfun.create_sac_input(catids, attr_file, sac_input_dir)
 
     # Create noah input
     noah_input_dir = os.path.join(input_dir, 'noah_input')
-    if model in ['cfe_noah', 'topmodel_noah', 'cfe_noah_sft', 'lasam_noah_sft', 'cfe_xaj_noah', 'cfe_xaj_noah_sft']:
+    if 'noah' in model:
         gfun.create_noah_input(catids, time_period, attr_file, noah_params_dir, noah_input_dir)
 
     # Create sft and smp input
     sft_dir = os.path.join(input_dir, 'sft_input')
     smp_dir = os.path.join(input_dir, 'smp_input')
-    if model in ['cfe_noah_sft', 'lasam_noah_sft', 'cfe_xaj_noah_sft']:
+    if 'sft' in model:
         gfun.create_sft_smp_input(catids, model, attr_file, cfe_dir, forcing_dir, sft_dir, smp_dir)
 
     # Create lasam input 
     lasam_dir = os.path.join(input_dir, 'lasam_input')
-    if model in ['lasam_noah_sft']:
+    if 'lasam' in model:
         gfun.create_lasam_input(catids, cfe_dir, lasam_soil_param, lasam_soil_class, lasam_dir)
 
     # Extract topmodel input
     topmd_input_dir = os.path.join(input_dir, 'topmodel_input')
-    if model in ['topmodel_noah']:
+    if 'topmodel' in model:
         os.makedirs(topmd_input_dir, exist_ok=True)
         for catID in catids:
             run_file = os.path.join(topmd_dir, 'topmod_{}'.format(catID) + '.run')
