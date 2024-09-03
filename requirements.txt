@@ -8,6 +8,6 @@ pandas==2.2.2
 geopandas
 flake8
 matplotlib
-git+https://github.com/noaa-owp/hypy@master#egg=hypy&subdirectory=python
+hypy@git+https://gitlab.sh.nextgenwaterprediction.com/NGWPC/hypy.git@development#egg=hypy&subdirectory=python
 hydrotools.nwis_client
 hydrotools.metrics

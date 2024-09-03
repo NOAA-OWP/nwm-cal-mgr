@@ -1,7 +1,14 @@
-FROM registry.sh.nextgenwaterprediction.com/ngwpc/nwm-ngen/ngen:latest
+## FIXME: replace with official ngen container build when ngen-cal and
+#   ngen+CFE crashing issue is addressed.
+## FIXME FIXME
+# FROM registry.sh.nextgenwaterprediction.com/ngwpc/nwm-ngen/ngen:latest
+FROM ngen:latest
 
-# ensure local python is preferred over distribution python
-ENV PATH="/usr/local/bin:$PATH"
+
+RUN --mount=type=secret,id=GITLAB_TOKEN \ 
+    set -eux; \
+    \
+    git config --global url."https://oauth2:$(cat /run/secrets/GITLAB_TOKEN)@gitlab.sh.nextgenwaterprediction.com/".insteadOf "https://gitlab.sh.nextgenwaterprediction.com/"
 
 RUN --mount=type=secret,id=GITLAB_TOKEN 
 RUN --mount=type=secret,id=GITLAB_TOKEN \ 
@@ -11,7 +18,14 @@ RUN --mount=type=secret,id=GITLAB_TOKEN \
 
 COPY . /ngen-app/ngen-cal/
 
+COPY ./docker/run-ngen-cal.sh /ngen-app/bin/
+
 WORKDIR /ngen-app/
+
+RUN set -eux; \
+	\
+    chmod +x /ngen-app/bin/run-ngen-cal.sh
+
 RUN set -eux; \
 	\
     pip3 install -r ngen-cal/requirements.txt ; \
@@ -35,7 +49,5 @@ RUN set -eux; \
 
 
 WORKDIR /
-SHELL ["/bin/bash", "-c"]
 
-ENTRYPOINT [ "/bin/bash" ] 
-
+ENTRYPOINT [ "/ngen-app/bin/run-ngen-cal.sh" ] 
