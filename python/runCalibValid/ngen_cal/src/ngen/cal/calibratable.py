@@ -344,9 +344,9 @@ class Evaluatable(ABC):
         """Write cost and position history plus gloal best position into csv files"""
         return self.eval_params.write_hist_file(optimizer_result, agent, params_lst)
 
-    def create_valid_realization_file(self, agent: 'Agent', params: 'pd.DataFrame') -> None:
+    def create_valid_realization_file(self, agent: 'Agent', params: 'pd.DataFrame',valid_run_name: str) -> None:
         """Create configuration files for validation run"""
-        return self.eval_params.create_valid_realization_file(agent, params)
+        return self.eval_params.create_valid_realization_file(agent, params, valid_run_name)
 
     def write_valid_metric_file(self, valid_run_path: Path, run_name: str, metrics: float) -> None:
         """Write statistical metrics files for validation run"""

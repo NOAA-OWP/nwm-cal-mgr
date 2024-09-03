@@ -896,7 +896,7 @@ def create_realization_file(
             os.symlink(value, lib_mod_link)
 
     # noah 
-    if model in ["cfe_noah", "topmodel_noah", "cfe_noah_sft", "lasam_noah_sft", "cfe_xaj_noah", "cfe_xaj_noah_sft"]:
+    if 'noah' in model:
         noah_dict = {"name": "bmi_fortran", 
                      "params": {"name": "bmi_fortran", 
                                 "model_type_name": "NoahOWP", 
@@ -914,7 +914,7 @@ def create_realization_file(
                                     "SOLDN": "land_surface_radiation~incoming~shortwave__energy_flux",
                                     "SFCPRS": "land_surface_air__pressure"}}}
     # cfe 
-    if model in ["cfe_noah", "cfe_noah_sft", "cfe_xaj_noah", "cfe_xaj_noah_sft"]:
+    if 'cfe' in model:
         cfe_dict = {"name": "bmi_c",
                     "params": {"name": "bmi_c", 
                                "model_type_name": "CFE", 
@@ -935,7 +935,7 @@ def create_realization_file(
             cfe_dict["params"]["variables_names_map"] = var_name_map 
 
     # topmodel
-    if model in ["topmodel_noah"]:
+    if 'topmodel' in model:
         topm_dict = {"name": "bmi_c",
                      "params": {"name": "bmi_c", 
                                 "model_type_name": "TOPMODEL", 
@@ -949,7 +949,7 @@ def create_realization_file(
                                 "registration_function": "register_bmi_topmodel"}}
 
     # sac-sma
-    if model in ["sac_snow17_pet", "sac_pet"]:
+    if 'sac' in model:
         sac_dict = {"name": "bmi_fortran",
                     "params": {
                                 "model_type_name": "sac",
@@ -962,6 +962,14 @@ def create_realization_file(
                                     "tair": "land_surface_air__temperature",
                                     "pet": "water_potential_evaporation_flux"
                                 }}}
+        if 'noah' in model and 'pet' not in model:
+            items = {"precip": "QINSUR", "pet": "EVAPOTRANS"}
+            var_name_map= sac_dict["params"]["variables_names_map"]
+            var_name_map.update(items)
+            sac_dict["params"]["variables_names_map"] = var_name_map  
+   
+
+
     # snow17
     if model in ["sac_snow17_pet", "snow17_pet"]:
         snow17_dict = {"name": "bmi_fortran",
@@ -1101,7 +1109,8 @@ def create_realization_file(
     if model in ["cfe_noah", "cfe_xaj_noah"]:
         model_type_name = "NoahOWP_CFE"
         main_output_variable = "Q_OUT"        
-        sub_module = [noah_dict, *[cfe_dict, sloth_dict]]
+        #sub_module = [noah_dict, *[cfe_dict, sloth_dict]]
+        sub_module = [sloth_dict, noah_dict, cfe_dict]
 
     elif model in ["sac_snow17_pet"]:
         model_type_name = "sac_snow17_pet"
@@ -1110,7 +1119,11 @@ def create_realization_file(
     elif model in ["sac_pet"]:
         model_type_name = "sac_pet"
         main_output_variable = "tci"
-        sub_module = [sloth_dict, sac_dict, pet_dict]    
+        sub_module = [sloth_dict, sac_dict, pet_dict] 
+    elif model in ["sac_noah"]:
+        model_type_name = "sac_pet"
+        main_output_variable = "tci"
+        sub_module = [noah_dict, sac_dict]    
     elif model in ["snow17_pet"]:
         model_type_name = "snow17_pet"
         main_output_variable = "raim"
