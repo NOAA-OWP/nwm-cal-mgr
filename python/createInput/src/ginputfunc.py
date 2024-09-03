@@ -958,10 +958,13 @@ def create_realization_file(
                                 "allow_exceed_end_time": True, "fixed_time_step": False, "uses_forcing_file": False,
                                 "main_output_variable": "tci",
                                 "variables_names_map": {
-                                    "precip": "raim",
+                                    "precip": "atmosphere_water__liquid_equivalent_precipitation_rate",
                                     "tair": "land_surface_air__temperature",
                                     "pet": "water_potential_evaporation_flux"
                                 }}}
+        if 'snow17' in model:
+            sac_dict["params"]["variables_names_map"]["precip"] = "raim"
+
         if 'noah' in model and 'pet' not in model:
             items = {"precip": "QINSUR", "pet": "EVAPOTRANS"}
             var_name_map= sac_dict["params"]["variables_names_map"]
