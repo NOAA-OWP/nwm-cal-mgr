@@ -1,16 +1,5 @@
-## FIXME: replace with official ngen container build when ngen-cal and
-#   ngen+CFE crashing issue is addressed.
-## FIXME FIXME
-# FROM registry.sh.nextgenwaterprediction.com/ngwpc/nwm-ngen/ngen:latest
-FROM ngen:latest
+FROM registry.sh.nextgenwaterprediction.com/ngwpc/nwm-ngen/ngen:latest
 
-
-RUN --mount=type=secret,id=GITLAB_TOKEN \ 
-    set -eux; \
-    \
-    git config --global url."https://oauth2:$(cat /run/secrets/GITLAB_TOKEN)@gitlab.sh.nextgenwaterprediction.com/".insteadOf "https://gitlab.sh.nextgenwaterprediction.com/"
-
-RUN --mount=type=secret,id=GITLAB_TOKEN 
 RUN --mount=type=secret,id=GITLAB_TOKEN \ 
     set -eux; \
     \
