@@ -1000,7 +1000,7 @@ def create_realization_file(
                                 "registration_function": "register_bmi_pet"
                                 }}
     # sloth
-    if model in ["cfe_noah", "sac_snow17_pet", "sac_pet", "snow17_pet", "topmodel_noah", "cfe_xaj_noah", "topmidel_pet"]:
+    if model in ["cfe_noah", "sac_snow17_pet", "sac_pet", "snow17_pet", "topmodel_noah", "cfe_xaj_noah"]:
         sloth_dict = {"name": "bmi_c++",
                       "params": {"name": "bmi_c++", 
                                  "model_type_name": "SLOTH", 
