@@ -958,7 +958,7 @@ def create_realization_file(
                                 "allow_exceed_end_time": True, "fixed_time_step": False, "uses_forcing_file": False,
                                 "main_output_variable": "tci",
                                 "variables_names_map": {
-                                    "precip": "atmosphere_water__liquid_equivalent_precipitation_rate",
+                                    "precip": "raim",
                                     "tair": "land_surface_air__temperature",
                                     "pet": "water_potential_evaporation_flux"
                                 }}}
@@ -989,7 +989,7 @@ def create_realization_file(
                                 "registration_function": "register_bmi_pet"
                                 }}
     # sloth
-    if model in ["cfe_noah", "sac_snow17_pet", "sac_pet", "snow17_pet", "topmodel_noah", "cfe_xaj_noah"]:
+    if model in ["cfe_noah", "sac_snow17_pet", "sac_pet", "snow17_pet", "topmodel_noah", "cfe_xaj_noah", "topmidel_pet"]:
         sloth_dict = {"name": "bmi_c++",
                       "params": {"name": "bmi_c++", 
                                  "model_type_name": "SLOTH", 
@@ -1119,7 +1119,6 @@ def create_realization_file(
         model_type_name = "NoahOWP_TOPMODEL"
         main_output_variable = "Qout"        
         sub_module = [noah_dict, topm_dict]
-
     elif model in ["cfe_noah_sft", "cfe_xaj_noah_sft"]:
         model_type_name = "NoahOWP_CFE_SK_SFT_SMP" if model== "cfe_noah_sft" else "NoahOWP_CFE_XAJ_SFT_SMP"
         main_output_variable = "Q_OUT"
