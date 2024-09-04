@@ -149,18 +149,29 @@ def create_input(filename):
     nexus_file = os.path.join(input_dir, os.path.basename(gpkg_file)) 
     walk_file = input_dir + '{}'.format(basin) + '_crosswalk.json'
     if not os.path.exists(cat_file):
+        print(f'Creating symlink from {gpkg_file} to {cat_file}')
         os.symlink(gpkg_file, cat_file)
     gfun.create_walk_file(basin, gpkg_file, walk_file)
 
     # Extract forcing files
+    missing_catchment_files = []
     forcing_path = os.path.join(input_dir, 'forcing')
     os.makedirs(forcing_path, exist_ok=True)
     for catID in catids:
         ffile = os.path.join(forcing_dir, catID + '.csv')
-        if not os.path.exists(os.path.join(forcing_path, os.path.basename(ffile))):
-            os.symlink(ffile, os.path.join(forcing_path, os.path.basename(ffile)))
+        # Make sure we have the file
+        if not os.path.exists(ffile):
+            print(f'Forcing file {ffile} does not exist')
+            missing_catchment_files.append(ffile)
+        else:
+            target = os.path.join(forcing_path, os.path.basename(ffile))
+            if not os.path.exists(target):
+                print(f'Creating symlink from {ffile} to {target}')
+                os.symlink(ffile, target)
+    if missing_catchment_files:
+        raise ValueError(f'Missing catchment files in forcing data - {missing_catchment_files}')
 
-    # Extract streamflow observtion 
+    # Extract streamflow observation
     if obsflow_dir:
         obs = pd.read_csv(os.path.join(obsflow_dir, basin + '_hourly_discharge.csv'))[['dateTime','q_cms']]
         obs = obs.rename(columns={'dateTime': 'value_date', 'q_cms': 'obs_flow'})
