@@ -962,6 +962,9 @@ def create_realization_file(
                                     "tair": "land_surface_air__temperature",
                                     "pet": "water_potential_evaporation_flux"
                                 }}}
+        if 'snow17' in model:
+            sac_dict["params"]["variables_names_map"]["precip"] = "raim"
+
         if 'noah' in model and 'pet' not in model:
             items = {"precip": "QINSUR", "pet": "EVAPOTRANS"}
             var_name_map= sac_dict["params"]["variables_names_map"]
@@ -1132,7 +1135,6 @@ def create_realization_file(
         model_type_name = "NoahOWP_TOPMODEL"
         main_output_variable = "Qout"        
         sub_module = [noah_dict, topm_dict]
-
     elif model in ["cfe_noah_sft", "cfe_xaj_noah_sft"]:
         model_type_name = "NoahOWP_CFE_SK_SFT_SMP" if model== "cfe_noah_sft" else "NoahOWP_CFE_XAJ_SFT_SMP"
         main_output_variable = "Q_OUT"
