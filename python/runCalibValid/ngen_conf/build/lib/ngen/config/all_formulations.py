@@ -10,11 +10,14 @@ from .sloth import SLOTH
 from .sft import SFT
 from .smp import SMP
 from .lasam import LASAM
+from .sac import SAC
+from .snow17 import Snow17
+from .ueb import UEB
 
 
 #NOTE the order of this union is important for validation
 #unless the model class is using smart_union!
-KnownFormulations = Union[Topmod, CFE, PET, NoahOWP, LSTM, SLOTH, MultiBMI, SFT, SMP, LASAM]
+KnownFormulations = Union[Topmod, CFE, PET, NoahOWP, LSTM, SLOTH, MultiBMI, SFT, SMP, LASAM, Snow17, SAC, UEB]
 
 #See notes in multi.py and formulation.py about the recursive
 #type of MultiBMI modules and how the forward_refs are handled.

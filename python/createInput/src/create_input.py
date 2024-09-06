@@ -91,6 +91,8 @@ def create_input(filename):
     pet_lib = config.get(section, 'pet_lib')
     snow17_lib = config.get(section, 'snow17_lib')
     sac_lib = config.get(section, "sac_lib")
+    ueb_params_dir = config.get(section, 'ueb_parameter_dir')
+    ueb_lib = config.get(section, "ueb_lib")
 
     # Time period 
     time_period={"run_time_period": {"calib": [calib_start_period, calib_end_period], 
@@ -126,7 +128,9 @@ def create_input(filename):
                     'sac_snow17_pet': {'sac': sac_lib, 'snow17': snow17_lib, 'sloth': sloth_lib, 'pet': pet_lib},
                     'sac_pet': {'sac': sac_lib, 'sloth': sloth_lib, 'pet': pet_lib},
                     'snow17_pet': {'snow17': snow17_lib, 'sloth': sloth_lib, 'pet': pet_lib},
-                    'sac_noah': {'sac': sac_lib, 'noah': noah_lib}
+                    'sac_noah': {'sac': sac_lib, 'noah': noah_lib},
+                    'ueb_pet_cfe': {'cfe': cfe_lib, 'pet': pet_lib, 'ueb': ueb_lib, 'sloth': sloth_lib},
+                    'cfe_noah_ueb': {'cfe': cfe_lib, 'noah': noah_lib, 'ueb': ueb_lib, 'sloth': sloth_lib},
                    }
     
     if not model:
@@ -183,8 +187,14 @@ def create_input(filename):
     # Create cfe input
     cfe_input_dir = os.path.join(input_dir, 'cfe_input')
     if 'cfe' in model:
+#    if model in ['cfe_noah', 'cfe_noah_sft', 'cfe_xaj_noah', 'cfe_xaj_noah_sft', 'pet_cfe_snow17', 'ueb_pet_cfe']:
         gfun.create_cfe_input(catids, attr_file, cfe_input_dir)
 
+    # Create ueb input
+    ueb_input_dir = os.path.join(input_dir, 'ueb_input')
+#    if model in ['ueb_pet_cfe']:
+    if 'ueb' in model:
+        gfun.create_ueb_input(catids, time_period, attr_file, ueb_params_dir, ueb_input_dir)
 
     # Create snow17 input
     snow17_input_dir = os.path.join(input_dir, 'snow17_input')
@@ -194,6 +204,7 @@ def create_input(filename):
     # Create pet input
     pet_input_dir = os.path.join(input_dir, 'pet_input')
     if 'pet' in model:
+#    if model in ['pet_cfe_snow17', 'sac_snow17_pet', 'sac_pet', 'snow17_pet', 'ueb_pet_cfe']:
         gfun.create_pet_input(catids, attr_file, pet_input_dir)
 
     # Create sac input
@@ -204,6 +215,8 @@ def create_input(filename):
     # Create noah input
     noah_input_dir = os.path.join(input_dir, 'noah_input')
     if 'noah' in model:
+#    if model in ['cfe_noah', 'topmodel_noah', 'cfe_noah_sft', 'lasam_noah_sft', 'cfe_xaj_noah', \
+#            'cfe_xaj_noah_sft']:
         gfun.create_noah_input(catids, time_period, attr_file, noah_params_dir, noah_input_dir)
 
     # Create sft and smp input
@@ -239,7 +252,8 @@ def create_input(filename):
     # Create model realization file
     realization_file = work_dir + '/{}'.format(basin) + '_realization_config_bmi_calib.json' 
     routing_config_file = os.path.join(work_dir + '/Input', '{}'.format(basin) + run_configs[0])
-    bmi_dir = {"cfe": cfe_input_dir, "topmodel": topmd_input_dir, "noah": noah_input_dir, 'sft': sft_dir, 'smp': smp_dir, 'lasam': lasam_dir, "snow17": snow17_input_dir, "sac": sac_input_dir, "pet": pet_input_dir}
+    bmi_dir = {"cfe": cfe_input_dir, "topmodel": topmd_input_dir, "noah": noah_input_dir, 'sft': sft_dir, 'smp': smp_dir, 'lasam': lasam_dir, "snow17": snow17_input_dir, "sac": sac_input_dir, "pet": pet_input_dir, \
+            "ueb": ueb_input_dir }
     rt_dict = {"routing": {"t_route_config_file_with_path": routing_config_file}} 
     gfun.create_realization_file(work_dir, lib_file, bmi_dir, forcing_path, realization_file, model, time_period, rt_dict)
 

@@ -22,6 +22,23 @@ import geopandas as gpd
 import pandas as pd
 import yaml
 
+from tempfile import mkstemp
+
+def replace_path(source_file_path, par_path, data_type_codes):
+    fh, target_file_path = mkstemp()
+    with open(target_file_path, 'w') as target_file:
+       with open(source_file_path, 'r') as source_file:
+         data = source_file.readlines() 
+         for i in range(2, len(data), 3):
+            if data[ i ][:1] in data_type_codes:
+                if data[ i + 1 ][:1] != '/':
+                    data[ i + 1 ] = par_path + '/' + data[ i + 1 ] 
+                      
+         target_file.writelines(data) 
+
+    os.remove(source_file_path)
+    shutil.move(target_file_path, source_file_path)
+
 
 __all__ = [
            'create_walk_file',
@@ -29,6 +46,10 @@ __all__ = [
            'create_noah_input',
            'create_sft_smp_input',
            'create_lasam_input',
+           'create_snow17_input',
+           'create_ueb_input',
+           'create_sac_input',
+           'create_pet_input',
            'change_topmodel_input',
            'create_troute_config',
            'create_realization_file',
@@ -462,6 +483,311 @@ def create_snow17_input(
                 ]
         with open(input_file, "w") as f:
             f.writelines('\n'.join(input_list))
+
+def create_ueb_input(
+    catids: List[str],
+    time_period: dict,
+    attr_file: Union[str, Path],
+    param_dir_source: Union[str, Path],
+    ueb_input_dir: str
+)->None:
+
+    """ Create BMI configuration file for ueb
+
+    Parameters
+    ----------
+    catids : catchment IDs in the basin
+    ueb_bmi_dir : directory for the ueb bmi configuration file
+    ueb_param_file : soil hydraulic parameter file
+    ueb_bmi_dir : directory for the lasam bmi configuration file
+
+    Returns
+    ----------
+    None
+
+   """
+    os.makedirs(ueb_input_dir, exist_ok=True)
+
+    # Read hydrofabric attribute file
+    dfa = pd.read_parquet(attr_file)
+    dfa.set_index("divide_id", inplace=True)
+
+    param_list = [
+               'Model Parameters',
+               'irad:  Radiation control flag (0=from ta, 1= input qsi, 2= input qsi,qli 3= input qnet)',
+               '2',
+               'ireadalb:  Albedo reading control flag (0=albedo is computed internally, 1 albedo is read)',
+               '0',
+               'tr: Temperature above which all is rain (3 C)',
+               '3   ',
+               'ts: Temperature below which all is snow (-1 C)',
+               '-1        ',
+               'ems: Emissivity of snow (nominally 0.99)',
+               '0.98  ',
+               'cg:  Ground heat capacity (nominally 2.09 KJ/kg/C)',
+               '2.09          ',
+               'z: Nominal meas. heights for air temp. and humidity (2m)',
+               '2 ',
+               'zo:  Surface aerodynamic roughness (m)',
+               '0.010     ',
+               'rho: Snow Density (Nominally 450 kg/m^3)',
+               '337 ',
+               'rhog:  Soil Density (nominally 1700 kg/m^3)',
+               '1700 ',
+               'lc: Liquid holding capacity of snow (0.05)',
+               '0.05     ',
+               'ks:  Snow Saturated hydraulic conductivity (20 m/hr)',
+               '20',
+               'de:  Thermally active depth of soil (0.1 m)',
+               '0.1   ',
+               'avo:  Visual new snow albedo (0.95)',
+               '0.85 ',
+               'anir0: NIR new snow albedo (0.65)',
+               '0.65 ',
+               'lans: The thermal conductivity of fresh (dry) snow (W/m-K)',
+               '0.278   ',
+               'lang: the thermal conductivity of soil (W/m-K)',
+               '1.11  ',
+               'wlf:  Low frequency fluctuation in deep snow/soil layer ',
+               '0.0654      ',
+               'rd1: Amplitude correction coefficient of heat conduction (1)',
+               '1 ',
+               'dnews:  The threshold depth of for new snow (0.001 m)',
+               '0.001  ',
+               'emc:   Emissivity of canopy',
+               '0.98   ',
+               'alpha: Scattering coefficient for solar radiation',
+               '0.5   ',
+               'alphal:   Scattering coefficient for long wave radiation',
+               '0.0  ',
+               'g: leaf orientation with respect to zenith angle',
+               '0.5   ',
+               'uc:  Unloading rate coefficient (Per hour) (Hedstrom and Pomeroy, 1998)',
+               '0.004626286  ',
+               'as:  Fraction of extraterrestrial radiation on cloudy day, Shuttleworth (1993)  ',
+               '0.25   ',
+               'Bs:     (as+bs):Fraction of extraterrestrial radiation on clear day, Shuttleworth ',
+               '0.5      ',
+               'lambda: Ratio of direct atm radiation to diffuse, worked out from Dingman ',
+               '0.857143 ',
+               'rimax:  Maximum value of Richardson number for stability correction',
+               '0.16',
+               'wcoeff: Wind decay coefficient for the forest',
+               '0.5     ',
+               'a: A in Bristow-Campbell formula for atmospheric transmittance',
+               '0.8      ',
+               'c: C in Bristow-Campbell formula for atmospheric transmittance',
+               '2.4 '
+    ]
+
+    # Files for the calibration and validation run
+    for run_name in ['calib','valid']:
+        if time_period['run_time_period'][run_name][0] and time_period['run_time_period'][run_name][1]:
+            # Date
+            startdate = time_period['run_time_period'][run_name][0]
+            startdate = datetime.datetime.strptime(startdate, "%Y-%m-%d %H:%M:%S") + datetime.timedelta(hours=1)
+            startdate = startdate.strftime("%Y%m%d%H%M")
+            enddate = datetime.datetime.strptime(time_period['run_time_period'][run_name][1], "%Y-%m-%d %H:%M:%S").strftime("%Y%m%d%H%M")
+            for catID in catids:
+                tslp = dfa.loc[catID]['slope_mean']
+                azimuth = dfa.loc[catID]['aspect_c_mean']
+                lat = dfa.loc[catID]['Y']
+                lon = dfa.loc[catID]['X']
+                input_file = os.path.join(ueb_input_dir, 'ueb-init-' +catID + '_' + run_name + '.dat')
+                param_file = os.path.join(ueb_input_dir, 'ueb_params-' +catID +'_' + run_name +  '.dat')
+                site_file = os.path.join(ueb_input_dir, 'ueb_sitevars-' +catID + '_' + run_name + '.dat')
+                inputctr_file = os.path.join(ueb_input_dir, 'ueb_inputctr-' +catID +'_' + run_name +  '.dat')
+                outputctr_file = os.path.join(ueb_input_dir, 'ueb_outputctr-' +catID +'_' + run_name +  '.dat')
+
+                with open(param_file, "w") as f:
+                    f.writelines('\n'.join(param_list))
+
+                site_var_list = [
+                'Site and Initial Condition Input Variables',
+                'USic:  Energy content initial condition (kg m-3)',
+                '0',
+                '0.0',
+                'WSis:  Snow water equivalent initial condition (m)',
+                '0',
+                '0.0',
+                'Tic:  Snow surface dimensionless age initial condition ',
+                '0',
+                '0.0',
+                'WCic:  Snow water equivalent of canopy conditio(m) ',
+                '0',
+                '0.0',
+                'df: Drift factor multiplier',
+                '0                ',
+                '1.0  ',
+                'apr: Average atmospheric pressure         ',
+                '0        ',
+                '74000.0   ',
+                'Aep: Albedo extinction coefficient             ',
+                '0                ',
+                '0.1  ',
+                'cc: Canopy coverage fraction         ',
+                '0          ',
+                '0.7 ',
+                'hcan: Canopy height           ',
+                '0          ',
+                '12.0',
+                'lai: Leaf area index',
+                '0          ',
+                '7.5		',
+                'Sbar: Maximum snow load held per unit branch area        ',
+                '0               ',
+                '6.6',
+                'ycage: Forest age flag for wind speed profile parameterization            ',
+                '0             ',
+                '1.00  ',
+                'slope: A 2-D grid that contains the slope at each grid point     ',
+                '0          ',
+                f'{tslp}',
+                'aspect: A 2-D grid that contains the aspect at each grid point   ',
+                '0       ',
+                f'{azimuth}',
+                'latitude: A 2-D grid that contains the latitude at each grid point    ',
+                '0             ',
+                f'{lat}',
+                'subalb: Albedo (fraction 0-1) of the substrate beneath the snow (ground, or glacier)',
+                '0',
+                '0.25',
+                'subtype: Type of beneath snow substrate encoded as (0 = Ground/Non Glacier, 1=Clean Ice/glacier, 2= Debris covered ice/glacier, 3= Glacier snow accumulation zone)',
+                '0        ',
+                '0.0',
+                'gsurf: The fraction of surface melt that runs off (e.g. from a glacier)',
+                '0',
+                '0.0',
+                'b01: Bristow-Campbell B for January (1)',
+                '0',
+                '6.743      ',
+                'b02: Bristow-Campbell B for February (2)',
+                '0',
+                '7.927    ',
+                'b03: Bristow-Campbell B for March(3)',
+                '0',
+                '8.055  ',
+                'b04: Bristow-Campbell B for April (4)',
+                '0',
+                '8.602 ',
+                'b05: Bristow-Campbell B for may (5)',
+                '0',
+                '8.43  ',
+                'b06: Bristow-Campbell B for June (6)',
+                '0',
+                '9.76',
+                'b07: Bristow-Campbell B for July (7)',
+                '0',
+                '0.0    ',
+                'b08:  Bristow-Campbell B for August (8)',
+                '0',
+                '0.0  ',
+                'b09: Bristow-Campbell B for September (9)',
+                '0',
+                '0.0   ',
+                'b10: Bristow-Campbell B for October (10)',
+                '0',
+                '7.4  ',
+                'b11: Bristow-Campbell B for November (11)',
+                '0',
+                '9.14    ',
+                'b12: Bristow-Campbell B for December (12)',
+                '0',
+                '6.67 ',
+                'ts_last:  degree celsius ',
+                '0',
+                '-9999',
+                'longitude: A 2-D grid that contains the latitude at each grid ',
+                '0',
+                f'{lon}' 
+                ]
+
+                with open(site_file, "w") as f:
+                    f.writelines('\n'.join(site_var_list))
+
+
+                input_ctr_list = [
+                             'Input Control file',
+                             'Prec: Precipitation  (always required)',
+                             '3   ',
+                             '0',
+                             'Ta: Air temperature  (always required)',
+                             '3  ',
+                             '0',
+                             'Tmin: Min Air temperature ',
+                             '2',
+                             '0',
+                             'Tmax: Max Air temperature  ',
+                             '2',
+                             '0',
+                             'v: Wind speed   (always required)',
+                             '3',
+                             '1',
+                             'RH: Relative Humidity   (always required)',
+                             '3',
+                             '40',
+                             'Vp: Air vapor pressure   ',
+                             '2',
+                             '0.5',
+                             'AP: Air pressure   (always required)',
+                             '3',
+                             '74000			//press Pressure Time 3',
+                             'Qsi: Incoming shortwave(kJ/m2/hr)   (only required if irad=1 or 2)',
+                             '3',
+                             '0             ',
+                             'Qli: Long wave radiation(kJ/m2/hr)',
+                             '3',
+                             '0',
+                             'Qnet: Net radiation(kJ/m2/hr)   (only required if irad=3)',
+                             '2  ',
+                             '0',
+                             'Qg: Ground heat flux   (kJ/m2/hr)        ',
+                             '2',
+                             '0 		    ',
+                             'Snowalb: Snow albedo (0-1).  (only required if ireadalb=1) The albedo of the snow surface to be used when the internal albedo calculations are to be overridden',
+                             '2',
+                             '0.6'
+                         ]
+
+                with open(inputctr_file, "w") as f:
+                    f.writelines('\n'.join(input_ctr_list))
+
+                output_list = [
+             'OUTPUT VARIABLES',
+             '1                 // number of point details; put 0 if no point output needed ',
+             f'0 0 {catID}_Point00.txt    // y, x coordinates, output file name                       ',
+             '0                //number of netcdf outputs; put 0 if no netcdf output needed',
+             '0                   //number of aggregated output variables',
+             'SWE m AVE           //name/symbol unit Aggregation operation (look up the dictionary "UEB_Variables_Symbols.dat" for the symbol, Operation SUM or AVE)',
+             'SWIT m SUM',
+             'SWISM m SUM' ]
+
+                with open(outputctr_file, "w") as f:
+                    f.writelines('\n'.join(output_list))
+
+                input_list = [
+                          'UEBGrid Model Driver Test for TWDEF',
+                          param_file,
+                          site_file,
+                          inputctr_file,
+                          outputctr_file,
+                          param_dir_source + '/aggout.nc ',
+                          param_dir_source + '/watershed_onecell.nc',
+                          'watershed y x',
+                          f'{startdate[:4]} {startdate[4:6]} {startdate[6:8]} {startdate[8:10]}.0',
+                          f'{enddate[:4]} {enddate[4:6]} {enddate[6:8]} {enddate[8:10]}.0',
+                          '1.0',
+                          '-7.0',
+                          '0',
+                          '1 15 16',
+                          '1 1'
+                ]
+                with open(input_file, "w") as f:
+                    f.writelines('\n'.join(input_list))
+
+#            replace_path( site_file, param_dir_source, [ '1' ] )
+#            replace_path( inputctr_file, param_dir_source, [ '0', '1'] )
+      
 
 def create_sac_input(
     catids: List[str],
@@ -933,6 +1259,23 @@ def create_realization_file(
             var_name_map= cfe_dict["params"]["variables_names_map"]
             var_name_map.update(items)
             cfe_dict["params"]["variables_names_map"] = var_name_map 
+        if model in ["ueb_pet_cfe"]:
+            items = {"ice_fraction_schaake": "sloth_ice_fraction_schaake",
+                     "ice_fraction_xinanjiang": "sloth_ice_fraction_xinanjiang",
+                     "soil_moisture_profile": "sloth_smp",
+                      "atmosphere_water__liquid_equivalent_precipitation_rate": "SWIT"}
+            var_name_map= cfe_dict["params"]["variables_names_map"]
+            var_name_map.update(items)
+            var_name_map.pop( "water_potential_evaporation_flux", None)
+            cfe_dict["params"]["variables_names_map"] = var_name_map 
+        if model in ["cfe_noah_ueb"]:
+            items = {"ice_fraction_schaake": "sloth_ice_fraction_schaake",
+                     "ice_fraction_xinanjiang": "sloth_ice_fraction_xinanjiang",
+                     "soil_moisture_profile": "sloth_smp",
+                      "atmosphere_water__liquid_equivalent_precipitation_rate": "SWIT"}
+            var_name_map= cfe_dict["params"]["variables_names_map"]
+            var_name_map.update(items)
+            cfe_dict["params"]["variables_names_map"] = var_name_map 
 
     # topmodel
     if 'topmodel' in model:
@@ -987,9 +1330,29 @@ def create_realization_file(
                                     "tair": "land_surface_air__temperature"
                                 }}}
 
+    #ueb
+    if 'ueb' in model:
+        ueb_dict = {"name": "bmi_c++",
+                      "params": {
+                                "name": "bmi_c++", 
+                                "model_type_name": "UEB",
+                                "library_file": lib_mod['ueb'],
+                                "init_config": os.path.join(bmi_dir['ueb'], 'ueb-init-{{id}}_calib.dat'),
+                                "allow_exceed_end_time": True, "fixed_time_step": False, "uses_forcing_file": False,
+                                "main_output_variable": "SWIT",
+                                "variables_names_map": {
+                                    "Prec": "atmosphere_water__liquid_equivalent_precipitation_rate",
+                                    "Ta": "land_surface_air__temperature",
+                                    "qair": "atmosphere_air_water~vapor__relative_saturation",
+                                    "uebu2d": "land_surface_wind__x_component_of_velocity",
+                                    "uebv2d": "land_surface_wind__y_component_of_velocity",
+                                    "Qli": "land_surface_radiation~incoming~longwave__energy_flux",
+                                    "Qsi": "land_surface_radiation~incoming~shortwave__energy_flux",
+                                    "AP": "land_surface_air__pressure"}}}
+
 
     #pet 
-    if model in ["sac_snow17_pet", "sac_pet", "snow17_pet"]:
+    if model in ["sac_snow17_pet", "sac_pet", "snow17_pet", "ueb_pet_cfe"]:
         pet_dict = {"name": "bmi_c",
                       "params": {
                                 "model_type_name": "PET",
@@ -1000,7 +1363,7 @@ def create_realization_file(
                                 "registration_function": "register_bmi_pet"
                                 }}
     # sloth
-    if model in ["cfe_noah", "sac_snow17_pet", "sac_pet", "snow17_pet", "topmodel_noah", "cfe_xaj_noah"]:
+    if model in ["cfe_noah", "sac_snow17_pet", "sac_pet", "snow17_pet", "topmodel_noah", "cfe_xaj_noah", "ueb_pet_cfe", "cfe_noah_ueb"]:
         sloth_dict = {"name": "bmi_c++",
                       "params": {"name": "bmi_c++", 
                                  "model_type_name": "SLOTH", 
@@ -1130,7 +1493,15 @@ def create_realization_file(
     elif model in ["snow17_pet"]:
         model_type_name = "snow17_pet"
         main_output_variable = "raim"
-        sub_module = [sloth_dict, snow17_dict]
+        sub_module = [sloth_dict, snow17_dict, pet_dict]
+    elif model in ["ueb_pet_cfe"]:
+        model_type_name = "ueb_pet_cfe"
+        main_output_variable = "Q_OUT"
+        sub_module = [sloth_dict, ueb_dict, pet_dict, cfe_dict]
+    elif model in ["cfe_noah_ueb"]:
+        model_type_name = "cfe_noah_ueb"
+        main_output_variable = "Q_OUT"
+        sub_module = [sloth_dict, ueb_dict, noah_dict, cfe_dict]
     elif model == "topmodel_noah":
         model_type_name = "NoahOWP_TOPMODEL"
         main_output_variable = "Qout"        
