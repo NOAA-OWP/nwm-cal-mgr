@@ -14,7 +14,6 @@ import scipy.stats as sp
 from scipy.stats import pearsonr
 
 from hydrotools.metrics import metrics as hm
-#from hydrotools.events.event_detection import decomposition as ev
 from .event_metric_functions import identify_events, separate_compound_events, pair_events, compute_event_metrics
 
 __all__ = ['treat_values',
@@ -457,53 +456,6 @@ def categorical_score(
     fbias = hm.frequency_bias(contingency_table)
 
     return {'POD':pod, 'FAR':far, 'CSI':csi, 'FBIAS':fbias}
-
-# def event_detection(
-#     data:pd.Series,
-#     halflife:Optional[str] = '6h', 
-#     window: Optional[str] = '7d', 
-#     minimum_event_duration: Optional[str] = '6h',
-#     start_radius: Optional[str] = '6h',
-# ) -> pd.DataFrame:
-#     """ Conduct first-round event detection using hydrotools.evens.event_detection
-
-#     Parameters
-#     ----------
-#     data : streamflow time series 
-#     halflife: parameter for event detection
-#     window: parameter for event detection
-#     minimum_event_duration: parameter for event detection
-#     start_radius: parameter for event detection 
-
-#     Returns
-#     -------
-#     DataFrame of events with start, end, and peak times, as well as peak flow value
-
-#     """
-    
-#     pd.set_option('future.no_silent_downcasting', True)
-
-#     # Detect events
-#     #data = data.resample('h').first().ffill()
-
-#     # data1 = pd.read_csv("/home/yuqiong.liu/work/Gitlab/run/obs_flow.csv")
-#     # data1['index'] = pd.to_datetime(data1['index'])
-#     # data1 = data1.set_index("index")   
-#     # print(data1)
-#     # events = ev.list_events(data1['obs_flow'], halflife='6h', window='7d', minimum_event_duration='6h',start_radius='6h')
-#     # print('------------------')
-#     # print(events)
-
-#     events = ev.list_events(data, halflife=halflife, window=window, 
-#        minimum_event_duration=minimum_event_duration,start_radius=start_radius)
-
-#     # Compute peak timing
-#     events['peak'] = events.apply(lambda e: data.loc[e.start:e.end].idxmax(), axis=1)
-
-#     # Compute peak discharge for each event
-#     events['peak_value'] = events.apply(lambda e: data.loc[e.start:e.end].max(), axis=1)
-
-#     return events
 
 def event_based_metrics(
     y_true:pd.Series, 
