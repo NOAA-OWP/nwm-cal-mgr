@@ -72,6 +72,7 @@ def create_input(filename):
     section = 'DataFile'
     forcing_dir = config.get(section, 'forcing_dir')
     obsflow_dir = config.get(section, 'obs_dir')
+    nwmflow_file = config.get(section,"nwmretro_file")
     hydrofab_dir = config.get(section, 'hydrofab_dir')
     cfe_dir = config.get(section, 'cfe_dir')
     topmd_dir = config.get(section, 'topmd_dir') 
@@ -260,7 +261,7 @@ def create_input(filename):
     # Create calibration configuration file 
     calib_config_file = os.path.join(work_dir + '/Input', '{}'.format(basin) + '_config_calib.yaml')
     model_dict = {'type': 'ngen', 'binary': ngen_exe_file, 'realization': realization_file, 'catchments': cat_file, 'nexus': nexus_file,
-                  'crosswalk':  walk_file, 'obsflow': obsflow_file, 'strategy': 'uniform', 'params': None,
+                  'crosswalk':  walk_file, 'obsflow': obsflow_file, 'nwmflow': nwmflow_file,'strategy': 'uniform', 'params': None,
                   'eval_params': {'objective': objective, 
                                   'evaluation_start': time_period['evaluation_time_period'][run_type][0],
                                   'evaluation_stop': time_period['evaluation_time_period'][run_type][1], 

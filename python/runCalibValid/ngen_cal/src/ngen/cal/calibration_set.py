@@ -38,6 +38,7 @@ class CalibrationSet(Evaluatable):
         end_time: str, 
         eval_params: 'EvaluationOptions', 
         obsflow_file: 'Path',
+        nwmflow_file: 'Path',
         wb_lst: list,
 ) -> None:
         """Construct attributes for the CalibrationSet object.
@@ -51,6 +52,7 @@ class CalibrationSet(Evaluatable):
         end_time : Endig simulation time 
         eval_params : EvaluationOptions object 
         obsflow_file : Streamflow observation file
+        nwmflow_file: nwm retrospective streamflow simulation
 
         """
         super().__init__(eval_params)
@@ -69,6 +71,13 @@ class CalibrationSet(Evaluatable):
             self._observed = obs.set_index('value_time')['value'].resample('1H').nearest()
             self._observed.rename('obs_flow', inplace=True)
             self._observed = self._observed * 0.028316847 # Convert observation from ft^3/s to m^3/s
+
+        # read nwm retrospective streamflow
+        if os.path.exists(nwmflow_file):
+            nwm = pd.read_csv(nwmflow_file)
+            nwm.columns = ['value_date','sim_flow']
+            nwm['value_date'] = pd.DatetimeIndex(nwm['value_date'])
+            self._nwmflow = nwm.set_index('value_date')
 
         self._output = None
         self._eval_range = self.eval_params._eval_range
@@ -134,7 +143,15 @@ class CalibrationSet(Evaluatable):
         if hydrograph is None:
             raise(RuntimeError("Error reading observation for {}".format(self._id)))
         return hydrograph
-
+    
+    @property
+    def nwmflow(self) -> 'DataFrame':
+        """ NWM retrospective hydrograph fromfor this catchment."""
+        hydrograph = self._nwmflow
+        if hydrograph is None:
+            raise(RuntimeError("Error reading observation for {}".format(self._id)))
+        return hydrograph
+    
     @observed.setter
     def observed(self, df):
         self._observed = df
@@ -167,11 +184,14 @@ class UniformCalibrationSet(CalibrationSet, Adjustable):
         end_time: str, 
         eval_params: 'EvaluationOptions', 
         obsflow_file: 'Path', 
+        nwmflow_file: 'Path',
         wb_lst: list,
         params: dict = {},
 ) -> None:
         """Constructor for the UniformCalibrationSet object."""
-        super().__init__(adjustables=[self], eval_nexus=eval_nexus, routing_output=routing_output, start_time=start_time, end_time=end_time, eval_params=eval_params, obsflow_file=obsflow_file, wb_lst=wb_lst)
+        super().__init__(adjustables=[self], eval_nexus=eval_nexus, routing_output=routing_output, \
+                         start_time=start_time, end_time=end_time, eval_params=eval_params, 
+                         obsflow_file=obsflow_file, nwmflow_file=nwmflow_file, wb_lst=wb_lst)
         Adjustable.__init__(self=self, df=DataFrame(params).rename(columns={'init': '0'}))
 
         #For now, set this to None so meta update does the right thing
