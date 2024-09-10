@@ -1308,12 +1308,20 @@ def create_realization_file(
         if 'snow17' in model:
             sac_dict["params"]["variables_names_map"]["precip"] = "raim"
 
-        if 'noah' in model and 'pet' not in model:
+        if 'ueb' in model:
+            sac_dict["params"]["variables_names_map"]["precip"] = "SWIT"
+
+        if 'noah' in model and 'pet' not in model and 'ueb' not in model:
             items = {"precip": "QINSUR", "pet": "EVAPOTRANS"}
             var_name_map= sac_dict["params"]["variables_names_map"]
             var_name_map.update(items)
             sac_dict["params"]["variables_names_map"] = var_name_map  
    
+        if 'noah' in model and 'ueb' in model:
+            items = {"precip": "SWIT", "pet": "EVAPOTRANS"}
+            var_name_map= sac_dict["params"]["variables_names_map"]
+            var_name_map.update(items)
+            sac_dict["params"]["variables_names_map"] = var_name_map  
 
 
     # snow17
@@ -1352,7 +1360,7 @@ def create_realization_file(
 
 
     #pet 
-    if model in ["sac_snow17_pet", "sac_pet", "snow17_pet", "ueb_pet_cfe"]:
+    if model in ["sac_snow17_pet", "sac_pet", "snow17_pet", "ueb_pet_cfe", "sac_ueb_pet"]:
         pet_dict = {"name": "bmi_c",
                       "params": {
                                 "model_type_name": "PET",
@@ -1482,6 +1490,10 @@ def create_realization_file(
         model_type_name = "sac_snow17_pet"
         main_output_variable = "tci"
         sub_module = [sloth_dict, snow17_dict, sac_dict, pet_dict]
+    elif model in ["sac_ueb_pet"]:
+        model_type_name = "sac_ueb_pet"
+        main_output_variable = "tci"
+        sub_module = [ueb_dict, sac_dict, pet_dict]
     elif model in ["sac_pet"]:
         model_type_name = "sac_pet"
         main_output_variable = "tci"
@@ -1490,6 +1502,10 @@ def create_realization_file(
         model_type_name = "sac_pet"
         main_output_variable = "tci"
         sub_module = [noah_dict, sac_dict]    
+    elif model in ["sac_noah_ueb"]:
+        model_type_name = "sac_noah_ueb"
+        main_output_variable = "tci"
+        sub_module = [noah_dict, sac_dict, ueb_dict]    
     elif model in ["snow17_pet"]:
         model_type_name = "snow17_pet"
         main_output_variable = "raim"

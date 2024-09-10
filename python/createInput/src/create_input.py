@@ -132,6 +132,8 @@ def create_input(filename):
                     'sac_noah': {'sac': sac_lib, 'noah': noah_lib},
                     'ueb_pet_cfe': {'cfe': cfe_lib, 'pet': pet_lib, 'ueb': ueb_lib, 'sloth': sloth_lib},
                     'cfe_noah_ueb': {'cfe': cfe_lib, 'noah': noah_lib, 'ueb': ueb_lib, 'sloth': sloth_lib},
+                    'sac_noah_ueb': {'sac': sac_lib, 'noah': noah_lib, 'ueb': ueb_lib},
+                    'sac_ueb_pet': {'sac': sac_lib, 'pet': pet_lib, 'ueb': ueb_lib},
                    }
     
     if not model:
