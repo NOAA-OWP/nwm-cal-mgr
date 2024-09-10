@@ -1,0 +1,220 @@
+# ------------------------------------------------
+# Main Input Configuration File
+#
+# This file is used to create the input data and
+# files to run calibration and validation.
+# It contains three sections:
+#    1. General
+#    2. Calibration
+#    3. DataFile
+# User needs to fill out the required options and   
+# change default entries if needed
+#
+# @author: Xia Feng
+# ------------------------------------------------
+
+[General]
+# Stream gage ID at basin outlet 
+basin = 01123000
+
+# Model and module for calibration
+# Current acceptable formulations: 
+# 1. cfe_noah: CFE with Schaake scheme coupled with Noah-OWP-Modular (NOM)
+# 2. cfe_noah_sft: CFE with Schaake scheme coupled with NOM, SFT and SMP
+# 3. cfe_xaj_noah: CFE with Xinanjiang scheme coupled with NOM
+# 4. cfe_xaj_noahsft: CFE with Xinanjiang scheme coupled with NOM, SFT and SMP
+# 5. lasam_noah_sft: LASAM coupled with NOM, SFT and SMP
+# 6. topmodel_noah: TOPMODEL coupled with NOM
+model = cfe_noah
+
+# Glacier: (Topoflow)
+# snow: UEB, NOAH-OWP, Snow-17
+# Evaportranspiration: (PET), NOAH-OWP, 
+# runoff: CFE, CFE-XAJ, SAC, Topmodel, (LASAM)
+# soil moisture: SMP, SFT
+# routing: T-route
+
+# Run name
+# calibration run: calib
+# control validation run: valid_control
+# best validation run: valid_best
+run_type = calib
+
+# Main directory to store input, output and other files  
+main_dir = /home/yuqiong.liu/work/Gitlab/run
+
+[Calibration]
+# Optimizaition algorithm for parameter estimation
+optimization_algorithm = dds 
+
+# Specify algorithm parameters for PSO and GWO only
+# Control parameters c1, c2 and w are only needed for PSO
+# This entry is optional.
+swarm_size = 10
+c1 = 2
+c2 = 2
+w = 0.7
+
+# Objective function   
+objective_function = kge 
+
+# Starting iteration number
+start_iteration = 0
+
+# Number of iterations
+number_iteration = 2 
+
+# Whether restart calibration from the stopped iteration 
+# 0: Not 
+# 1: Yes
+# It should be 0 if start_interation entry is 0. 
+restart = 0
+
+# Calibration simulation time period
+calib_start_period = 2015-10-01 00:00:00
+calib_end_period = 2019-09-30 23:00:00
+
+# Calibration evaluation time period
+calib_eval_start_period = 2016-10-01 00:00:00
+calib_eval_end_period = 2019-09-30 23:00:00
+
+# Validation simulation time period
+valid_start_period = 2013-10-01 00:00:00
+valid_end_period = 2019-09-30 23:00:00
+
+# Validation evaluation time period
+valid_eval_start_period = 2014-10-01 00:00:00
+valid_eval_end_period = 2016-09-30 23:00:00
+
+# Full evaluation time period
+full_eval_start_period = 2014-10-01 00:00:00
+full_eval_end_period = 2019-09-30 23:00:00
+
+# Save streamflow output and plot at the specified iteration
+# These entries are optional and specified with the default values.
+# 1: Filename is distinguished by the iteration number.
+# 0: Filename is same at different iteration, i.e., overwritten by file from last iteration.
+save_output_iter = 0
+save_plot_iter = 0
+
+# Iteration interval to save plots
+# This entry is optional and specified with the default value.
+save_plot_iter_freq = 1
+
+# Streamflow threshold in cms for the calculation of categorical scores
+# This entry is optional. 
+# If it is not specified, categorical metrics will not be calculated.
+# here 3.88 is 90% flow in cms
+streamflow_threshold = 3.88
+
+# Stream station name used for the title of plots 
+# This entry is optional. 
+# If it is not specified, station name will not show up in the title of plots.
+station_name = "Little River Near Hanover, CT"
+
+# Email address to receive the notification of run completion 
+# This entry is optional. 
+# If it is not specified, user will not receive email notification after run is completed. 
+user_email = 
+
+[DataFile]
+# Diretory for forcing data 
+forcing_dir = /home/yuqiong.liu/work/data/aorc_nwm/csv_basin_group1/Gage_01123000/
+
+# Diretory for streamflow observation  
+# This entry is optional. 
+# If it is not specified, observation will be downloaded on the fly during the calibration.
+obs_dir = /home/yuqiong.liu/work/data/streamflow_obs/
+
+# file for NWM retreospective streamflow simulation
+# if nor provided, metrics for NWM retro will not be calcualted; it won't show in evaluation plots either
+nwmretro_file = /home/yuqiong.liu/work/data/nwmv3_retro_streamflow/csv/CONUS/01123000_1979_2022.csv
+
+# Diretory for hydrofabric data   
+hydrofab_dir = /home/yuqiong.liu/work/data/camels1/
+
+# Diretory for CFE BMI files 
+# This entry is optional.
+# If neither SFT, nor SMP nor LASAM is selected, there is no need to fill this entry.
+cfe_dir = 
+
+# Diretory for TOPMODEL BMI files   
+# This entry is optional.
+# If TOPMODEL is not selected, there is no need to fill this entry.
+topmd_dir = 
+
+# Diretory for Noah-OWP-Modular parameter table   
+# This entry is optional.
+# If Noah-OWP-Modular is not selected, there is no need to fill this entry.
+noah_parameter_dir = /home/yuqiong.liu/work/data/bmi_config/Noah-OWP/
+
+# Path for model attributes file
+# This entry is optional.
+# If neither CFE, nor Noah-OWP-Modular, nor SFT is selected, there is no need to fill this entry.
+attributes_file = /home/yuqiong.liu/work/data/conus_model_attributes.parquet
+
+# Path for calibration parameter file
+# It contains the minimum, maximum, and initial values of parameters for the specified model
+calib_parameter_file = /home/yuqiong.liu/work/data/calib_params_CFE_NOM.txt
+
+# Path for LASAM soil parameter file
+# This entry is optional.
+# If LASAM is not selected, there is no need to fill this entry.
+lasam_soil_parameter_file = 
+
+# Path for LASAM soil class file
+# This entry is optional.
+# If LASAM is not selected, there is no need to fill this entry.
+lasam_soil_class_file = 
+
+# Executable file for running ngen BMI
+ngen_exe_file = /home/yuqiong.liu/work/Gitlab/ngen/cmake_build/ngen
+
+# Library file for CFE
+# This entry is optional.
+# If CFE is not selected, there is no need to fill this entry.
+cfe_lib = /home/yuqiong.liu/work/Gitlab/ngen/extern/cfe/cmake_build/libcfebmi.so
+#cfe_lib = /home/yuqiong.liu/work/ngen/extern/cfe/cmake_build/libcfebmi.so
+
+# Library file for SLoth
+sloth_lib = /home/yuqiong.liu/work/Gitlab/ngen/extern/sloth/cmake_build/libslothmodel.so
+
+# Library file for TOPMODEL
+# This entry is optional.
+# If TOPMODEL is not selected, there is no need to fill this entry.
+topmd_lib = 
+
+# Library file for Noah-OWP-Modular
+# This entry is optional.
+# If Noah-OWP-Modular is not selected, there is no need to fill this entry.
+noah_lib = /home/yuqiong.liu/work/Gitlab/ngen/extern/noah-owp-modular/cmake_build/libsurfacebmi.so
+
+# Library file for soil freeze and thaw (SFT) model
+# This entry is optional.
+# If SFT is not selected, there is no need to fill this entry.
+sft_lib = 
+
+# Library file for soil moisture profiles (SMP)
+# This entry is optional.
+# If SMP is not selected, there is no need to fill this entry.
+smp_lib = 
+
+# Library file for Lumped Arid and Semi-arid Model (LASAM)
+# This entry is optional.
+# If LASAM is not selected, there is no need to fill this entry.
+lasam_lib = 
+
+# Library file for PET (potentital evapotranspiration)
+# This entry is optional.
+# If PET is not selected, there is no need to fill this entry.
+pet_lib = /home/yuqiong.liu/work/Gitlab/ngen/extern/evapotranspiration/evapotranspiration/cmake_build/libpetbmi.so
+
+# Library file for SAC-SMA
+# This entry is optional.
+# If SAC-SMA is not selected, there is no need to fill this entry.
+sac_lib = /home/yuqiong.liu/work/Gitlab/ngen/extern/sac-sma/cmake_build/libsacbmi.so
+
+# Library file for SAC-SMA
+# This entry is optional.
+# If SAC-SMA is not selected, there is no need to fill this entry.
+snow17_lib = /home/yuqiong.liu/work/Gitlab/ngen/extern/snow17/cmake_build/libsnow17bmi.so

@@ -406,10 +406,10 @@ def scatterplot_var(
     allcols = list(df.columns)[1:]
 
     # Define figure arguments
-    if len(allcols) > 15 and len(allcols) < 20:
+    if len(allcols) > 16:
         cols = 5
-    elif len(allcols) > 6 and len(allcols) <= 15: 
-        cols = 5
+    elif len(allcols) > 12: 
+        cols = 4
     else:
         cols = 3
     rows = math.ceil((len(allcols) - 1)/cols)
@@ -532,17 +532,19 @@ def barplot_metric(
     labels = list(df.index.get_level_values(1).unique())
     x = np.arange(len(labels))
     width = 0.7/len(runtp)
-    xwidth = [x - width/2, x + width/2] if len(runtp) == 2 else [x - width, x, x + width]
+    #xwidth = [x - width/2, x + width/2] if len(runtp) == 2 else [x - width, x, x + width]
+    start0 = -(len(runtp)-1)*width/2
+    x1 = np.arange(start0, start0+len(labels), 1)
+    xwidth = [x1+x*width for x in np.arange(len(runtp))]
 
     # Plot
     fig, axs = plt.subplots(rows, cols, figsize=figsize, dpi=105, sharex=False)
     axs = trim_axs(axs, len(allcols))
     for ax, varname in zip(axs, allcols):
         if varname==allcols[-1]:
-            #label0 = [x.split('_')[1] for x in runtp]
             label0 = [x.replace("valid_","") for x in runtp]
         else:
-            label0 = ["",""] if len(runtp)==2 else ["","",""]
+            label0 = [""] * len(runtp)
         for i in range(len(runtp)):
             ax.bar(xwidth[i], df.loc[(runtp[i], labels),varname].values.tolist(), width, label=label0[i])
 
@@ -553,8 +555,12 @@ def barplot_metric(
             ax.set_xticklabels("")
 
         ax.set_title(varname)
-        if varname==allcols[-1]:
-            ax.legend(bbox_to_anchor=(1, 0.8, 0.15, 0.15), fontsize=12)
+        #if varname==allcols[-1]:
+        #    ax.legend(bbox_to_anchor=(1, 0.8, 0.15, 0.15), fontsize=12)
+
+    # Create a single legend for the entire figure
+    handles, labels = ax.get_legend_handles_labels()
+    fig.legend(handles, labels, loc='lower center',ncol=len(runtp),fontsize=12)
 
     # Set common x- and y-axis labels
     fig.add_subplot(111, frameon=False)
@@ -562,7 +568,7 @@ def barplot_metric(
     plt.xlabel("Simulation Time Period", weight='bold', fontsize=16)
 
     plt.suptitle(title, size=20, weight='bold')
-    plt.subplots_adjust(left=0.06, right=0.89, bottom=0.08, top=0.85, hspace=0.25, wspace=0.35)
+    plt.subplots_adjust(left=0.06, right=0.94, bottom=0.12, top=0.85, hspace=0.25, wspace=0.35)
 
     plt.savefig(plotfile)
     plt.close()
@@ -591,7 +597,6 @@ def plot_fdc_calib(
     # Figure arguments
     colname = list(df.columns)[1:]
     df = df.iloc[24:] # remove first day with possible big values
-    max0 = math.ceil(pd.melt(df, id_vars=[df.columns[0]], value_vars=colname[1:])['value'].max()) * 1.02
 
     # Plot
     cols = ['k', 'b', 'orange', 'tab:green']
@@ -644,7 +649,7 @@ def plot_fdc_valid(
     # Figure arguments
     colname = list(df.columns)[1:]
     df = df.iloc[24:] # remove initial big values
-    max0 = math.ceil(pd.melt(df, id_vars=[df.columns[0]], value_vars=colname[1:])['value'].max()) * 1.02
+    #max0 = math.ceil(pd.melt(df, id_vars=[df.columns[0]], value_vars=colname[1:])['value'].max()) * 1.02
 
     # Plot
     cols = ['k', 'b', 'orange', 'tab:green','tab:cyan'] # cols = ['k','C1','C0','C3']

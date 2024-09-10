@@ -104,6 +104,7 @@ class NgenBase(ModelExec):
     binary: str = 'ngen'
     args: Optional[str]
     obsflow: Optional[FilePath]
+    nwmflow: Optional[FilePath]
 
     #private, not validated
     _catchments: Sequence['CalibrationCatchment'] = []
@@ -454,7 +455,9 @@ class NgenUniform(NgenBase):
         self.routing_output = "troute_output_" + start_t.strftime("%Y%m%d%M%H") + ".nc"
         nexus_id = self._catchment_hydro_fabric.loc[self._x_walk.index[0].replace('cat','wb')]['toid']
         self._wb_lst = [x.split('-')[1] for x in list(self._catchment_hydro_fabric.query('toid==@nexus_id').index)]
-        self._catchments.append(UniformCalibrationSet(eval_nexus=eval_nexus[0], routing_output=self.routing_output, start_time=start_t, end_time=end_t, eval_params=self.eval_params, obsflow_file=self.obsflow, params=params, wb_lst=self._wb_lst))
+        self._catchments.append(UniformCalibrationSet(eval_nexus=eval_nexus[0], routing_output=self.routing_output, \
+                                                      start_time=start_t, end_time=end_t, eval_params=self.eval_params, \
+                                                        obsflow_file=self.obsflow, nwmflow_file=self.nwmflow, params=params, wb_lst=self._wb_lst))
 
 class Ngen(BaseModel, Configurable, smart_union=True):
     __root__: Union[NgenExplicit, NgenIndependent, NgenUniform] = Field(discriminator="strategy")

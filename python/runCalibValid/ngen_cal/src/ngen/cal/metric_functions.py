@@ -81,7 +81,7 @@ def treat_values(
 
     # Replace zero values
     if replace_zero:
-        if df[colnames[1:]].min().values.min() == 0:
+        if df[colnames[1:]].min().values.min() <= 0.0001:
             df[colnames[1:]] = df[colnames[1:]] + 1.0/100.0*df[colnames[1]].mean()
 
     return df

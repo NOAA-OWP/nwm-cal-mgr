@@ -50,14 +50,21 @@ def run_valid_ctrl_best(agent: 'Agent') -> None:
             # Save and move output
             calibration_object.save_valid_output(calibration_object.basinID, agent.run_name, agent.valid_path, agent.job.workdir, agent.valid_path_output)
 
-            # Plot
+            # compute metrics for nwm retrospective streamflow (for valid_control) or 
+            # plot the validation plots (for valid_best or validation with alternative parameters)
             if agent.run_name == 'valid_control':
-                pass
+                metrics = pd.DataFrame()
+                for key, value in time_period.items():
+                    result = _calc_metrics(calibration_object.nwmflow, calibration_object.observed, value, calibration_object.threshold)
+                    tmp = {**{'run': 'nwm_retro', 'period': key}, **result}
+                    metrics = pd.concat([metrics, pd.DataFrame([tmp])], ignore_index=True)
+                    calibration_object.write_valid_metric_file(agent.workdir, 'nwm_retro', metrics)
+                
             elif agent.run_name == 'valid_best':
-                runs = ['valid_control', 'valid_best']
+                runs = ['valid_control', 'valid_best', 'nwm_retro']
                 plot_valid_output(calibration_object, agent, runs, time_period)
             else:
-                runs = ['valid_control', 'valid_best', agent.run_name]
+                runs = ['valid_control', 'valid_best', 'nwm_retro', agent.run_name]
                 plot_valid_output(calibration_object, agent, runs, time_period)
         
 

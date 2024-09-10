@@ -17,11 +17,8 @@ from ngen.cal.configuration import General
 
 def main(general: General, model_conf, worker:str, iteration:int):
 
-    # run name
-    run_name = 'valid_' + worker + '_iter' + str(iteration)
-
     # Initialize agent
-    agent = Agent(model_conf, general.calib_path, general, general.log, general.restart)
+    agent = Agent(model_conf, general.valid_path, general, general.log, general.restart)
 
     # read the parameter values from the *params_iteration.csv file
     file1 = Path(agent.calib_path,'ngen_'+worker+'_worker',conf['model']['eval_params']['basinID'] + '_params_iteration.csv')
@@ -36,21 +33,21 @@ def main(general: General, model_conf, worker:str, iteration:int):
         for calibration_object in calibration_set.adjustables:
 
             # get the alternative parameter values
-            calibration_object.adf.loc[:,run_name] = df1[iteration].to_list()
+            calibration_object.adf.loc[:,general.name] = df1[iteration].to_list()
 
             # create the realization file (with the alternative parameters) and the validation config file
-            calibration_object.create_valid_realization_file(agent, calibration_object.adf, run_name) 
+            calibration_object.create_valid_realization_file(agent, calibration_object.adf, general.name) 
 
     # create t-route config file for the validation run
     configfl = os.path.join(agent.valid_path, os.path.basename(str(agent.realization_file)))
-    valid_file = os.path.join(agent.valid_path, os.path.basename(configfl).replace("calib",run_name))
+    valid_file = os.path.join(agent.valid_path, os.path.basename(configfl).replace("calib",general.name))
     if not os.path.exists(valid_file):
         raise FileNotFoundError('File does not exist: ' + str(valid_file))
     with open(valid_file) as fp:
         data = json.load(fp)
 
     troute_config = data['routing']['t_route_config_file_with_path']
-    troute_config_best = troute_config.replace(run_name, 'valid_best')
+    troute_config_best = troute_config.replace(general.name, 'valid_best')
     if not os.path.exists(troute_config_best):
         raise FileNotFoundError('File does not exist: ' + str(troute_config_best))
     shutil.copy(troute_config_best, troute_config)
@@ -69,5 +66,6 @@ if __name__ == "__main__":
         conf = yaml.safe_load(file)
     
     general = General(**conf['general'])
+    general.name = 'valid_' + args.worker_id + '_iter' + str(args.iter_no)
 
     main(general, conf['model'], args.worker_id, args.iter_no)
