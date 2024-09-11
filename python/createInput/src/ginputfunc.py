@@ -13,6 +13,7 @@ import re
 import sys
 import shutil
 import subprocess
+import fnmatch
 from fileinput import FileInput
 from functools import partial
 from typing import List, Union
@@ -358,7 +359,8 @@ def create_sft_smp_input(
     for catID in catids:
 
         # Read cfe file
-        cfe_bmi_file = os.path.join(cfe_dir, catID + '*.txt')
+        #cfe_bmi_file = os.path.join(cfe_dir, catID + '*.txt')
+        cfe_bmi_file = os.path.join(cfe_dir, fnmatch.filter(os.listdir(cfe_dir), '*'+catID+'*.txt')[0])
         df = pd.read_table(cfe_bmi_file,  delimiter='=', names=["Params","Values"], index_col=0)
 
         # Obtain annual mean surface temperature as proxy for initial soil temperature
@@ -367,10 +369,11 @@ def create_sft_smp_input(
 
         # Create sft list
         sft_lst = ['verbosity=none', 'soil_moisture_bmi=1', 'end_time=1.[d]', 'dt=1.0[h]', 
-                   'soil_params.smcmax=' + df.loc['soil_params.smcmax'][0], 
-                   'soil_params.b=' + df.loc['soil_params.b'][0], 
-                   'soil_params.satpsi=' + df.loc['soil_params.satpsi'][0], 
-                   'soil_params.quartz=' + str(dfa.loc[catID]['quartz']) +'[]', 
+                   'soil_params.smcmax=' + df.loc['soil_params.smcmax'].iloc[0], 
+                   'soil_params.b=' + df.loc['soil_params.b'].iloc[0], 
+                   'soil_params.satpsi=' + df.loc['soil_params.satpsi'].iloc[0], 
+                   #'soil_params.quartz=' + str(dfa.loc[catID]['quartz']) +'[]', 
+                   'soil_params.quartz=' + str(dfa.loc[catID][[x for x in dfa.columns.to_list() if 'quartz' in x]].mean()) +'[]', 
                    'ice_fraction_scheme=' + icefscheme, 'soil_z=0.1,0.3,1.0,2.0[m]',
                    'soil_temperature=' + ','.join([str(mtemp)]*4) + '[K]',
                   ]
@@ -380,9 +383,9 @@ def create_sft_smp_input(
 
         # Create smp list
         smp_lst = ['verbosity=none', 
-               'soil_params.smcmax=' + df.loc['soil_params.smcmax'][0], 
-               'soil_params.b=' + df.loc['soil_params.b'][0], 
-               'soil_params.satpsi=' + df.loc['soil_params.satpsi'][0], 
+               'soil_params.smcmax=' + df.loc['soil_params.smcmax'].iloc[0], 
+               'soil_params.b=' + df.loc['soil_params.b'].iloc[0], 
+               'soil_params.satpsi=' + df.loc['soil_params.satpsi'].iloc[0], 
                'soil_z=0.1,0.3,1.0,2.0[m]']
         if model in ['cfe_noah_sft', 'cfe_xaj_noah_sft']:
             smp_lst += ['soil_storage_model=conceptual', 'soil_storage_depth=2.0']

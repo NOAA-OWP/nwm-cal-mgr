@@ -218,8 +218,6 @@ def create_input(filename):
     # Create noah input
     noah_input_dir = os.path.join(input_dir, 'noah_input')
     if 'noah' in model:
-#    if model in ['cfe_noah', 'topmodel_noah', 'cfe_noah_sft', 'lasam_noah_sft', 'cfe_xaj_noah', \
-#            'cfe_xaj_noah_sft']:
         gfun.create_noah_input(catids, time_period, attr_file, noah_params_dir, noah_input_dir)
 
     # Create sft and smp input
