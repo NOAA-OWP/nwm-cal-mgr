@@ -48,6 +48,9 @@ class NgenStrategy(str, Enum):
     independent = "independent"
 
 def _params_as_df(params: Mapping[str, Parameters], name: str = None):
+    if not params or len(params) == 0:
+        raise ValueError("The 'params' mapping cannot be empty.")
+
     if not name:
         dfs = []
         for k,v in params.items():
@@ -124,24 +127,44 @@ class NgenBase(ModelExec):
     def __init__(self, **kwargs):
         #Let pydantic work its magic
         super().__init__(**kwargs)
+        # Ensure the realization file exists before copying
+        if not self.realization.exists():
+            raise FileNotFoundError(f"Realization file '{self.realization}' does not exist.")
+
         #Make a copy of the config file, just in case
         shutil.copy(self.realization, str(self.realization)+'_original')
        
-        self._catchment_hydro_fabric = gpd.read_file(self.catchments, layer='divides')
+        # Reading catchments and nexus
+        try:
+            self._catchment_hydro_fabric = gpd.read_file(self.catchments, layer='divides')
+        except Exception as e:
+            raise RuntimeError(f"Failed to read catchment hydro fabric from {self.catchments}: {e}")
+
         self._catchment_hydro_fabric.set_index('id', inplace=True)
-        self._nexus_hydro_fabric = gpd.read_file(self.nexus, layer='nexus')
+
+        try:
+            self._nexus_hydro_fabric = gpd.read_file(self.nexus, layer='nexus')
+        except Exception as e:
+            raise RuntimeError(f"Failed to read nexus hydro fabric from {self.nexus}: {e}")
+
         self._nexus_hydro_fabric.set_index('id', inplace=True)
 
+        # Handle crosswalk file
         self._x_walk = pd.Series(dtype=object)
-        with open(self.crosswalk) as fp:
-            data = json.load(fp)
-            for id, values in data.items():
-                gage = values.get('Gage_no')
-                if gage:
-                    if not isinstance(gage, str):
-                        gage = gage[0]
-                    if gage != "":
-                        self._x_walk[id] = gage
+        try:
+            with open(self.crosswalk) as fp:
+                data = json.load(fp)
+                for id, values in data.items():
+                    gage = values.get('Gage_no')
+                    if gage:
+                        if not isinstance(gage, str):
+                            gage = gage[0]
+                        if gage != "":
+                            self._x_walk[id] = gage
+        except FileNotFoundError:
+            raise FileNotFoundError(f"Crosswalk file '{self.crosswalk}' not found.")
+        except json.JSONDecodeError:
+            raise ValueError(f"Failed to parse JSON from crosswalk file '{self.crosswalk}'.")
 
         #Read the calibration specific info
         with open(self.realization) as fp:
@@ -426,6 +449,12 @@ class NgenUniform(NgenBase):
     def __init__(self, **kwargs):
         ##Let pydantic work its magic
         super().__init__(**kwargs)
+
+        # Check if params is provided and non-empty
+        if not self.params or len(self.params) == 0:
+            raise ValueError("NgenUniform requires non-empty 'params' for configuration.")
+
+
         #now we work ours
         start_t = self.ngen_realization.time.start_time
         end_t = self.ngen_realization.time.end_time

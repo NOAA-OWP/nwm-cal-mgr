@@ -9,6 +9,7 @@ from abc import ABC, abstractmethod
 import os
 from pathlib import Path
 from typing import TYPE_CHECKING
+from pydantic.error_wrappers import ValidationError
 
 import pandas as pd
 
@@ -120,7 +121,11 @@ class Agent(BaseAgent):
             self._plot_iter_path = None 
 
         model_conf['workdir'] = self.job.workdir
-        self._model = Model(model=model_conf)
+        try:
+            self._model = Model(model=model_conf)
+        except ValidationError as e:
+            print(f'validation error: {e.json()}')
+            raise
         self._model.model.resolve_paths()
 
     @property
