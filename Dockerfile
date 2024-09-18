@@ -26,12 +26,16 @@ WORKDIR /ngen-app/
 RUN set -eux; \
 	\
     cd ngen-cal/python/createInput; \
+    # Reset cache to ensure latest updates are captured
+    touch src/*.py; \
     pip3 install . ; \
     \
     cd ../runCalibValid/ngen_cal; \
+    touch src/ngen/cal/*.py; \
     pip3 install . ; \
     \
     cd ../ngen_conf ; \
+    touch src/ngen/config/*.py; \
     pip3 install . ; \
     \
     pip3 cache purge
