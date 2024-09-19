@@ -16,7 +16,7 @@ import subprocess
 import fnmatch
 from fileinput import FileInput
 from functools import partial
-from typing import List, Union
+from typing import List, Union, Dict
 from pathlib import Path
 
 import geopandas as gpd
@@ -120,15 +120,17 @@ def create_walk_file(
 
 def create_cfe_input(
     catids: List[str],  
+    modules: List[str],
     attr_file: Union[str, Path],
     cfe_input_dir: Union[str, Path],
 )->None:
 
-    """ Create BMI initial configuration file for CFE with Schakke infiltration and runoff scheme
+    """ Create BMI initial configuration file for CFE with Schaake or Xianjiang infiltration and runoff scheme
 
     Parameters
     ----------
     catids : catchment IDs in the basin
+    modules: list of modules in the formulation
     attr_file : file containing model parameter attributes
     cfe_input_dir: directory to save configuration files
 
@@ -150,12 +152,17 @@ def create_cfe_input(
     dfa = pd.read_parquet(attr_file)
     dfa.set_index("divide_id", inplace=True)
  
+     # surface partitioning scheme
+    scheme = 'Schaake'
+    if ('cfe.xaj' in modules):
+        scheme = 'Xinanjiang'
+
     # Create bmi config files
     for catID in catids:
         cfe_bmi_file = os.path.join(cfe_input_dir, catID + "_bmi_config_cfe.txt")
         f = open(cfe_bmi_file, "w")
         f.write("%s" %("forcing_file=BMI\n"))
-        f.write("%s" %("surface_partitioning_scheme=Schaake\n"))
+        f.write("%s" %("surface_partitioning_scheme=" + scheme +"\n"))
         f.write("%s" %("soil_params.depth=2.0[m]\n"))
         f.write("%s" %("soil_params.b=" + str(dfa.loc[catID]['bexp_soil_layers_stag=1']) + "[]\n"))
         f.write("%s" %("soil_params.satdk=" + str(dfa.loc[catID]['dksat_soil_layers_stag=1']) + "[m s-1]\n"))
@@ -179,6 +186,20 @@ def create_cfe_input(
         f.write("%s" %("verbosity=1\n"))
         f.write("%s" %("DEBUG=0\n"))
         f.write("%s" %("giuh_ordinates=0.55,0.25,0.2\n"))
+        f.write("%s" %("surface_runoff_scheme=GIUH\n"))
+
+        if 'sft' in modules:
+            f.write("%s" %("sft_coupled=true\n"))
+            f.write("%s" %("ice_content_threshold=0.3\n"))
+
+        # add the new parameters for cfe.xaj
+        # TODO: read these catchment-specific parameters from the NWMv3 model attributes parquet file
+        # The current parquet file we have access to was likely based on NWMv2.1 and hence missing these XAJ parameters
+        f.write("%s" %("a_Xinanjiang_inflection_point_parameter=-0.212938\n"))
+        f.write("%s" %("b_Xinanjiang_shape_parameter=0.666238\n"))
+        f.write("%s" %("x_Xinanjiang_shape_parameter=0.02414\n"))
+        f.write("%s" %("urban_decimal_fraction=0.0\n"))
+
         f.close()
 
 
@@ -207,9 +228,6 @@ def create_noah_input(
 
     # Create symlink for parameter directory
     os.makedirs(noah_input_dir, exist_ok=True)
-    # param_dir_symlink = os.path.join(noah_input_dir, os.path.basename(param_dir_source))
-    # if not os.path.exists(param_dir_symlink):
-    #     os.symlink(param_dir_source, param_dir_symlink)
     noah_par_tables = ['SOILPARM.TBL','MPTABLE.TBL','GENPARM.TBL']
     for par in noah_par_tables:
         src = os.path.join(param_dir_source,par)
@@ -316,7 +334,7 @@ def create_noah_input(
 
 def create_sft_smp_input(
     catids: List[str],  
-    model: str, 
+    modules: List[str], 
     attr_file: Union[str, Path],
     cfe_dir: Union[str, Path],
     forcing_dir: Union[str, Path], 
@@ -329,7 +347,7 @@ def create_sft_smp_input(
     Parameters
     ----------
     catids : catchment IDs in the basin
-    model: model and module combination 
+    modules: list of modules in the formulation 
     attr_file : file containing model parameter attributes
     cfe_dir : directory containing cfe bmi configuration files 
     forcing_dir : directory containing forcing files 
@@ -350,16 +368,14 @@ def create_sft_smp_input(
     dfa.set_index('divide_id', inplace=True)
 
     # Ice fraction scheme
-    if model in ['cfe_noah_sft', 'lasam_noah_sft']:
-        icefscheme = 'Schaake'
-    elif model in ['cfe_xaj_noah_sft']:
+    icefscheme = 'Schaake'
+    if ('cfe.xaj' in modules):
         icefscheme = 'Xinanjiang'
 
     # Create bmi config files
     for catID in catids:
 
-        # Read cfe file
-        #cfe_bmi_file = os.path.join(cfe_dir, catID + '*.txt')
+        # Read cfe BMI files
         cfe_bmi_file = os.path.join(cfe_dir, fnmatch.filter(os.listdir(cfe_dir), '*'+catID+'*.txt')[0])
         df = pd.read_table(cfe_bmi_file,  delimiter='=', names=["Params","Values"], index_col=0)
 
@@ -372,9 +388,9 @@ def create_sft_smp_input(
                    'soil_params.smcmax=' + df.loc['soil_params.smcmax'].iloc[0], 
                    'soil_params.b=' + df.loc['soil_params.b'].iloc[0], 
                    'soil_params.satpsi=' + df.loc['soil_params.satpsi'].iloc[0], 
-                   #'soil_params.quartz=' + str(dfa.loc[catID]['quartz']) +'[]', 
                    'soil_params.quartz=' + str(dfa.loc[catID][[x for x in dfa.columns.to_list() if 'quartz' in x]].mean()) +'[]', 
-                   'ice_fraction_scheme=' + icefscheme, 'soil_z=0.1,0.3,1.0,2.0[m]',
+                   'ice_fraction_scheme=' + icefscheme, 
+                   'soil_z=0.1,0.3,1.0,2.0[m]',
                    'soil_temperature=' + ','.join([str(mtemp)]*4) + '[K]',
                   ]
         sft_bmi_file = os.path.join(sft_dir, catID + '_bmi_config_sft.txt')
@@ -387,9 +403,9 @@ def create_sft_smp_input(
                'soil_params.b=' + df.loc['soil_params.b'].iloc[0], 
                'soil_params.satpsi=' + df.loc['soil_params.satpsi'].iloc[0], 
                'soil_z=0.1,0.3,1.0,2.0[m]']
-        if model in ['cfe_noah_sft', 'cfe_xaj_noah_sft']:
+        if 'cfe' in modules or 'cfe.xaj' in modules:
             smp_lst += ['soil_storage_model=conceptual', 'soil_storage_depth=2.0']
-        elif model in ['lasam_noah_sft']:
+        elif 'lasam' in modules:
             smp_lst += ['soil_storage_model=layered', 'soil_moisture_profile_option=constant', 'soil_depth_layers=2.0', 'water_table_depth=10[m]']
         smp_bmi_file = os.path.join(smp_dir, catID + '_bmi_config_smp.txt')
         with open(smp_bmi_file, "w") as f:
@@ -929,7 +945,6 @@ def create_pet_input(
 
 def create_lasam_input(
     catids: List[str],
-    cfe_bmi_dir: Union[str, Path], 
     soil_param_file: str,
     soil_class_file: Union[str, Path],
     lasam_bmi_dir: Union[str, Path], 
@@ -966,7 +981,7 @@ def create_lasam_input(
                'layer_soil_type=',
                'max_soil_types=25',
                'wilting_point_psi=15495.0[cm]',
-               'giuh_ordinates=',
+               'giuh_ordinates=0.55,0.25,0.2',
                'sft_coupled=true',
                'soil_z=10,30,100.0,200.0[cm]',
                'calib_params=true',
@@ -978,11 +993,11 @@ def create_lasam_input(
 
     # Create bmi config file
     for catID in catids:
-        cfe_file_catID = glob.glob(os.path.join(cfe_bmi_dir, catID + '*.txt'))[0]
-        df = pd.read_table(cfe_file_catID,  delimiter='=', names=["Params","Values"], index_col=0)
+        #cfe_file_catID = glob.glob(os.path.join(cfe_bmi_dir, catID + '*.txt'))[0]
+        #df = pd.read_table(cfe_file_catID,  delimiter='=', names=["Params","Values"], index_col=0)
         lasam_lst_catID = lasam_lst.copy()
         lasam_lst_catID[9] = lasam_lst_catID[9] + str(df_soil.loc[catID]['category'])
-        lasam_lst_catID[12] = lasam_lst_catID[12] + df.loc['giuh_ordinates'][0]
+        #lasam_lst_catID[12] = lasam_lst_catID[12] + df.loc['giuh_ordinates'][0]
         lasam_bmi_file = os.path.join(lasam_bmi_dir, catID + '_bmi_config_lasam.txt')
 
         with open(lasam_bmi_file, "w") as f:
@@ -1185,6 +1200,46 @@ def create_troute_config(
     with open(rt_cfg_file, 'w') as file:
         yaml.dump(config, file, sort_keys=False, default_flow_style=False, indent=4)
 
+def var_mapping(
+    modules: List[str],
+    pet_in: str,
+    pcp_in: str,
+)-> Dict[str,str]:
+    """ create variable nameing mapping based on modules
+    
+    Parameters
+    ----------
+    modules: list of modules in the formulation
+    pet_in: module input variable name for evapotranspiration   
+    pcp_in: module input variable name for precipitation
+
+    Returns 
+    ----------
+    Variable name mapping dictionary
+
+    """
+    var_maps = {}
+
+    # only needed when CFE is not coupled to SFT/SMP
+    if ('cfe' in modules or 'cfe.xaj' in modules) and ('sft' not in modules):
+        var_maps["ice_fraction_schaake"] = "sloth_ice_fraction_schaake"
+        var_maps["ice_fraction_xinanjiang"] = "sloth_ice_fraction_xinanjiang"
+        var_maps["soil_moisture_profile"] = "sloth_smp"
+        
+    # PET
+    if 'noah' in modules and 'pet' not in modules:
+        var_maps[pet_in] = "EVAPOTRANS"
+        
+    # snowmelt
+    if 'noah' in modules:
+        var_maps[pcp_in] = "QINSUR"
+    elif 'ueb' in modules:
+        var_maps[pcp_in] = "SWIT"       
+    elif 'snow17' in modules:
+        var_maps[pcp_in] = 'raim'   
+
+    return var_maps     
+
 
 def create_realization_file(
     workdir: Union[str, Path], 
@@ -1192,7 +1247,7 @@ def create_realization_file(
     bmi_dir: dict, 
     forcing_dir: Union[str, Path], 
     realization_file: Union[str, Path],
-    model: str, 
+    modules: List[str], 
     time_period: dict, 
     rt_dict: dict,
 )-> None:
@@ -1202,7 +1257,7 @@ def create_realization_file(
     Parameters
     ----------
     workdir : basin directory for storing all the files 
-    lib_file : library file for different model or module
+    lib_file : library files for different modules
     bmi_dir : directory for different model or module to store BMI files 
     forcing_dir : directory to store foricng files
     realization_file : model realization configuration file
@@ -1224,9 +1279,10 @@ def create_realization_file(
         if not os.path.exists(lib_mod_link): 
             os.symlink(value, lib_mod_link)
 
+    model_configs = {}
     # noah 
-    if 'noah' in model:
-        noah_dict = {"name": "bmi_fortran", 
+    if 'noah' in modules:
+        model_configs['noah'] = {"name": "bmi_fortran", 
                      "params": {"name": "bmi_fortran", 
                                 "model_type_name": "NoahOWP", 
                                 "main_output_variable": "QINSUR",
@@ -1242,321 +1298,246 @@ def create_realization_file(
                                     "LWDN": "land_surface_radiation~incoming~longwave__energy_flux",
                                     "SOLDN": "land_surface_radiation~incoming~shortwave__energy_flux",
                                     "SFCPRS": "land_surface_air__pressure"}}}
-    # cfe 
-    if 'cfe' in model:
-        cfe_dict = {"name": "bmi_c",
-                    "params": {"name": "bmi_c", 
-                               "model_type_name": "CFE", 
-                               "main_output_variable": "Q_OUT",
-                               "library_file": lib_mod['cfe'],
-                               "init_config": os.path.join(bmi_dir['cfe'], '{{id}}_bmi_config_cfe.txt'), 
-                               "allow_exceed_end_time": True, "fixed_time_step": False, "uses_forcing_file": False,
-                               "variables_names_map": {
-                                   "atmosphere_water__liquid_equivalent_precipitation_rate": "QINSUR",
-                                   "water_potential_evaporation_flux": "EVAPOTRANS"},
-                               "registration_function": "register_bmi_cfe"}}
-        if model in ["cfe_noah", "cfe_xaj_noah"]:
-            items = {"ice_fraction_schaake": "sloth_ice_fraction_schaake",
-                     "ice_fraction_xinanjiang": "sloth_ice_fraction_xinanjiang",
-                     "soil_moisture_profile": "sloth_smp"}
-            var_name_map= cfe_dict["params"]["variables_names_map"]
-            var_name_map.update(items)
-            cfe_dict["params"]["variables_names_map"] = var_name_map 
-        if model in ["ueb_pet_cfe"]:
-            items = {"ice_fraction_schaake": "sloth_ice_fraction_schaake",
-                     "ice_fraction_xinanjiang": "sloth_ice_fraction_xinanjiang",
-                     "soil_moisture_profile": "sloth_smp",
-                      "atmosphere_water__liquid_equivalent_precipitation_rate": "SWIT"}
-            var_name_map= cfe_dict["params"]["variables_names_map"]
-            var_name_map.update(items)
-            var_name_map.pop( "water_potential_evaporation_flux", None)
-            cfe_dict["params"]["variables_names_map"] = var_name_map 
-        if model in ["cfe_noah_ueb"]:
-            items = {"ice_fraction_schaake": "sloth_ice_fraction_schaake",
-                     "ice_fraction_xinanjiang": "sloth_ice_fraction_xinanjiang",
-                     "soil_moisture_profile": "sloth_smp",
-                      "atmosphere_water__liquid_equivalent_precipitation_rate": "SWIT"}
-            var_name_map= cfe_dict["params"]["variables_names_map"]
-            var_name_map.update(items)
-            cfe_dict["params"]["variables_names_map"] = var_name_map 
+
+    # cfe or cfe.xaj
+    if 'cfe' in modules or 'cfe.xaj' in modules:
+        m1 = 'cfe' if 'cfe' in modules else 'cfe.xaj'
+        model_configs[m1] = {"name": "bmi_c",
+                                "params": {"name": "bmi_c", 
+                                    "model_type_name": "CFE", 
+                                    "main_output_variable": "Q_OUT",
+                                    "library_file": lib_mod[m1],
+                                    "init_config": os.path.join(bmi_dir[m1], '{{id}}_bmi_config_cfe.txt'), 
+                                    "allow_exceed_end_time": True, "fixed_time_step": False, "uses_forcing_file": False,
+                                    "registration_function": "register_bmi_cfe"}}
+
+        # variable name mapping section
+        pet_in = "water_potential_evaporation_flux"
+        pcp_in = "atmosphere_water__liquid_equivalent_precipitation_rate"
+        model_configs[m1]["params"]["variables_names_map"] = var_mapping(modules, pet_in, pcp_in)
+
+        # module output variable for input to t-route
+        main_output_variable = "Q_OUT" 
 
     # topmodel
-    if 'topmodel' in model:
-        topm_dict = {"name": "bmi_c",
-                     "params": {"name": "bmi_c", 
-                                "model_type_name": "TOPMODEL", 
-                                "main_output_variable": "Qout",
-                                "library_file": lib_mod['topmodel'],
-                                "init_config": os.path.join(bmi_dir['topmodel'], '{{id}}_topmodel.run'),
-                                "allow_exceed_end_time": True, "fixed_time_step": False, "uses_forcing_file": False,
-                                "variables_names_map": {
-                                    "atmosphere_water__liquid_equivalent_precipitation_rate": "QINSUR",
-                                    "water_potential_evaporation_flux": "EVAPOTRANS"},
-                                "registration_function": "register_bmi_topmodel"}}
+    if 'topmodel' in modules:
+        model_configs['topmodel'] = {"name": "bmi_c",
+                                    "params": {"name": "bmi_c", 
+                                        "model_type_name": "TOPMODEL", 
+                                        "main_output_variable": "Qout",
+                                        "library_file": lib_mod['topmodel'],
+                                        "init_config": os.path.join(bmi_dir['topmodel'], '{{id}}_topmodel.run'),
+                                        "allow_exceed_end_time": True, "fixed_time_step": False, "uses_forcing_file": False,
+                                        "registration_function": "register_bmi_topmodel"}}
+        # variable name mapping section
+        pet_in = "water_potential_evaporation_flux"
+        pcp_in = "atmosphere_water__liquid_equivalent_precipitation_rate"
+        model_configs['topmodel']["params"]["variables_names_map"] = var_mapping(modules, pet_in, pcp_in)
+
+        # module output variable for input to t-route
+        main_output_variable = "Qout"
 
     # sac-sma
-    if 'sac' in model:
-        sac_dict = {"name": "bmi_fortran",
-                    "params": {
-                                "model_type_name": "sac",
-                                "library_file": lib_mod['sac'],
-                                "init_config": os.path.join(bmi_dir['sac'], 'sac-init-{{id}}-HHWM8.namelist.input'),
-                                "allow_exceed_end_time": True, "fixed_time_step": False, "uses_forcing_file": False,
-                                "main_output_variable": "tci",
-                                "variables_names_map": {
-                                    "precip": "atmosphere_water__liquid_equivalent_precipitation_rate",
-                                    "tair": "land_surface_air__temperature",
-                                    "pet": "water_potential_evaporation_flux"
-                                }}}
-        if 'snow17' in model:
-            sac_dict["params"]["variables_names_map"]["precip"] = "raim"
+    if 'sac' in modules:
+        model_configs['sac'] = {"name": "bmi_fortran",
+                                "params": {
+                                    "model_type_name": "sac",
+                                    "library_file": lib_mod['sac'],
+                                    "init_config": os.path.join(bmi_dir['sac'], 'sac-init-{{id}}-HHWM8.namelist.input'),
+                                    "allow_exceed_end_time": True, "fixed_time_step": False, "uses_forcing_file": False,
+                                    "main_output_variable": "tci",
+                                }}
 
-        if 'ueb' in model:
-            sac_dict["params"]["variables_names_map"]["precip"] = "SWIT"
+        # variable name mapping section
+        pet_in = "pet"
+        pcp_in = "precip"
+        var_maps = var_mapping(modules, pet_in, pcp_in)
+        var_maps['tair'] = "land_surface_air__temperature"
+        model_configs['sac']["params"]["variables_names_map"] = var_maps
 
-        if 'noah' in model and 'pet' not in model and 'ueb' not in model:
-            items = {"precip": "QINSUR", "pet": "EVAPOTRANS"}
-            var_name_map= sac_dict["params"]["variables_names_map"]
-            var_name_map.update(items)
-            sac_dict["params"]["variables_names_map"] = var_name_map  
-   
-        if 'noah' in model and 'ueb' in model:
-            items = {"precip": "SWIT", "pet": "EVAPOTRANS"}
-            var_name_map= sac_dict["params"]["variables_names_map"]
-            var_name_map.update(items)
-            sac_dict["params"]["variables_names_map"] = var_name_map  
-
+        # module output variable for input to t-route
+        main_output_variable = "tci"
 
     # snow17
-    if model in ["sac_snow17_pet", "snow17_pet"]:
-        snow17_dict = {"name": "bmi_fortran",
-                      "params": {
-                                "model_type_name": "snow17",
-                                "library_file": lib_mod['snow17'],
-                                "init_config": os.path.join(bmi_dir['snow17'], 'snow17-init-{{id}}.namelist.input'),
-                                "allow_exceed_end_time": True, "fixed_time_step": False, "uses_forcing_file": False,
-                                "main_output_variable": "raim",
-                                "variables_names_map": {
-                                    "precip": "atmosphere_water__liquid_equivalent_precipitation_rate",
-                                    "tair": "land_surface_air__temperature"
-                                }}}
+    if 'snow17' in modules:
+        model_configs['snow17'] = {"name": "bmi_fortran",
+                                "params": {
+                                    "model_type_name": "snow17",
+                                    "library_file": lib_mod['snow17'],
+                                    "init_config": os.path.join(bmi_dir['snow17'], 'snow17-init-{{id}}.namelist.input'),
+                                    "allow_exceed_end_time": True, "fixed_time_step": False, "uses_forcing_file": False,
+                                    "main_output_variable": "raim",
+                                    "variables_names_map": {
+                                        "precip": "atmosphere_water__liquid_equivalent_precipitation_rate",
+                                        "tair": "land_surface_air__temperature"
+                                    }}}
 
     #ueb
-    if 'ueb' in model:
-        ueb_dict = {"name": "bmi_c++",
-                      "params": {
-                                "name": "bmi_c++", 
-                                "model_type_name": "UEB",
-                                "library_file": lib_mod['ueb'],
-                                "init_config": os.path.join(bmi_dir['ueb'], 'ueb-init-{{id}}_calib.dat'),
-                                "allow_exceed_end_time": True, "fixed_time_step": False, "uses_forcing_file": False,
-                                "main_output_variable": "SWIT",
-                                "variables_names_map": {
-                                    "Prec": "atmosphere_water__liquid_equivalent_precipitation_rate",
-                                    "Ta": "land_surface_air__temperature",
-                                    "qair": "atmosphere_air_water~vapor__relative_saturation",
-                                    "uebu2d": "land_surface_wind__x_component_of_velocity",
-                                    "uebv2d": "land_surface_wind__y_component_of_velocity",
-                                    "Qli": "land_surface_radiation~incoming~longwave__energy_flux",
-                                    "Qsi": "land_surface_radiation~incoming~shortwave__energy_flux",
-                                    "AP": "land_surface_air__pressure"}}}
-
+    if 'ueb' in modules:
+        model_configs['ueb'] = {"name": "bmi_c++",
+                                "params": {
+                                    "name": "bmi_c++", 
+                                    "model_type_name": "UEB",
+                                    "library_file": lib_mod['ueb'],
+                                    "init_config": os.path.join(bmi_dir['ueb'], 'ueb-init-{{id}}_calib.dat'),
+                                    "allow_exceed_end_time": True, "fixed_time_step": False, "uses_forcing_file": False,
+                                    "main_output_variable": "SWIT",
+                                    "variables_names_map": {
+                                        "Prec": "atmosphere_water__liquid_equivalent_precipitation_rate",
+                                        "Ta": "land_surface_air__temperature",
+                                        "qair": "atmosphere_air_water~vapor__relative_saturation",
+                                        "uebu2d": "land_surface_wind__x_component_of_velocity",
+                                        "uebv2d": "land_surface_wind__y_component_of_velocity",
+                                        "Qli": "land_surface_radiation~incoming~longwave__energy_flux",
+                                        "Qsi": "land_surface_radiation~incoming~shortwave__energy_flux",
+                                        "AP": "land_surface_air__pressure"}}}
 
     #pet 
-    if model in ["sac_snow17_pet", "sac_pet", "snow17_pet", "ueb_pet_cfe", "sac_ueb_pet"]:
-        pet_dict = {"name": "bmi_c",
-                      "params": {
-                                "model_type_name": "PET",
-                                "library_file": lib_mod['pet'],
-                                "init_config": os.path.join(bmi_dir['pet'], '{{id}}_bmi_config.ini'),
-                                "allow_exceed_end_time": True, "fixed_time_step": False, "uses_forcing_file": False,
-                                "main_output_variable": "water_potential_evaporation_flux",
-                                "registration_function": "register_bmi_pet"
+    if 'pet' in modules:
+        model_configs['pet'] = {"name": "bmi_c",
+                                "params": {
+                                    "model_type_name": "PET",
+                                    "library_file": lib_mod['pet'],
+                                    "init_config": os.path.join(bmi_dir['pet'], '{{id}}_bmi_config.ini'),
+                                    "allow_exceed_end_time": True, "fixed_time_step": False, "uses_forcing_file": False,
+                                    "main_output_variable": "water_potential_evaporation_flux",
+                                    "registration_function": "register_bmi_pet"
                                 }}
-    # sloth
-    if model in ["cfe_noah", "sac_snow17_pet", "sac_pet", "snow17_pet", "topmodel_noah", "cfe_xaj_noah", "ueb_pet_cfe", "cfe_noah_ueb"]:
-        sloth_dict = {"name": "bmi_c++",
-                      "params": {"name": "bmi_c++", 
-                                 "model_type_name": "SLOTH", 
-                                 "main_output_variable": "z", 
-                                 "library_file": lib_mod['sloth'], 
-                                 "init_config": '/dev/null',
-                                 "allow_exceed_end_time": True, 
-                                 "fixed_time_step": False, 
-                                 "uses_forcing_file": False,
-                                 "model_params": {
-                                     "sloth_ice_fraction_schaake(1,double,m,node)": 0.0,
-                                     "sloth_ice_fraction_xinanjiang(1,double,1,node)": 0.0,
-			             "sloth_smp(1,double,1,node)": 0.0}}}
 
-    elif model in ["cfe_noah_sft", "cfe_xaj_noah_sft"]:
-        sloth_dict = {"name": "bmi_c++",
-                      "params": {"name": "bmi_c++", 
-                                 "model_type_name": "SLOTH",
-                                 "main_output_variable": "z", 
-                                 "library_file": lib_mod['sloth'],
-                                 "init_config": '/dev/null',
-                                 "allow_exceed_end_time": True, 
-                                 "fixed_time_step": False, 
-                                 "uses_forcing_file": False,
-                                 "model_params": {
-                                     "soil_moisture_wetting_fronts(1,double,1,node)": 0.0,
-		                     "soil_thickness_layered(1,double,1,node)": 0.0,
-		             	     "soil_depth_wetting_fronts(1,double,1,node)": 0.0,
-				     "num_wetting_fronts(1,int,1,node)": 1.0,
-			             "Qb_topmodel(1,double,1,node)": 0.0,
-				     "Qv_topmodel(1,double,1,node)": 0.0,
-				     "global_deficit(1,double,1,node)": 0.0}}}
-    
-    elif model in ["lasam_noah_sft"]:
-        sloth_dict = {"name": "bmi_c++",
-                      "params": {"name": "bmi_c++",
-                                 "model_type_name": "SLOTH",
-                                 "main_output_variable": "z",
-                                 "library_file": lib_mod['sloth'],
-                                 "init_config": '/dev/null',
-                                 "allow_exceed_end_time": True,
-                                 "fixed_time_step": False,
-                                 "uses_forcing_file": False,
-                                 "model_params": {
-                                     "sloth_soil_storage(1,double,m,node)" : 1.0E-10,
-                                     "sloth_soil_storage_change(1,double,m,node)" : 0.0,
-                                     "Qb_topmodel(1,double,1,node)": 0.0,
-                                     "Qv_topmodel(1,double,1,node)": 0.0,
-                                     "global_deficit(1,double,1,node)": 0.0,
-                                     "potential_evapotranspiration_rate(1,double,1,node)": 0.0}}}
+    # sloth
+    if 'sloth' in modules:
+        model_configs['sloth'] = {"name": "bmi_c++",
+                                "params": {"name": "bmi_c++", 
+                                    "model_type_name": "SLOTH", 
+                                    "main_output_variable": "z", 
+                                    "library_file": lib_mod['sloth'], 
+                                    "init_config": '/dev/null',
+                                    "allow_exceed_end_time": True, 
+                                    "fixed_time_step": False, 
+                                    "uses_forcing_file": False}}
+
+        if 'cfe' in modules or 'cfe.xaj' in modules :
+            if 'sft' not in modules:
+                model_params = {
+                    "sloth_ice_fraction_schaake(1,double,m,node)": 0.0,
+                    "sloth_ice_fraction_xinanjiang(1,double,1,node)": 0.0,
+			        "sloth_smp(1,double,1,node)": 0.0}
+            else:
+                model_params = {
+                    "soil_moisture_wetting_fronts(1,double,1,node)": 0.0,
+		            "soil_thickness_layered(1,double,1,node)": 0.0,
+		            "soil_depth_wetting_fronts(1,double,1,node)": 0.0,
+				    "num_wetting_fronts(1,int,1,node)": 1.0,
+			        "Qb_topmodel(1,double,1,node)": 0.0,
+				    "Qv_topmodel(1,double,1,node)": 0.0,
+				    "global_deficit(1,double,1,node)": 0.0}
+        elif 'lasam' in modules:
+            if 'sft' not in modules:
+                model_params = {"soil_temperature_profile(1,double,K,node)" : 275.15}
+            else:
+                model_params = {
+                    "sloth_soil_storage(1,double,m,node)" : 1.0E-10,
+                    "sloth_soil_storage_change(1,double,m,node)" : 0.0,
+                    "Qb_topmodel(1,double,1,node)": 0.0,
+                    "Qv_topmodel(1,double,1,node)": 0.0,
+                    "global_deficit(1,double,1,node)": 0.0,
+                    "potential_evapotranspiration_rate(1,double,1,node)": 0.0}
+
+        model_configs['sloth']['params'] ['model_params'] = model_params
 
     # sft
-    if model in ["cfe_noah_sft", "lasam_noah_sft", "cfe_xaj_noah_sft"]:
-        sft_dict = {"name": "bmi_c++",
-                    "params": {"name": "bmi_c++",
-                               "model_type_name": "SFT", 
-                               "main_output_variable": "num_cells",
-                               "library_file": lib_mod['sft'],
-                               "init_config": os.path.join(bmi_dir['sft'], '{{id}}_bmi_config_sft.txt'),
-                               "allow_exceed_end_time": True, 
-                               "uses_forcing_file": False,
-                               "variables_names_map": {"ground_temperature" : "TGS"}}}
+    if 'sft' in modules:
+        model_configs['sft'] = {"name": "bmi_c++",
+                                "params": {"name": "bmi_c++",
+                                    "model_type_name": "SFT", 
+                                    "main_output_variable": "num_cells",
+                                    "library_file": lib_mod['sft'],
+                                    "init_config": os.path.join(bmi_dir['sft'], '{{id}}_bmi_config_sft.txt'),
+                                    "allow_exceed_end_time": True, 
+                                    "uses_forcing_file": False,
+                                    "variables_names_map": {"ground_temperature" : "TGS"}}}
 
     # smp
-    if model in ["cfe_noah_sft", "cfe_xaj_noah_sft"]:
-        smp_dict = {"name": "bmi_c++",
-                    "params": {"name": "bmi_c++", 
-                               "model_type_name": "SMP", 
-                               "main_output_variable": "soil_water_table",
-                               "library_file": lib_mod['smp'],
-                               "init_config": os.path.join(bmi_dir['smp'], '{{id}}_bmi_config_smp.txt'),
-                               "allow_exceed_end_time": True,
-                               "uses_forcing_file": False,
-                               "variables_names_map": {
-                                   "soil_storage": "SOIL_STORAGE",
-				   "soil_storage_change": "SOIL_STORAGE_CHANGE"}}}
-
-    elif model in ["lasam_noah_sft"]:
-         smp_dict = {"name": "bmi_c++",
-                    "params": {"name": "bmi_c++",
-                               "model_type_name": "SMP",
-                               "main_output_variable": "soil_water_table",
-                               "library_file": lib_mod['smp'],
-                               "init_config": os.path.join(bmi_dir['smp'], '{{id}}_bmi_config_smp.txt'),
-                               "allow_exceed_end_time": True,
-                               "uses_forcing_file": False,
-                               "variables_names_map": {
+    if 'smp' in modules:
+        model_configs['smp'] = {"name": "bmi_c++",
+                                "params": {"name": "bmi_c++", 
+                                    "model_type_name": "SMP", 
+                                    "main_output_variable": "soil_water_table",
+                                    "library_file": lib_mod['smp'],
+                                    "init_config": os.path.join(bmi_dir['smp'], '{{id}}_bmi_config_smp.txt'),
+                                    "allow_exceed_end_time": True,
+                                    "uses_forcing_file": False,
+                                    "variables_names_map": {
+                                        "soil_storage": "SOIL_STORAGE",
+				                        "soil_storage_change": "SOIL_STORAGE_CHANGE"}}}
+        if 'lasam' in modules:
+            model_configs['smp']['params']["variables_names_map"] = {
                                    "soil_storage" : "sloth_soil_storage",
                                    "soil_storage_change" : "sloth_soil_storage_change",
                                    "soil_moisture_wetting_fronts" : "soil_moisture_wetting_fronts",
                                    "soil_depth_wetting_fronts" : "soil_depth_wetting_fronts",
-                                   "num_wetting_fronts" : "soil_num_wetting_fronts"}}}
+                                   "num_wetting_fronts" : "soil_num_wetting_fronts"}
 
     # lasam
-    if model in ["lasam_noah_sft"]:
-        lasam_dict = {"name": "bmi_c++",
-                      "params": {"name": "bmi_c++",
-                                 "model_type_name": "LASAM",
-                                 "main_output_variable": "precipitation_rate",
-                                 "library_file": lib_mod['lasam'],
-                                 "init_config": os.path.join(bmi_dir['lasam'], '{{id}}_bmi_config_lasam.txt'),
-                                 "allow_exceed_end_time": True,
-                                 "uses_forcing_file": False,
-                                 "variables_names_map": {
-                                     "precipitation_rate" : "QINSUR",
-                                     "potential_evapotranspiration_rate": "EVAPOTRANS"}}}
+    if 'lasam' in modules:
+        model_configs['lasam'] = {"name": "bmi_c++",
+                                "params": {"name": "bmi_c++",
+                                    "model_type_name": "LASAM",
+                                    "main_output_variable": "precipitation_rate",
+                                    "library_file": lib_mod['lasam'],
+                                    "init_config": os.path.join(bmi_dir['lasam'], '{{id}}_bmi_config_lasam.txt'),
+                                    "allow_exceed_end_time": True,
+                                    "uses_forcing_file": False,
+                                    "variables_names_map": {
+                                        "precipitation_rate" : "QINSUR",
+                                        "potential_evapotranspiration_rate": "EVAPOTRANS"}}}
+
+        # variable name mapping section
+        pet_in = "potential_evapotranspiration_rate"
+        pcp_in = "precipitation_rate"
+        model_configs['lasam']["params"]["variables_names_map"] = var_mapping(modules, pet_in, pcp_in)
+
+        # module output variable for input to t-route
+        main_output_variable = "total_discharge"
+
 
     # Combine configurations
-    if model in ["cfe_noah", "cfe_xaj_noah"]:
-        model_type_name = "NoahOWP_CFE"
-        main_output_variable = "Q_OUT"        
-        #sub_module = [noah_dict, *[cfe_dict, sloth_dict]]
-        sub_module = [sloth_dict, noah_dict, cfe_dict]
-
-    elif model in ["sac_snow17_pet"]:
-        model_type_name = "sac_snow17_pet"
-        main_output_variable = "tci"
-        sub_module = [sloth_dict, snow17_dict, sac_dict, pet_dict]
-    elif model in ["sac_ueb_pet"]:
-        model_type_name = "sac_ueb_pet"
-        main_output_variable = "tci"
-        sub_module = [ueb_dict, sac_dict, pet_dict]
-    elif model in ["sac_pet"]:
-        model_type_name = "sac_pet"
-        main_output_variable = "tci"
-        sub_module = [sloth_dict, sac_dict, pet_dict] 
-    elif model in ["sac_noah"]:
-        model_type_name = "sac_pet"
-        main_output_variable = "tci"
-        sub_module = [noah_dict, sac_dict]    
-    elif model in ["sac_noah_ueb"]:
-        model_type_name = "sac_noah_ueb"
-        main_output_variable = "tci"
-        sub_module = [noah_dict, sac_dict, ueb_dict]    
-    elif model in ["snow17_pet"]:
-        model_type_name = "snow17_pet"
-        main_output_variable = "raim"
-        sub_module = [sloth_dict, snow17_dict, pet_dict]
-    elif model in ["ueb_pet_cfe"]:
-        model_type_name = "ueb_pet_cfe"
-        main_output_variable = "Q_OUT"
-        sub_module = [sloth_dict, ueb_dict, pet_dict, cfe_dict]
-    elif model in ["cfe_noah_ueb"]:
-        model_type_name = "cfe_noah_ueb"
-        main_output_variable = "Q_OUT"
-        sub_module = [sloth_dict, ueb_dict, noah_dict, cfe_dict]
-    elif model == "topmodel_noah":
-        model_type_name = "NoahOWP_TOPMODEL"
-        main_output_variable = "Qout"        
-        sub_module = [noah_dict, topm_dict]
-    elif model in ["cfe_noah_sft", "cfe_xaj_noah_sft"]:
-        model_type_name = "NoahOWP_CFE_SK_SFT_SMP" if model== "cfe_noah_sft" else "NoahOWP_CFE_XAJ_SFT_SMP"
-        main_output_variable = "Q_OUT"
-        output_variables = ["soil_ice_fraction", "TGS", "RAIN_RATE", "DIRECT_RUNOFF", "GIUH_RUNOFF", "NASH_LATERAL_RUNOFF",
-	                    "DEEP_GW_TO_CHANNEL_FLUX", "Q_OUT", "SOIL_STORAGE",  "ice_fraction_schaake", "POTENTIAL_ET", "ACTUAL_ET", "soil_moisture_fraction"]
-        output_header_fields = ["soil_ice_fraction", "ground_temperature", "rain_rate", "direct_runoff", "giuh_runoff", "nash_lateral_runoff",
-                                "deep_gw_to_channel_flux", "q_out", "soil_storage", "ice_fraction_schaake", "PET", "AET", "soil_moisture_fraction"]
-        if model=="cfe_xaj_noah_sft":
-            output_variables[9] = "ice_fraction_xinanjiang"
-            output_header_fields[9] = "ice_fraction_xinanjiang"
-        sub_module = [sloth_dict, noah_dict, smp_dict, sft_dict, cfe_dict]
-
-    elif model == "lasam_noah_sft":
-        model_type_name = "NoahOWP_LASAM_SFT_SMP"
-        main_output_variable = "total_discharge"
-        output_variables = ["soil_ice_fraction", "TGS", "precipitation", "potential_evapotranspiratio", "actual_evapotranspiration", 
-                            "soil_storage", "surface_runoff", "giuh_runoff", "groundwater_to_stream_recharge",  "percolation", "total_discharge", 
-                            "infiltration", "EVAPOTRAN", "soil_moisture_fraction"] 
-        output_header_fields = ["soil_ice_fraction", "ground_temperature", "rain_rate", "PET_rate", "actual_ET",  
-                                "soil_storage", "direct_runoff", "giuh_runoff", "deep_gw_to_channel_flux", "soil_to_gw_flux", "q_out",
-                                "infiltration", "PET_NOM", "soil_moisture_fraction"]
-        sub_module = [sloth_dict, noah_dict, smp_dict, sft_dict, lasam_dict]
-
+    model_type_name = '_'.join([m1 for m1 in modules if m1 not in ['sloth','troute']])    
     gbmain = {"name": "bmi_multi", 
               "params": {"name": "bmi_multi", "model_type_name": model_type_name, "init_config": "",
                          "allow_exceed_end_time": False, "fixed_time_step": False, 
                          "uses_forcing_file": False,
                          "main_output_variable": main_output_variable}}
-    if model in ["cfe_noah_sft", "lasam_noah_sft", "cfe_xaj_noah_sft"]:
-        gbmain["params"]["output_variables"] = output_variables
-        gbmain["params"]["output_header_fields"] = output_header_fields
-    gbmain["params"]["modules"] = sub_module
+
+    # if 'sft' in modules:
+    #     if 'cfe' in modules or 'cfe.xaj' in modules:
+    #         output_variables = ["soil_ice_fraction", "TGS", "RAIN_RATE", "DIRECT_RUNOFF", "GIUH_RUNOFF", "NASH_LATERAL_RUNOFF",
+	#                     "DEEP_GW_TO_CHANNEL_FLUX", "Q_OUT", "SOIL_STORAGE",  "ice_fraction_schaake", "POTENTIAL_ET", "ACTUAL_ET", "soil_moisture_fraction"]
+    #         output_header_fields = ["soil_ice_fraction", "ground_temperature", "rain_rate", "direct_runoff", "giuh_runoff", "nash_lateral_runoff",
+    #                             "deep_gw_to_channel_flux", "q_out", "soil_storage", "ice_fraction_schaake", "PET", "AET", "soil_moisture_fraction"]
+    #         if 'cfe.xaj' in modules:
+    #             output_variables[9] = "ice_fraction_xinanjiang"
+    #             output_header_fields[9] = "ice_fraction_xinanjiang"yliu_NGWPC-1969_update_ngen-cal_for_sftsmp
+    #     elif 'lasam' in modules:
+    #         output_variables = ["soil_ice_fraction", "TGS", "precipitation", "potential_evapotranspiratio", "actual_evapotranspiration", 
+    #                         "soil_storage", "surface_runoff", "giuh_runoff", "groundwater_to_stream_recharge",  "percolation", "total_discharge", 
+    #                         "infiltration", "EVAPOTRAN", "soil_moisture_fraction"] 
+    #         output_header_fields = ["soil_ice_fraction", "ground_temperature", "rain_rate", "PET_rate", "actual_ET",  
+    #                             "soil_storage", "direct_runoff", "giuh_runoff", "deep_gw_to_channel_flux", "soil_to_gw_flux", "q_out",
+    #                             "infiltration", "PET_NOM", "soil_moisture_fraction"]  
+
+    #     gbmain["params"]["output_variables"] = output_variables
+    #     gbmain["params"]["output_header_fields"] = output_header_fields
+
+    # modules section    
+    if 'sft' in modules:
+        snow_module = [m1 for m1 in modules if m1 not in ['sloth','cfe','cfe.xaj','lasam','troute','sft','smp']]
+        rr_module = [m1 for m1 in ['cfe','cfe.xaj','lasam'] if m1 in modules]
+        modules1 = ['sloth'] + snow_module + ['smp', 'sft'] + rr_module
+    else:
+        modules1 = [m1 for m1 in modules if m1 != 'troute']
+
+    gbmain["params"]["modules"] = [model_configs[m1] for m1 in modules1]
 
     # global configuration
     g = {"global": {"formulations": [gbmain],
@@ -1576,7 +1557,8 @@ def create_realization_file(
 
 
 def create_calib_config_file(
-    calib_params_file: Union[str, Path], 
+    par_file: Union[str, Path], 
+    modules: List[str],
     workdir: Union[str, Path], 
     general_dict: dict,
     model_dict: dict, 
@@ -1587,7 +1569,8 @@ def create_calib_config_file(
 
     Parameters
     ----------
-    calib_params_file : file containing min, max and init values of calibration parameters
+    par_file : file containing min, max and init values of calibration parameters
+    modules: list of modules in the formulation
     workdir : basin directory for storing all the files 
     general_dict : general settings  
     model_dict : model settings 
@@ -1599,8 +1582,25 @@ def create_calib_config_file(
 
     """
 
-    # Extract calibration params range 
-    df_params = pd.read_fwf(calib_params_file).copy()
+    # Extract calibration params range
+    # If par_file (which contains calibration parameters and its initial, min and max values) exists,
+    # read from that file directly; otherwise gather this information from predefined calib_params files for 
+    # individual modules
+    if os.path.isfile(par_file) and os.path.exists(par_file):
+        df_params = pd.read_fwf(par_file).copy()
+    elif os.path.exists(os.path.dirname(par_file)):
+        calib_modules = ['cfe','cfe.xaj','noah','snow17','sac','ueb','topmodel']
+        modules1 = [m1 for m1 in modules if m1 in calib_modules]
+        df_params = pd.DataFrame()
+        for m1 in modules1:
+            f1 = os.path.dirname(par_file) + '/calib_params_' + m1 + '.txt'
+            if not os.path.exists(f1):
+                raise ValueError(f'Folder {os.path.dirname(par_file)} does not contain calibration parameter files for {m1}')
+            df_params = pd.concat([df_params, pd.read_fwf(f1)], ignore_index=True)
+    else:
+        raise ValueError(f'File {par_file} does not exist and \
+            Folder {os.path.dirname(par_file)} does not exist or does not contain calibration parameter files for the chosen modules')
+
     df_params.set_index('param', inplace=True)
     calib_params = df_params.groupby('model').groups
 

@@ -44,11 +44,13 @@ def identify_events(
     events = ev.list_events(data, halflife=halflife, window=window, 
        minimum_event_duration=minimum_event_duration,start_radius=start_radius)
 
-    # Compute peak timing
-    events['peak'] = events.apply(lambda e: data.loc[e.start:e.end].idxmax(), axis=1)
+    if len(events) > 0:
 
-    # Compute peak discharge for each event
-    events['peak_value'] = events.apply(lambda e: data.loc[e.start:e.end].max(), axis=1)
+        # Compute peak timing
+        events['peak'] = events.apply(lambda e: data.loc[e.start:e.end].idxmax(), axis=1)
+
+        # Compute peak discharge for each event
+        events['peak_value'] = events.apply(lambda e: data.loc[e.start:e.end].max(), axis=1)
 
     return events
 
@@ -184,11 +186,12 @@ def pair_events(
 
     # for each unpaired model event (that is above threshold), add an observed event with the same start/end time as the model event
     events2_new1 = events2_new.loc[~events2_new.paired].copy(deep=True)
-    events2_new1 = events2_new1.loc[events2_new1['peak_value'] >= threshold]
-    if events2_new1.shape[0] > 0:
-        for e1 in events2_new1.itertuples():
-            new_event = pd.DataFrame([{'obs_start':e1.start,'obs_end':e1.end,'mod_start':e1.start,'mod_end':e1.end}])
-            events = pd.concat([events, new_event], ignore_index=True)
+    if len(events2_new1)>0:
+        events2_new1 = events2_new1.loc[events2_new1['peak_value'] >= threshold]
+        if events2_new1.shape[0] > 0:
+            for e1 in events2_new1.itertuples():
+                new_event = pd.DataFrame([{'obs_start':e1.start,'obs_end':e1.end,'mod_start':e1.start,'mod_end':e1.end}])
+                events = pd.concat([events, new_event], ignore_index=True)
 
     # sort paired events by start time
     events = events.sort_values(by=['obs_start']) 
@@ -214,30 +217,33 @@ def compute_event_metrics(
     aggregation: aggregation method (mean or median) for metrics calculated for all events
 
     """
-    # get peak magnitude for paired events
-    y_pred = event_pairs.apply(lambda e: data_obs.loc[e.obs_start:e.obs_end].max(), axis=1)
-    y_true = event_pairs.apply(lambda e: data_mod.loc[e.mod_start:e.mod_end].max(), axis=1)
-
-    # get peak timing for paired events
-    y_pred_time = event_pairs.apply(lambda e: data_obs.loc[e.obs_start:e.obs_end].idxmax(), axis=1)
-    y_true_time = event_pairs.apply(lambda e: data_mod.loc[e.mod_start:e.mod_end].idxmax(), axis=1)
-
-    # comptue event volume bias
-    pbias = pd.Series(index=range(len(event_pairs)))
-    for i1, e1 in enumerate(event_pairs.itertuples(),1):
-        y_pred = data_mod.loc[e1.mod_start:e1.mod_end]
-        y_true = data_obs.loc[e1.obs_start:e1.obs_end]
-        pbias[i1-1] = np.abs(y_pred.sum()-y_true.sum())/y_true.sum()*100
-    
-    if aggregation == 'mean':
-        peak_bias = np.mean(np.absolute(np.subtract(y_pred, y_true)/y_true))*100
-        ptime_err = pd.Timedelta(np.timedelta64(np.mean(np.absolute(np.subtract(y_pred_time, y_true_time))),'h')).total_seconds()/3600
-        event_bias = pbias.mean()
-    elif aggregation == 'median':
-        peak_bias = np.nanmedian(np.absolute(np.subtract(y_pred, y_true)/y_true))*100
-        ptime_err = pd.Timedelta(np.timedelta64(np.nanmedian(np.absolute(np.subtract(y_pred_time, y_true_time))),'h')).total_seconds()/3600
-        event_bias = pbias.median()
+    if len(event_pairs)==0:
+        peak_bias = ptime_err = event_bias = np.NaN 
     else:
-        warnings.warn("cannot aggregate event-based metrics with " + aggregation)
+        # get peak magnitude for paired events
+        y_pred = event_pairs.apply(lambda e: data_obs.loc[e.obs_start:e.obs_end].max(), axis=1)
+        y_true = event_pairs.apply(lambda e: data_mod.loc[e.mod_start:e.mod_end].max(), axis=1)
+
+        # get peak timing for paired events
+        y_pred_time = event_pairs.apply(lambda e: data_obs.loc[e.obs_start:e.obs_end].idxmax(), axis=1)
+        y_true_time = event_pairs.apply(lambda e: data_mod.loc[e.mod_start:e.mod_end].idxmax(), axis=1)
+
+        # comptue event volume bias
+        pbias = pd.Series(index=range(len(event_pairs)))
+        for i1, e1 in enumerate(event_pairs.itertuples(),1):
+            y_pred = data_mod.loc[e1.mod_start:e1.mod_end]
+            y_true = data_obs.loc[e1.obs_start:e1.obs_end]
+            pbias[i1-1] = np.abs(y_pred.sum()-y_true.sum())/y_true.sum()*100
+    
+        if aggregation == 'mean':
+            peak_bias = np.mean(np.absolute(np.subtract(y_pred, y_true)/y_true))*100
+            ptime_err = pd.Timedelta(np.timedelta64(np.mean(np.absolute(np.subtract(y_pred_time, y_true_time))),'h')).total_seconds()/3600
+            event_bias = pbias.mean()
+        elif aggregation == 'median':
+            peak_bias = np.nanmedian(np.absolute(np.subtract(y_pred, y_true)/y_true))*100
+            ptime_err = pd.Timedelta(np.timedelta64(np.nanmedian(np.absolute(np.subtract(y_pred_time, y_true_time))),'h')).total_seconds()/3600
+            event_bias = pbias.median()
+        else:
+            warnings.warn("cannot aggregate event-based metrics with " + aggregation)
 
     return {'peak_bias':peak_bias, 'ptime_err':ptime_err, 'event_bias':event_bias}
