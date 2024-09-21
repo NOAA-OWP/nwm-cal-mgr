@@ -516,9 +516,10 @@ def create_ueb_input(
     Parameters
     ----------
     catids : catchment IDs in the basin
-    ueb_bmi_dir : directory for the ueb bmi configuration file
-    ueb_param_file : soil hydraulic parameter file
-    ueb_bmi_dir : directory for the lasam bmi configuration file
+    time_period: simulation time period
+    attr_file : attributes file containing info on lat/lon/slope/aspect etc
+    param_dir_source : directory containing UEB parameter files
+    ueb_input_dir : directory for the UEB bmi configuration file
 
     Returns
     ----------
@@ -1231,12 +1232,12 @@ def var_mapping(
         var_maps[pet_in] = "EVAPOTRANS"
         
     # snowmelt
-    if 'noah' in modules:
-        var_maps[pcp_in] = "QINSUR"
+    if 'snow17' in modules:
+        var_maps[pcp_in] = 'raim' 
     elif 'ueb' in modules:
-        var_maps[pcp_in] = "SWIT"       
-    elif 'snow17' in modules:
-        var_maps[pcp_in] = 'raim'   
+        var_maps[pcp_in] = "SWIT"    
+    elif 'noah' in modules: # check noah last since it can also be included to provided ET
+        var_maps[pcp_in] = "QINSUR"         
 
     return var_maps     
 
@@ -1509,35 +1510,10 @@ def create_realization_file(
                          "uses_forcing_file": False,
                          "main_output_variable": main_output_variable}}
 
-    # if 'sft' in modules:
-    #     if 'cfe' in modules or 'cfe.xaj' in modules:
-    #         output_variables = ["soil_ice_fraction", "TGS", "RAIN_RATE", "DIRECT_RUNOFF", "GIUH_RUNOFF", "NASH_LATERAL_RUNOFF",
-	#                     "DEEP_GW_TO_CHANNEL_FLUX", "Q_OUT", "SOIL_STORAGE",  "ice_fraction_schaake", "POTENTIAL_ET", "ACTUAL_ET", "soil_moisture_fraction"]
-    #         output_header_fields = ["soil_ice_fraction", "ground_temperature", "rain_rate", "direct_runoff", "giuh_runoff", "nash_lateral_runoff",
-    #                             "deep_gw_to_channel_flux", "q_out", "soil_storage", "ice_fraction_schaake", "PET", "AET", "soil_moisture_fraction"]
-    #         if 'cfe.xaj' in modules:
-    #             output_variables[9] = "ice_fraction_xinanjiang"
-    #             output_header_fields[9] = "ice_fraction_xinanjiang"yliu_NGWPC-1969_update_ngen-cal_for_sftsmp
-    #     elif 'lasam' in modules:
-    #         output_variables = ["soil_ice_fraction", "TGS", "precipitation", "potential_evapotranspiratio", "actual_evapotranspiration", 
-    #                         "soil_storage", "surface_runoff", "giuh_runoff", "groundwater_to_stream_recharge",  "percolation", "total_discharge", 
-    #                         "infiltration", "EVAPOTRAN", "soil_moisture_fraction"] 
-    #         output_header_fields = ["soil_ice_fraction", "ground_temperature", "rain_rate", "PET_rate", "actual_ET",  
-    #                             "soil_storage", "direct_runoff", "giuh_runoff", "deep_gw_to_channel_flux", "soil_to_gw_flux", "q_out",
-    #                             "infiltration", "PET_NOM", "soil_moisture_fraction"]  
 
-    #     gbmain["params"]["output_variables"] = output_variables
-    #     gbmain["params"]["output_header_fields"] = output_header_fields
 
     # modules section    
-    if 'sft' in modules:
-        snow_module = [m1 for m1 in modules if m1 not in ['sloth','cfe','cfe.xaj','lasam','troute','sft','smp']]
-        rr_module = [m1 for m1 in ['cfe','cfe.xaj','lasam'] if m1 in modules]
-        modules1 = ['sloth'] + snow_module + ['smp', 'sft'] + rr_module
-    else:
-        modules1 = [m1 for m1 in modules if m1 != 'troute']
-
-    gbmain["params"]["modules"] = [model_configs[m1] for m1 in modules1]
+    gbmain["params"]["modules"] = [model_configs[m1] for m1 in modules if m1 != 'troute']
 
     # global configuration
     g = {"global": {"formulations": [gbmain],
@@ -1585,21 +1561,23 @@ def create_calib_config_file(
     # Extract calibration params range
     # If par_file (which contains calibration parameters and its initial, min and max values) exists,
     # read from that file directly; otherwise gather this information from predefined calib_params files for 
-    # individual modules
+    # individual modules in the directory given by par_file
     if os.path.isfile(par_file) and os.path.exists(par_file):
         df_params = pd.read_fwf(par_file).copy()
-    elif os.path.exists(os.path.dirname(par_file)):
-        calib_modules = ['cfe','cfe.xaj','noah','snow17','sac','ueb','topmodel']
-        modules1 = [m1 for m1 in modules if m1 in calib_modules]
-        df_params = pd.DataFrame()
-        for m1 in modules1:
-            f1 = os.path.dirname(par_file) + '/calib_params_' + m1 + '.txt'
-            if not os.path.exists(f1):
-                raise ValueError(f'Folder {os.path.dirname(par_file)} does not contain calibration parameter files for {m1}')
-            df_params = pd.concat([df_params, pd.read_fwf(f1)], ignore_index=True)
     else:
-        raise ValueError(f'File {par_file} does not exist and \
-            Folder {os.path.dirname(par_file)} does not exist or does not contain calibration parameter files for the chosen modules')
+        par_dir = os.path.join(par_file,'')
+        if os.path.exists(par_dir):
+            calib_modules = ['cfe','cfe.xaj','noah','snow17','sac','ueb','topmodel']
+            modules1 = [m1 for m1 in modules if m1 in calib_modules]
+            df_params = pd.DataFrame()
+            for m1 in modules1:
+                f1 = par_dir + '/calib_params_' + m1 + '.txt'
+                if not os.path.exists(f1):
+                    raise ValueError(f'Folder {par_dir} does not contain calibration parameter files for {m1}')
+                df_params = pd.concat([df_params, pd.read_fwf(f1)], ignore_index=True)
+        else:
+            raise ValueError(f'File {par_file} does not exist and \
+                Folder {par_dir} does not exist or does not contain calibration parameter files for the chosen modules')
 
     df_params.set_index('param', inplace=True)
     calib_params = df_params.groupby('model').groups

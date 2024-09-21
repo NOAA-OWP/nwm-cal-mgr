@@ -405,6 +405,9 @@ def scatterplot_var(
     df = pd.read_csv(var_file)
     allcols = list(df.columns)[1:]
 
+    # ignore cloumn 'objFunVal' from metrics_iteration.csv
+    allcols = [c1 for c1 in allcols if c1 != 'objFunVal']
+
     # Define figure arguments
     if len(allcols) > 16:
         cols = 5
@@ -412,7 +415,8 @@ def scatterplot_var(
         cols = 4
     else:
         cols = 3
-    rows = math.ceil((len(allcols) - 1)/cols)
+    #rows = math.ceil((len(allcols) - 1)/cols)
+    rows = math.ceil(len(allcols)/cols)
 
     # Plot
     fig, axs = plt.subplots(rows, cols, figsize=(12, 8), dpi=105, sharex=True)

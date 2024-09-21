@@ -22,10 +22,27 @@ import pandas as pd
 from createInput import ginputfunc as gfun
 
 def create_input(filename):
+
+    # define currently supported modules in each hydrologic process
+    mod_all = {'SLOTH': ['sloth'],
+                'snow': ['noah','snow17','ueb'],
+                'ET': ['pet','noah'],
+                'RR': ['cfe','cfe.xaj','topmodel','sac','lasam'],
+                'routing': ['troute']}
+
+    # define mapping for module names with spelling being different between GUI and ngen-cal 
+    mod_dict = {
+            'noah-owp-modular': 'noah',
+            'snow-17': 'snow17',
+            'cfe-s': 'cfe',
+            'cfe-x': 'cfe.xaj',
+            'sac-sma': 'sac',
+            't-route': 'troute',
+    }
+
+    # Read input config file
     if not os.path.isfile(filename):
         raise ValueError(f'File {filename} does not exist')
-        
-    # Read input config file
     config  = configparser.ConfigParser()
     config.read(filename)
     
@@ -62,29 +79,12 @@ def create_input(filename):
                 'start_iteration': int(conf2['start_iteration']), 'iterations': int(conf2['number_iteration']), \
                 'restart': int(conf2['restart'])}
 
-    # mapping between module names on the GUI and in ngen-cal
-    mod_dict = {'topoflow': 'topoflow',
-            'noah-owp-modular': 'noah',
-            'snow-17': 'snow17',
-            'ueb': 'ueb',
-            'pet': 'pet',
-            'cfe-s': 'cfe',
-            'cfe-x': 'cfe.xaj',
-            'topmodel': 'topmodel',
-            'sac-sma': 'sac',
-            'lasam': 'lasam',
-            'sft': 'sft',
-            'smp': 'smp',
-            't-route': 'troute',
-            'sloth': 'sloth',
-    }
-
     # get list of modules
     if not conf1['models']:
         raise ValueError('Model must be specified')
     modules0 = [x.replace(" ", "") for x in re.split(',',conf1['models'])]
-    modules = [mod_dict[m1.lower()] for m1 in modules0]
-
+    modules = [mod_dict[m1.lower()] if m1.lower() in mod_dict.keys() else m1.lower() for m1 in modules0]
+    
     # add sloth if CFE or LASAM is selected
     module_found = [x for x in ['cfe','cfe.xaj','lasam'] if x in modules]
     if len(module_found)==1 and 'sloth' not in modules:
@@ -103,7 +103,12 @@ def create_input(filename):
     if 'troute' not in modules:
         print("T-Route must be included in the formulation. Add T-Route to module list")
         modules = modules + ['troute']
-    
+
+    # rearrange modules in order of hydrologic processes
+    modules1 = [m1 for p1 in mod_all.keys() for m1 in modules if m1 in mod_all[p1]]
+    modules = []
+    tmp = [modules.append(m1) for m1 in modules1 if m1 not in modules]
+
     # library files for all modules included in the formulation
     lib_file = {}
     modules1 = [m1 for m1 in modules if m1 != 'troute']
@@ -172,7 +177,7 @@ def create_input(filename):
         if m1 in ['cfe', 'cfe.xaj']:
             gfun.create_cfe_input(catids, modules, attr_file, mod_input_dir)
         elif m1 == 'ueb':
-            gfun.create_ueb_input(catids, attr_file, conf3['ueb_parameter_dir'],mod_input_dir) 
+            gfun.create_ueb_input(catids, time_period, attr_file, conf3['ueb_parameter_dir'],mod_input_dir) 
         elif m1 == 'snow17':
             gfun.create_snow17_input(catids, attr_file, mod_input_dir)
         elif m1 == "pet":
@@ -195,10 +200,6 @@ def create_input(filename):
         elif m1 == 'topmodel':
             os.makedirs(mod_input_dir, exist_ok=True)
             for catID in catids:
-                # run_file = os.path.join(conf3['topmd_dir'], 'topmod_{}'.format(catID) + '.run')
-                # params_file = os.path.join(conf3['topmd_dir'], 'params_{}'.format(catID) + '.dat')
-                # subcat_file = os.path.join(conf3['topmd_dir'], 'subcat_{}'.format(catID) + '.dat')
-
                 run_file = os.path.join(conf3['topmd_dir'], '{}_topmodel'.format(catID) + '.run')
                 params_file = os.path.join(conf3['topmd_dir'], '{}_topmodel_params'.format(catID) + '.dat')
                 subcat_file = os.path.join(conf3['topmd_dir'], '{}_topmodel_subcat'.format(catID) + '.dat')
@@ -247,6 +248,7 @@ def create_input(filename):
     general_dict['workdir'] = work_dir 
     general_dict['yaml_file'] = calib_config_file 
     gfun.create_calib_config_file(conf3['calib_parameter_file'], modules, work_dir, general_dict, model_dict, calib_config_file)
+    print('Calibration yaml file generated at: ' + calib_config_file)
 
 
 def main():
