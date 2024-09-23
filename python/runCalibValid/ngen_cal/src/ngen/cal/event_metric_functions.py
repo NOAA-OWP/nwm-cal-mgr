@@ -101,6 +101,11 @@ def separate_compound_events(
         # make sure peak times are within the original event
         peak_times = [t1 for t1 in peak_times if (t1>e1.start) & (t1<e1.end)]
 
+        # remove duplicated peak times if any
+        tmp = peak_times.copy()
+        peak_times = []
+        [peak_times.append(p1) for p1 in tmp if p1 not in peak_times]
+
         # compute start time of new events as the time with the minimum value
         start_times = [e1.start] + [data1['value'].loc[peak_times[i1]:peak_times[i1+1]].idxmin() \
                for i1 in range(len(peak_times)-1)]
