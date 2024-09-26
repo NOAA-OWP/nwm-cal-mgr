@@ -20,6 +20,7 @@ from .gwo_global_best import GlobalBestGWO
 from .metric_functions import treat_values, calculate_all_metrics
 from .plot_output import plot_calib_output, plot_cost_func
 from .utils import pushd, complete_msg 
+from .ngen_cerf import report
 
 if TYPE_CHECKING:
     from ngen.cal import Adjustable, Evaluatable
@@ -92,7 +93,7 @@ def _calc_metrics(
 
     return calculate_all_metrics(obsflow, simflow, threshold)
 
-def _evaluate(i: int, calibration_object: 'Evaluatable', agent: 'Agent', info: bool=False) -> float:
+def _evaluate(i: int, calibration_object: 'Evaluatable', agent: 'Agent', first_iter_for_agent: bool, info: bool=False) -> float:
     """ Calculate objective function and evaluation metrics. 
     Save calibration output and generate plots during iteration. 
 
@@ -101,6 +102,8 @@ def _evaluate(i: int, calibration_object: 'Evaluatable', agent: 'Agent', info: b
     i : current iteration
     calibration_object : Adjustable object
     agent : Agent object
+    first_iter_for_agent: whether it is first iteration for the agent (for reporting to the server)
+       (note first agent starts iteration 0 and the rest start from iteration 1 for GWO & PSO)
     info : whether to print objective, best objective and best parameter to screen, default False 
 
     Returns
@@ -141,8 +144,6 @@ def _evaluate(i: int, calibration_object: 'Evaluatable', agent: 'Agent', info: b
     calibration_object.save_best_output(str(calibration_object.best_output_file), calibration_object.best_save_flag)
 
     # Save global best cost, and plot
-    #if len(glob.glob('*.log'))==1 and agent.algorithm !='dds':
-    #    calibration_object.write_cost_iter_file(i, agent.workdir) 
     if agent.algorithm !='dds':
         cost_iter_file = calibration_object.write_cost_iter_file(i, agent.workdir)
         if len(glob.glob('*.log'))==1:
@@ -154,6 +155,11 @@ def _evaluate(i: int, calibration_object: 'Evaluatable', agent: 'Agent', info: b
 
     # Save last iteration
     calibration_object.write_last_iteration(i)
+
+    # report info back to server if running from ngenCERF GUI
+    if agent._general.ngen_cerf:
+        worker = os.path.basename(agent.job.workdir).replace('ngen_','').replace('_worker','')
+        report(agent._general.calibration_run_id, i, worker, first_iter_for_agent, agent._general.auth_token)
 
     return score
 
@@ -224,7 +230,7 @@ def dds(start_iteration: int, iterations: int,  calibration_object: 'Evaluatable
             agent.update_config(start_iteration, calibration_object.df[[str(start_iteration), 'param', 'model']], calibration_object.id)
             _execute(agent, start_iteration)
         with pushd(agent.job.workdir):
-            _evaluate(0, calibration_object, agent, info=True)
+            _evaluate(0, calibration_object, agent, first_iter_for_agent=True, info=True)
         calibration_object.check_point(agent.job.workdir)
         start_iteration += 1
 
@@ -236,7 +242,7 @@ def dds(start_iteration: int, iterations: int,  calibration_object: 'Evaluatable
         print("Running {} for iteration {}".format(agent.cmd, i))
         _execute(agent, i)
         with pushd(agent.job.workdir):
-            _evaluate(i, calibration_object, agent)
+            _evaluate(i, calibration_object, agent, first_iter_for_agent=False)
         calibration_object.check_point(agent.job.workdir)
 
 def dds_set(start_iteration: int, iterations: int, agent: 'Agent')->None:
@@ -274,7 +280,7 @@ def dds_set(start_iteration: int, iterations: int, agent: 'Agent')->None:
                 print("Running {} to produce initial simulation".format(agent.cmd))
                 _execute(agent, start_iteration)
             with pushd(agent.job.workdir):
-                _evaluate(0, calibration_set, agent, info=True)
+                _evaluate(0, calibration_set, agent, first_iter_for_agent=True, info=True)
             calibration_set.check_point(agent.job.workdir)
             start_iteration += 1
 
@@ -288,7 +294,7 @@ def dds_set(start_iteration: int, iterations: int, agent: 'Agent')->None:
             print("Running {} for iteration {}".format(agent.cmd, i))
             _execute(agent, i)
             with pushd(agent.job.workdir):
-                _evaluate(i, calibration_set, agent)
+                _evaluate(i, calibration_set, agent, first_iter_for_agent=False)
             calibration_set.check_point(agent.job.workdir)
 
         # Create configuration files for validation run
@@ -299,35 +305,41 @@ def dds_set(start_iteration: int, iterations: int, agent: 'Agent')->None:
         calibration_object.write_run_complete_file(agent.run_name, agent.workdir)
         complete_msg(calibration_object.basinID, agent.run_name, agent.workdir, calibration_object.user)
 
-def compute(calibration_object: 'Adjustable', iteration: int, input: Tuple) -> float:
+def compute(calibration_object: 'Adjustable', iteration: int, agent_1st: str, input: Tuple) -> float:
     """Execute run and evaluate objection function.
 
     parameters
     ----------
     calibration_object : Adjustable object
     iteration : starting iteration
+    agent_1st: name of first agent
     input : Agent and associated parameters 
 
     """
     params = input[0]
     agent = input[1]
+
+    # determine whether it is the first iteration for the agent
+    agent_name = os.path.basename(agent.job.workdir).replace('ngen_','').replace('_worker','')
+    first_iter_for_agent = True if (agent_name!=agent_1st) and (iteration==1) else False
     
     # Execute run with the updated parameter set and evaluate objective function
     calibration_object.df[str(iteration)] = params
     with pushd(agent.job.workdir):
         agent.update_config(iteration, calibration_object.df[[str(iteration), 'param', 'model']], calibration_object.id)
         _execute(agent, iteration)
-        cost = _evaluate(iteration, calibration_object, agent)
+        cost = _evaluate(iteration, calibration_object, agent, first_iter_for_agent)
         calibration_object.check_point(agent.job.workdir)
     return cost
 
-def cost_func( calibration_object: 'Adjustable', agents: 'Agent', pool: int, params: pd.DataFrame):
+def cost_func( calibration_object: 'Adjustable', agents: 'Agent',agent_1st: str, pool: int, params: pd.DataFrame):
     """Compute cost function for each iteration.
 
     Parameters:
     ----------
     calibration_object : Adjustable object
     agents : Agent object
+    agent_1st: name of first agent
     pool : Pool size
     params : Parameter set
 
@@ -337,7 +349,7 @@ def cost_func( calibration_object: 'Adjustable', agents: 'Agent', pool: int, par
     """
     global __iteration_counter
     #TODO implement multi-processing here???
-    func = partial(compute, calibration_object, __iteration_counter)
+    func = partial(compute, calibration_object, __iteration_counter, agent_1st)
     costs = np.fromiter(pool.imap(func, zip(params, agents)), dtype=float)
     __iteration_counter = __iteration_counter + 1
 
@@ -361,6 +373,9 @@ def pso_search(start_iteration: int, iterations: int,  agent: 'Agent') -> None:
     pool_size = agent.parameters.get("pool", 1)
     print("Running PSO with {} particles using {} processes".format(num_particles, pool_size))
 
+    # name of first agent
+    agent_1st = os.path.basename(agent.job.workdir).replace('ngen_','').replace('_worker','')
+
     #TODO warn about potential loss of data when particles > pool
     _pool = pool.Pool(pool_size)
     agents = [agent] + [ agent.duplicate() for i in range(num_particles-1) ]
@@ -376,7 +391,7 @@ def pso_search(start_iteration: int, iterations: int,  agent: 'Agent') -> None:
                 agent.update_config(start_iteration, calibration_object.adf[[str(start_iteration), 'param', 'model']], calibration_object.id)                
                 _execute(agent, start_iteration)
             with pushd(agent.job.workdir):
-                _evaluate(0, calibration_object, agent, info=True)
+                _evaluate(0, calibration_object, agent, first_iter_for_agent=True, info=True)
             calibration_object.check_point(agent.job.workdir)
         bounds = calibration_object.bounds
         bounds = (bounds[0].values, bounds[1].values)
@@ -395,7 +410,7 @@ def pso_search(start_iteration: int, iterations: int,  agent: 'Agent') -> None:
         # we are using here to interface with pyswarm, which only calls the cost_func once per iteration, and tracks other states internally
         # this is a significant problem, especially considering the computation costs of our "cost_function"
         optimizer = ps.single.GlobalBestPSO(n_particles=num_particles, dimensions=len(calibration_object.df), options=options, bounds=bounds)
-        cf = partial(cost_func, calibration_object, agents, _pool)
+        cf = partial(cost_func, calibration_object, agents, agent_1st, _pool)
 
         # Perform optimization
         # For pyswarm, DO NOT use the embedded multi-processing -- it is impossible to track the mapping of an agent to the params
@@ -440,6 +455,10 @@ def gwo_search(start_iteration: int, iterations: int,  agent)->None:
     pool_size = agent.parameters.get("pool", num_particles)
     print("Running GWO with {} particles using {} processes".format(num_particles, pool_size))
     _pool = pool.Pool(pool_size)
+
+    # name of first agent
+    agent_1st = os.path.basename(agent.job.workdir).replace('ngen_','').replace('_worker','')
+
     if start_iteration ==0:
         agents = [agent] + [ agent.duplicate() for i in range(num_particles-1) ]
     else:
@@ -457,7 +476,7 @@ def gwo_search(start_iteration: int, iterations: int,  agent)->None:
                 agent.update_config(start_iteration, calibration_object.adf[[str(start_iteration), 'param', 'model']], calibration_object.id)                
                 _execute(agent, start_iteration)
             with pushd(agent.job.workdir):
-                _evaluate(0, calibration_object, agent, info=True)
+                _evaluate(0, calibration_object, agent, first_iter_for_agent=True, info=True)
             calibration_object.check_point(agent.job.workdir)
         bounds = calibration_object.bounds
         bounds = (bounds[0].values, bounds[1].values)
@@ -465,7 +484,7 @@ def gwo_search(start_iteration: int, iterations: int,  agent)->None:
         # Initialize swarms 
         optimizer = GlobalBestGWO(n_particles=num_particles, dimensions=len(calibration_object.df), bounds=bounds, start_iter=start_iteration,
                                   calib_path=agent.calib_path, basinid=calibration_object.basinID)
-        cf = partial(cost_func, calibration_object, agents, _pool)
+        cf = partial(cost_func, calibration_object, agents, agent_1st, _pool)
 
         # Perform optimization
         cost, pos = optimizer.optimize(cf, iters=iterations, n_processes=None)

@@ -67,7 +67,7 @@ def create_input(filename):
                                             "full": [conf2['full_eval_start_period'], conf2['full_eval_end_period']]}}
 
     # General settings 
-    algorithm = conf2['optimization_algorithm']
+    algorithm = conf2['optimization_algorithm'].lower()
     swarm_size = int(conf2['swarm_size'])
     strategy = {'type': 'estimation', 'algorithm': algorithm} 
     if algorithm == 'pso': 
@@ -91,7 +91,7 @@ def create_input(filename):
         print("CFE or LASAM is used in the formulation. Add SLOTH to module list")
         modules = ['sloth'] + modules
 
-    # make SMP and SFT are always selected together
+    # make sure SMP and SFT are always selected together
     if 'smp' in modules and 'sft' not in modules:
         print('SMP and SFT must be selected together. Add SFT to module list')
         modules = modules + ['sft']
@@ -107,7 +107,8 @@ def create_input(filename):
     # rearrange modules in order of hydrologic processes
     modules1 = [m1 for p1 in mod_all.keys() for m1 in modules if m1 in mod_all[p1]]
     modules = []
-    tmp = [modules.append(m1) for m1 in modules1 if m1 not in modules]
+    [modules.append(m1) for m1 in modules1 if m1 not in modules]
+    print("Final list of modules in formulation: " + str(modules))
 
     # library files for all modules included in the formulation
     lib_file = {}
@@ -247,6 +248,13 @@ def create_input(filename):
     general_dict = general_cfg.copy()
     general_dict['workdir'] = work_dir 
     general_dict['yaml_file'] = calib_config_file 
+
+    # items related to running from GUI
+    for s1 in ['calibration_run_id', 'ngen_cerf', 'auth_token']:
+        general_dict[s1] = conf1[s1]
+    general_dict['calibration_run_id'] = int(general_dict['calibration_run_id'])
+    general_dict['ngen_cerf'] = True if general_dict['ngen_cerf'].lower()=='true' else False
+
     gfun.create_calib_config_file(conf3['calib_parameter_file'], modules, work_dir, general_dict, model_dict, calib_config_file)
     print('Calibration yaml file generated at: ' + calib_config_file)
 

@@ -56,7 +56,9 @@ def main(general: General, model_conf):
 
     print("Starting Iteration: {}".format(start_iteration))
     print("Starting calibration loop")
-
+    if general.strategy.algorithm in [Algorithm.pso, Algorithm.gwo]:
+        print(f"Note the full set of plots are only produced for the first worker at: {agent.job.workdir}")
+              
     # NOTE this assumes we calibrate each catchment independently, it may be possible to design an "aggregate" calibration
     # that works in a more sophisticated manner.
     if agent.model.strategy == 'explicit': #FIXME this needs a refactor...should be able to use a calibration_set with explicit loading

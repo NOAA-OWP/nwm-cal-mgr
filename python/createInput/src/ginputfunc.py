@@ -1567,7 +1567,7 @@ def create_calib_config_file(
     else:
         par_dir = os.path.join(par_file,'')
         if os.path.exists(par_dir):
-            calib_modules = ['cfe','cfe.xaj','noah','snow17','sac','ueb','topmodel']
+            calib_modules = ['cfe','cfe.xaj','noah','snow17','sac','ueb','topmodel','lasam']
             modules1 = [m1 for m1 in modules if m1 in calib_modules]
             df_params = pd.DataFrame()
             for m1 in modules1:
