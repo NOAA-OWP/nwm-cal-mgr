@@ -423,7 +423,8 @@ class EvaluationOptions(BaseModel):
 
         # Replace namelist of Noah-OWP-Modular and add output variables to SFT related model for control and best run
         for m in config_valid['global']['formulations'][0]['params']['modules']:
-            if m['params']['model_type_name'] == 'NoahOWP':
+            if m['params']['model_type_name'] == 'NoahOWP' or \
+                    m['params']['model_type_name'] == 'UEB':
                 m1 = m['params']['init_config']
                 m['params']['init_config'] = os.path.join(os.path.dirname(m1), os.path.basename(m1).replace('calib', 'valid'))
 
