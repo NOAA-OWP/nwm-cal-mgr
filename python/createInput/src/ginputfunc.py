@@ -986,6 +986,7 @@ def create_lasam_input(
                'sft_coupled=true',
                'soil_z=10,30,100.0,200.0[cm]',
                'calib_params=true',
+               'field_capacity_psi=340.0[cm]',
                ]
 
     # Read soil class file
