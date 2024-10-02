@@ -3,9 +3,8 @@ from urllib.parse import urljoin
 import requests
 import os 
 
-#NGENCERF_URL = 'http://localhost:8000/'
-NGENCERF_URL = os.environ.get('NGENCERF_URL')
-NGENCERF_REPORT_ITERATION_ENDPOINT = 'calibration/report_iteration'
+NGENCERF_URL = os.environ.get('NGENCERF_URL', 'http://localhost:8000/')
+NGENCERF_REPORT_ITERATION_ENDPOINT = 'calibration/report_iteration/'
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +24,7 @@ def report(calibration_run_id: int, iteration: int, worker: str, first_iteration
     }
 
     logger.info(f'Reporting iteration to ngenCerf server - {payload}')
-    response = requests.get(url, json=payload, headers=headers)
+    response = requests.post(url, json=payload, headers=headers)
     
     try:
         response.raise_for_status()
