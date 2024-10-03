@@ -38,8 +38,9 @@ RUN set -eux; \
     touch src/ngen/config/*.py; \
     pip3 install . ; \
     \
-    pip3 cache purge
-
+    pip3 cache purge ; \
+    rm --force /root/.gitconfig
+ 
 
 WORKDIR /
 
