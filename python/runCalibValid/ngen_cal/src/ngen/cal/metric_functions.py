@@ -62,6 +62,9 @@ def treat_values(
     """
 
     df = df.copy()
+
+    # make time index a column
+    df.reset_index(drop=False, inplace=True)
     colnames = list(df.columns)
 
     # Remove rows with duplicated datetime
@@ -83,6 +86,9 @@ def treat_values(
     if replace_zero:
         if df[colnames[1:]].min().values.min() <= 0.0001:
             df[colnames[1:]] = df[colnames[1:]] + 1.0/100.0*df[colnames[1]].mean()
+
+    # Return to the original time index (needed to for event-based metrics)
+    df.set_index(colnames[0],inplace=True)
 
     return df
 
@@ -480,23 +486,32 @@ def event_based_metrics(
     Dictionary of event-based metrics
 
     """
-    # step 1: initial event detection for observed and model streamflows
-    events_obs = identify_events(y_true)
-    events_mod = identify_events(y_pred)
+    # step 0: deal with missing observations & simulations
+    y_true = y_true.copy()
+    y_true = y_true.resample('h').first().ffill(limit=5)
+    y_pred = y_pred.copy()
+    y_pred = y_pred.resample('h').first().ffill(limit=5)    
 
-    # step 2: event discretization based on initial events for model and observations
-    events_obs_new = separate_compound_events(events_obs, y_true)
-    events_mod_new = separate_compound_events(events_mod, y_pred)
+    if y_true.isnull().values.any() or y_pred.isnull().values.any():
+        return {'PKBIAS': np.nan, 'PKTE': np.nan, 'EVBIAS': np.nan}
+    else:
+        # step 1: initial event detection for observed and model streamflows
+        events_obs = identify_events(y_true)
+        events_mod = identify_events(y_pred)
 
-    # step 3: event pairing
-    thresh_val = y_true.quantile(threshold)
-    events_paired = pair_events(events_obs_new, events_mod_new, thresh_val)
+        # step 2: event discretization based on initial events for model and observations
+        events_obs_new = separate_compound_events(events_obs, y_true)
+        events_mod_new = separate_compound_events(events_mod, y_pred)
 
-    # step 4: compute event-based metrics (and aggregate by median by default)
-    metrics = compute_event_metrics(events_paired, y_true, y_pred, aggregation)
+        # step 3: event pairing
+        thresh_val = y_true.quantile(threshold)
+        events_paired = pair_events(events_obs_new, events_mod_new, thresh_val)
 
-    return {'PKBIAS': metrics['peak_bias'], 'PKTE': metrics['ptime_err'], 'EVBIAS': metrics['event_bias']}
-    #return {'PKBIAS': np.nan, 'PKTE': np.nan, 'EVBIAS': np.nan}
+        # step 4: compute event-based metrics (and aggregate by median by default)
+        metrics = compute_event_metrics(events_paired, y_true, y_pred, aggregation)
+
+        return {'PKBIAS': metrics['peak_bias'], 'PKTE': metrics['ptime_err'], 'EVBIAS': metrics['event_bias']}
+
 
 _all_metrics = [
     pearson_corr,
