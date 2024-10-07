@@ -14,6 +14,7 @@ import json
 import shutil
 from ngen.cal.agent import Agent
 from ngen.cal.configuration import General
+from ngen.cal.validation_run import run_valid_ctrl_best 
 
 def main(general: General, model_conf, worker:str, iteration:int):
 
@@ -51,6 +52,27 @@ def main(general: General, model_conf, worker:str, iteration:int):
     if not os.path.exists(troute_config_best):
         raise FileNotFoundError('File does not exist: ' + str(troute_config_best))
     shutil.copy(troute_config_best, troute_config)
+
+    # read validation config file
+    config_file_valid = os.path.join(agent.valid_path, os.path.basename(agent.yaml_file).replace('calib', general.name))
+    if not os.path.exists(config_file_valid):
+        raise FileNotFoundError('File does not exist: ' + str(config_file_valid))    
+    with open(config_file_valid) as file:
+        conf_valid = yaml.safe_load(file)
+    general_valid = General(**conf_valid['general'])
+
+    # Change directory to workdir
+    os.chdir(general_valid.workdir)
+
+    print("Starting Validation Run")
+
+    # Initialize agent
+    agent_valid = Agent(conf_valid['model'], general_valid.valid_path, general_valid, general_valid.log, general_valid.restart)
+    
+    # Execcute validation simulation
+    run_valid_ctrl_best(agent_valid)
+
+    print("Validation completed")
 
 if __name__ == "__main__":
 
