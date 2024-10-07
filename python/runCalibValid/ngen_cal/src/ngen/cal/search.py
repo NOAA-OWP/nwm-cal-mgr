@@ -83,11 +83,14 @@ def _calc_metrics(
         print("WARNING: Cannot compute objective function, do time indicies align?")
     if eval_range:
         df = df.loc[eval_range[0]:eval_range[1]]
-
-    # we need to keep the time index for calculation of event-based metrics
-    #df.reset_index(inplace=True)
+ 
+    df.reset_index(inplace=True)
 
     df = treat_values(df, remove_neg = True, remove_na = True)
+
+    # reset the time index (needed for calculation of event-based metrics)
+    df.set_index(df.columns[0], inplace=True)
+
     obsflow = df['obs_flow']
     simflow = df['sim_flow']
 

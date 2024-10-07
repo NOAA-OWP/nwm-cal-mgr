@@ -62,9 +62,6 @@ def treat_values(
     """
 
     df = df.copy()
-
-    # make time index a column
-    df.reset_index(drop=False, inplace=True)
     colnames = list(df.columns)
 
     # Remove rows with duplicated datetime
@@ -86,9 +83,6 @@ def treat_values(
     if replace_zero:
         if df[colnames[1:]].min().values.min() <= 0.0001:
             df[colnames[1:]] = df[colnames[1:]] + 1.0/100.0*df[colnames[1]].mean()
-
-    # Return to the original time index (needed to for event-based metrics)
-    df.set_index(colnames[0],inplace=True)
 
     return df
 
