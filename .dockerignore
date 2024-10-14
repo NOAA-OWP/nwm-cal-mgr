@@ -2,6 +2,7 @@
 .dockerignore
 Dockerfile
 docker.md
+docker/ngen-cal-local.env
 
 # exclude gitlab and github artifacts
 .github

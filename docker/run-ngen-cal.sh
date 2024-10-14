@@ -12,11 +12,6 @@ Optional args (for validation_iteration):
   <worker_name>       name of the worker
   <iteration>         iteration number
 "
-CREATE_INPUT_SCRIPT="/ngen-app/ngen-python/lib/python3.10/site-packages/createInput/create_input.py"
-CALIB_SCRIPT="/ngen-app/ngen-cal/python/runCalibValid/calibration.py"
-VALID_SCRIPT="/ngen-app/ngen-cal/python/runCalibValid/validation.py"
-VALID_ITERATION_SCRIPT="/ngen-app/ngen-cal/python/runCalibValid/validation_iteration.py"
-
 
 function usage () {
     echo "$__usage"
@@ -33,6 +28,21 @@ function exit_script () {
 if [[ $# -lt 2 ]]; then
     usage
 fi
+
+current_dir=$(dirname $(readlink -f $0))
+source ${current_dir}/ngen-cal.env
+
+if [[ -z "${NGENCERF_VENV_ROOT}" || -z "${NGEN_CAL_ROOT}" ]]; then
+  echo "ERROR: ngen-cal.env is not setting required environment variables"
+  usage
+fi
+echo "DEBUG: NGENCERF_VENV_ROOT: ${NGENCERF_VENV_ROOT}"
+echo "DEBUG: NGEN_CAL_ROOT: ${NGEN_CAL_ROOT}"
+
+CREATE_INPUT_SCRIPT="${NGENCERF_VENV_ROOT}/createInput/create_input.py"
+CALIB_SCRIPT="${NGEN_CAL_ROOT}/calibration.py"
+VALID_SCRIPT="${NGEN_CAL_ROOT}/validation.py"
+VALID_ITERATION_SCRIPT="${NGEN_CAL_ROOT}/validation_iteration.py"
 
 operation=${1}
 input_file=${2}
