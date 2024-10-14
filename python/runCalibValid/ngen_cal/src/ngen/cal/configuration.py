@@ -44,7 +44,7 @@ class General(BaseModel):
     objective_log_file: Optional[Path]
     random_seed: Optional[int]
     calibration_run_id: Optional[int]
-    ngencerf: Optional[bool]
+    ngen_cerf: Optional[bool]
     auth_token: Optional[str]
     # Private
     _calib_path: Path

@@ -160,7 +160,7 @@ def _evaluate(i: int, calibration_object: 'Evaluatable', agent: 'Agent', first_i
     calibration_object.write_last_iteration(i)
 
     # report info back to server if running from ngenCERF GUI
-    if agent._general.ngencerf:
+    if agent._general.ngen_cerf:
         worker = os.path.basename(agent.job.workdir).replace('ngen_','').replace('_worker','')
         report(agent._general.calibration_run_id, i, worker, first_iter_for_agent, agent._general.auth_token)
 

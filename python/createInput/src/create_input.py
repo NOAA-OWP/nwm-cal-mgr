@@ -251,7 +251,12 @@ def create_input(filename):
 
     # items related to running from GUI
     for s1 in ['calibration_run_id', 'ngen_cerf', 'auth_token']:
-        general_dict[s1] = conf1[s1]
+        try:
+            general_dict[s1] = conf1[s1]
+        except KeyError as e:
+            print(f"Exception Key not found: {str(e)}")
+            return 1
+
     general_dict['calibration_run_id'] = int(general_dict['calibration_run_id'])
     general_dict['ngen_cerf'] = True if general_dict['ngen_cerf'].lower()=='true' else False
 

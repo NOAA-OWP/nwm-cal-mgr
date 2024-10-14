@@ -29,7 +29,7 @@ def main(general: General, model_conf):
     # Initialize agent
     agent = Agent(model_conf, general.valid_path, general, general.log, general.restart)
     
-    # Execcute validation control and best simulation
+    # Execute validation control and best simulation
     run_valid_ctrl_best(agent)
 
 
@@ -44,7 +44,7 @@ if __name__ == "__main__":
     
     with open(args.config_file) as file:
         conf = yaml.safe_load(file)
-    
+
     general = General(**conf['general'])
 
     # Change directory to workdir
