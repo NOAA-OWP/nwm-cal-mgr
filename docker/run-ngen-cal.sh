@@ -1,11 +1,11 @@
 #!/bin/bash
 
-# This shell script lives in both the CerfServer repo as well as ngen-cal.
+# This shell script lives in the ngen-cal.  It is used by CerfServer when calling ngen-cal
 
 # It is used by CerfServer directly when running in LOCAL mode.
-#     The environment variables should be set in CerfServer (the .env file)
 # It is used by the ngen-cal docker container when the server is running in DOCKER or PARALLEL_WORKS mode.
-#     The environment variables should be set in the ngen-cal Docker container (ngen-cal.env)
+
+# The environment variables should be set in the ngen-cal Docker container (ngen-cal.env)
 
 
 # Function to resolve ~ to the home directory
