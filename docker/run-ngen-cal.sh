@@ -5,35 +5,10 @@
 # It is used by CerfServer directly when running in LOCAL mode.
 # It is used by the ngen-cal docker container when the server is running in DOCKER or PARALLEL_WORKS mode.
 
-# The environment variables should be set in the ngen-cal Docker container (ngen-cal.env)
-
-
-# Function to resolve ~ to the home directory
-resolve_path() {
-  echo "${1//\~/$HOME}"
-}
-
-current_dir="$(dirname "$(readlink -f "$0")")"
-source "${current_dir}/ngen-cal.env"
-
-# Check if required environment variables are set, otherwise exit with an error
-if [ -z "$NGENCERF_VENV_ROOT" ] || [ -z "$NGEN_CAL_ROOT" ]; then
-  echo "Error: One or more required environment variables are not set."
-  echo "Please set the following environment variables:"
-  echo "  NGENCERF_VENV_ROOT"
-  echo "  NGEN_CAL_ROOT"
-  exit 1
-fi
-
-echo "DEBUG: NGENCERF_VENV_ROOT: $(resolve_path "$NGENCERF_VENV_ROOT")"
-echo "DEBUG: NGEN_CAL_ROOT: $(resolve_path "$NGEN_CAL_ROOT")"
-echo ""
-
-# Get the script paths from the environment variables, resolving ~ to the home directory
-CALIB_SCRIPT=$(resolve_path "$NGEN_CAL_ROOT/calibration.py")
-VALID_SCRIPT=$(resolve_path "$NGEN_CAL_ROOT/validation.py")
-VALID_ITERATION_SCRIPT=$(resolve_path "$NGEN_CAL_ROOT/validation_iteration.py")
-CREATE_INPUT_SCRIPT=$(resolve_path "$NGENCERF_VENV_ROOT/createInput/create_input.py")
+CALIB_SCRIPT=/ngen-app/ngen-cal/python/runCalibValid/calibration.py
+VALID_SCRIPT=/ngen-app/ngen-cal/python/runCalibValid/validation.py
+VALID_ITERATION_SCRIPT=/ngen-app/ngen-cal/python/runCalibValid/validation_iteration.py
+CREATE_INPUT_SCRIPT=/ngen-app/ngen-python/lib/python3.10/site-packages/createInput/create_input.py
 
 # Function to display help message
 show_help() {

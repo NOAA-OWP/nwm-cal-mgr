@@ -8,7 +8,6 @@ RUN --mount=type=secret,id=GITLAB_TOKEN \
 COPY . /ngen-app/ngen-cal/
 
 COPY ./docker/run-ngen-cal.sh /ngen-app/bin/
-COPY ./docker/ngen-cal.env /ngen-app/bin/
 
 WORKDIR /ngen-app/
 
