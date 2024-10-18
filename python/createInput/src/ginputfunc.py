@@ -18,12 +18,14 @@ from fileinput import FileInput
 from functools import partial
 from typing import List, Union, Dict
 from pathlib import Path
-
 import geopandas as gpd
 import pandas as pd
 import yaml
+import logging
+logger = logging.getLogger(__name__)
 
 from tempfile import mkstemp
+from createInput import settings
 
 def replace_path(source_file_path, par_path, data_type_codes):
     fh, target_file_path = mkstemp()
@@ -154,7 +156,7 @@ def create_cfe_input(
  
      # surface partitioning scheme
     scheme = 'Schaake'
-    if ('cfe.xaj' in modules):
+    if ('cfex' in modules):
         scheme = 'Xinanjiang'
 
     # Create bmi config files
@@ -192,7 +194,7 @@ def create_cfe_input(
             f.write("%s" %("sft_coupled=true\n"))
             f.write("%s" %("ice_content_threshold=0.3\n"))
 
-        # add the new parameters for cfe.xaj
+        # add the new parameters for cfex
         # TODO: read these catchment-specific parameters from the NWMv3 model attributes parquet file
         # The current parquet file we have access to was likely based on NWMv2.1 and hence missing these XAJ parameters
         f.write("%s" %("a_Xinanjiang_inflection_point_parameter=-0.212938\n"))
@@ -369,7 +371,7 @@ def create_sft_smp_input(
 
     # Ice fraction scheme
     icefscheme = 'Schaake'
-    if ('cfe.xaj' in modules):
+    if ('cfex' in modules):
         icefscheme = 'Xinanjiang'
 
     # Create bmi config files
@@ -403,7 +405,7 @@ def create_sft_smp_input(
                'soil_params.b=' + df.loc['soil_params.b'].iloc[0], 
                'soil_params.satpsi=' + df.loc['soil_params.satpsi'].iloc[0], 
                'soil_z=0.1,0.3,1.0,2.0[m]']
-        if 'cfe' in modules or 'cfe.xaj' in modules:
+        if 'cfes' in modules or 'cfex' in modules:
             smp_lst += ['soil_storage_model=conceptual', 'soil_storage_depth=2.0']
         elif 'lasam' in modules:
             smp_lst += ['soil_storage_model=layered', 'soil_moisture_profile_option=constant', 'soil_depth_layers=2.0', 'water_table_depth=10[m]']
@@ -1223,7 +1225,7 @@ def var_mapping(
     var_maps = {}
 
     # only needed when CFE is not coupled to SFT/SMP
-    if ('cfe' in modules or 'cfe.xaj' in modules) and ('sft' not in modules):
+    if ('cfes' in modules or 'cfex' in modules) and ('sft' not in modules):
         var_maps["ice_fraction_schaake"] = "sloth_ice_fraction_schaake"
         var_maps["ice_fraction_xinanjiang"] = "sloth_ice_fraction_xinanjiang"
         var_maps["soil_moisture_profile"] = "sloth_smp"
@@ -1242,6 +1244,10 @@ def var_mapping(
 
     return var_maps     
 
+def get_model_type_name(
+    module: str            
+) -> str:
+    return settings.modules_all.loc[settings.modules_all['module']==module,'name_config'].iloc[0]
 
 def create_realization_file(
     workdir: Union[str, Path], 
@@ -1286,7 +1292,7 @@ def create_realization_file(
     if 'noah' in modules:
         model_configs['noah'] = {"name": "bmi_fortran", 
                      "params": {"name": "bmi_fortran", 
-                                "model_type_name": "NoahOWP", 
+                                "model_type_name": get_model_type_name('noah'), 
                                 "main_output_variable": "QINSUR",
                                 "library_file": lib_mod['noah'],
                                 "init_config": os.path.join(bmi_dir['noah'], '{{id}}_calib.input'),
@@ -1301,12 +1307,12 @@ def create_realization_file(
                                     "SOLDN": "land_surface_radiation~incoming~shortwave__energy_flux",
                                     "SFCPRS": "land_surface_air__pressure"}}}
 
-    # cfe or cfe.xaj
-    if 'cfe' in modules or 'cfe.xaj' in modules:
-        m1 = 'cfe' if 'cfe' in modules else 'cfe.xaj'
+    # cfe or cfex
+    if 'cfes' in modules or 'cfex' in modules:
+        m1 = 'cfes' if 'cfes' in modules else 'cfex'
         model_configs[m1] = {"name": "bmi_c",
                                 "params": {"name": "bmi_c", 
-                                    "model_type_name": "CFE", 
+                                    "model_type_name": get_model_type_name(m1), 
                                     "main_output_variable": "Q_OUT",
                                     "library_file": lib_mod[m1],
                                     "init_config": os.path.join(bmi_dir[m1], '{{id}}_bmi_config_cfe.txt'), 
@@ -1325,7 +1331,7 @@ def create_realization_file(
     if 'topmodel' in modules:
         model_configs['topmodel'] = {"name": "bmi_c",
                                     "params": {"name": "bmi_c", 
-                                        "model_type_name": "TOPMODEL", 
+                                        "model_type_name": get_model_type_name('topmodel'), 
                                         "main_output_variable": "Qout",
                                         "library_file": lib_mod['topmodel'],
                                         "init_config": os.path.join(bmi_dir['topmodel'], '{{id}}_topmodel.run'),
@@ -1343,7 +1349,7 @@ def create_realization_file(
     if 'sac' in modules:
         model_configs['sac'] = {"name": "bmi_fortran",
                                 "params": {
-                                    "model_type_name": "sac",
+                                    "model_type_name": get_model_type_name('sac'),
                                     "library_file": lib_mod['sac'],
                                     "init_config": os.path.join(bmi_dir['sac'], 'sac-init-{{id}}-HHWM8.namelist.input'),
                                     "allow_exceed_end_time": True, "fixed_time_step": False, "uses_forcing_file": False,
@@ -1364,7 +1370,7 @@ def create_realization_file(
     if 'snow17' in modules:
         model_configs['snow17'] = {"name": "bmi_fortran",
                                 "params": {
-                                    "model_type_name": "snow17",
+                                    "model_type_name": get_model_type_name('snow17'),
                                     "library_file": lib_mod['snow17'],
                                     "init_config": os.path.join(bmi_dir['snow17'], 'snow17-init-{{id}}.namelist.input'),
                                     "allow_exceed_end_time": True, "fixed_time_step": False, "uses_forcing_file": False,
@@ -1379,7 +1385,7 @@ def create_realization_file(
         model_configs['ueb'] = {"name": "bmi_c++",
                                 "params": {
                                     "name": "bmi_c++", 
-                                    "model_type_name": "UEB",
+                                    "model_type_name": get_model_type_name('ueb'),
                                     "library_file": lib_mod['ueb'],
                                     "init_config": os.path.join(bmi_dir['ueb'], 'ueb-init-{{id}}_calib.dat'),
                                     "allow_exceed_end_time": True, "fixed_time_step": False, "uses_forcing_file": False,
@@ -1398,7 +1404,7 @@ def create_realization_file(
     if 'pet' in modules:
         model_configs['pet'] = {"name": "bmi_c",
                                 "params": {
-                                    "model_type_name": "PET",
+                                    "model_type_name": get_model_type_name('pet'),
                                     "library_file": lib_mod['pet'],
                                     "init_config": os.path.join(bmi_dir['pet'], '{{id}}_bmi_config.ini'),
                                     "allow_exceed_end_time": True, "fixed_time_step": False, "uses_forcing_file": False,
@@ -1410,7 +1416,7 @@ def create_realization_file(
     if 'sloth' in modules:
         model_configs['sloth'] = {"name": "bmi_c++",
                                 "params": {"name": "bmi_c++", 
-                                    "model_type_name": "SLOTH", 
+                                    "model_type_name": get_model_type_name('sloth'), 
                                     "main_output_variable": "z", 
                                     "library_file": lib_mod['sloth'], 
                                     "init_config": '/dev/null',
@@ -1418,7 +1424,7 @@ def create_realization_file(
                                     "fixed_time_step": False, 
                                     "uses_forcing_file": False}}
 
-        if 'cfe' in modules or 'cfe.xaj' in modules :
+        if 'cfes' in modules or 'cfex' in modules :
             if 'sft' not in modules:
                 model_params = {
                     "sloth_ice_fraction_schaake(1,double,m,node)": 0.0,
@@ -1451,7 +1457,7 @@ def create_realization_file(
     if 'sft' in modules:
         model_configs['sft'] = {"name": "bmi_c++",
                                 "params": {"name": "bmi_c++",
-                                    "model_type_name": "SFT", 
+                                    "model_type_name": get_model_type_name('sft'), 
                                     "main_output_variable": "num_cells",
                                     "library_file": lib_mod['sft'],
                                     "init_config": os.path.join(bmi_dir['sft'], '{{id}}_bmi_config_sft.txt'),
@@ -1463,7 +1469,7 @@ def create_realization_file(
     if 'smp' in modules:
         model_configs['smp'] = {"name": "bmi_c++",
                                 "params": {"name": "bmi_c++", 
-                                    "model_type_name": "SMP", 
+                                    "model_type_name": get_model_type_name('smp'),
                                     "main_output_variable": "soil_water_table",
                                     "library_file": lib_mod['smp'],
                                     "init_config": os.path.join(bmi_dir['smp'], '{{id}}_bmi_config_smp.txt'),
@@ -1484,15 +1490,12 @@ def create_realization_file(
     if 'lasam' in modules:
         model_configs['lasam'] = {"name": "bmi_c++",
                                 "params": {"name": "bmi_c++",
-                                    "model_type_name": "LASAM",
+                                    "model_type_name": get_model_type_name('lasam'),
                                     "main_output_variable": "precipitation_rate",
                                     "library_file": lib_mod['lasam'],
                                     "init_config": os.path.join(bmi_dir['lasam'], '{{id}}_bmi_config_lasam.txt'),
                                     "allow_exceed_end_time": True,
-                                    "uses_forcing_file": False,
-                                    "variables_names_map": {
-                                        "precipitation_rate" : "QINSUR",
-                                        "potential_evapotranspiration_rate": "EVAPOTRANS"}}}
+                                    "uses_forcing_file": False}}
 
         # variable name mapping section
         pet_in = "potential_evapotranspiration_rate"
@@ -1531,6 +1534,7 @@ def create_realization_file(
     # save configuration into json file 
     with open(realization_file, 'w') as outfile:
         json.dump(g, outfile, indent=4, separators=(", ", ": "), sort_keys=False)
+    print(f'Realization file is created at {realization_file}')
 
 
 def create_calib_config_file(
@@ -1563,23 +1567,31 @@ def create_calib_config_file(
     # If par_file (which contains calibration parameters and its initial, min and max values) exists,
     # read from that file directly; otherwise gather this information from predefined calib_params files for 
     # individual modules in the directory given by par_file
+    calib_modules_config = list(settings.modules_all.loc[settings.modules_all['calibratable'],'name_config'])
     if os.path.isfile(par_file) and os.path.exists(par_file):
-        df_params = pd.read_fwf(par_file).copy()
+        df_params = pd.read_csv(par_file,sep=None,comment='#',engine='python')
+        df_params = df_params.loc[df_params['model'] in calib_modules_config]
     else:
         par_dir = os.path.join(par_file,'')
         if os.path.exists(par_dir):
-            calib_modules = ['cfe','cfe.xaj','noah','snow17','sac','ueb','topmodel','lasam']
-            modules1 = [m1 for m1 in modules if m1 in calib_modules]
             df_params = pd.DataFrame()
-            for m1 in modules1:
-                f1 = par_dir + '/calib_params_' + m1 + '.txt'
-                if not os.path.exists(f1):
-                    raise ValueError(f'Folder {par_dir} does not contain calibration parameter files for {m1}')
-                df_params = pd.concat([df_params, pd.read_fwf(f1)], ignore_index=True)
+            for m1 in modules:
+                m_ui = settings.modules_all.loc[settings.modules_all['module']==m1,'name_ui'].iloc[0]
+                m_config = settings.modules_all.loc[settings.modules_all['module']==m1,'name_config'].iloc[0]
+                if m_config in calib_modules_config:
+                    f1 = par_dir + '/calib_params_' + m_ui + '.csv'
+                    if not os.path.exists(f1):
+                        logger.error(f'Folder {par_dir} does not contain calibration parameter file for {m_ui}')
+                    df_tmp = pd.read_csv(f1,sep=None,comment='#',engine='python')
+                    df_tmp['model'] = m_config
+                    df_params = pd.concat([df_params, df_tmp], ignore_index=True)
         else:
-            raise ValueError(f'File {par_file} does not exist and \
+            logger.error(f'File {par_file} does not exist and \
                 Folder {par_dir} does not exist or does not contain calibration parameter files for the chosen modules')
 
+    if len(df_params) == 0:
+        logger.error(f'No calibratable parameters found for the list of modules: {modules}')
+    
     df_params.set_index('param', inplace=True)
     calib_params = df_params.groupby('model').groups
 
@@ -1608,3 +1620,4 @@ def create_calib_config_file(
     # Save configuration into yaml file
     with open(config_yaml_file, 'w') as file:
         yaml.dump(basin_yaml, file, sort_keys=False, default_flow_style=False, indent=2)
+    print(f'Calibration config file is created at: {config_yaml_file}')
