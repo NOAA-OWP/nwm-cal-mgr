@@ -32,7 +32,7 @@ unit-test:
     - echo "Running Unit Tests..."
     - cd /ngen-app/ngen-cal
     - pytest --log-cli-level 0 ./python/runCalibValid/ngen_conf/tests/
-#   - pytest --log-cli-level 0 ./python/runCalibValid/ngen_cal/tests/ # FIXME
+    - pytest --log-cli-level 0 ./python/runCalibValid/ngen_cal/tests/
 
 sonarqube:
   stage: sonarqube

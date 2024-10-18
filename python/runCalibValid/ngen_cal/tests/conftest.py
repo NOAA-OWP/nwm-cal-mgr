@@ -1,10 +1,12 @@
 import pytest
+import os
 from typing import Generator, List
 from pathlib import Path
 from copy import deepcopy
 import json
 import pandas as pd # type: ignore
 import geopandas as gpd # type: ignore
+from pydantic import FilePath
 from ngen.cal.configuration import General
 from ngen.cal.ngen import Ngen
 from ngen.cal.meta import JobMeta
@@ -76,8 +78,8 @@ def ngen_config(realization_config, workdir) -> Ngen:
     ngen_config = {"type":"ngen",
                    "strategy":"explicit",
                    "realization": realization_config,
-                   "catchments": Path(__file__).parent/"data/catchment_data.geojson",
-                   "nexus": Path(__file__).parent/"data/nexus_data.geojson",
+                   "catchments": Path(__file__).parent/"data/gauge_01073000/gauge_01073000.gpkg",
+                   "nexus": Path(__file__).parent/"data/gauge_01073000/nexus.geojson",
                    "crosswalk": Path(__file__).parent/"data/crosswalk.json",
                    "binary": "echo ngen"}
     ngen_config.update(model_params)
@@ -105,7 +107,7 @@ def meta(ngen_config, general_config, mocker) -> Generator[JobMeta, None, None]:
 
 @pytest.fixture
 def agent(ngen_config, general_config) -> Generator['Agent', None, None]:
-    a = Agent(ngen_config.__root__.dict(), general_config.workdir, general_config.log)
+    a = Agent(ngen_config.__root__.dict(), general_config.workdir, general_config, general_config.log)
     yield a
 
 @pytest.fixture
@@ -121,14 +123,14 @@ def fabric():
     """
         Mock geoseries for defining catchment gemomentry/attributes
     """
-    catchment_data = Path(__file__).parent/"data/catchment_data.geojson"
-    df = gpd.read_file(catchment_data)
+    catchment_data = Path(__file__).parent/"data/gauge_01073000/gauge_01073000.gpkg"
+    df = gpd.read_file( catchment_data, layer='divides' )
     return df.loc[0]
 
 class MockLocation:
     def __init__(self):
-        now = pd.Timestamp.now().round('H')
-        self.ts = pd.DataFrame({'value':[1,2,3,4,5], "value_time":pd.date_range(now, periods=5, freq='H')})
+        now = pd.Timestamp.now().round('h')
+        self.ts = pd.DataFrame({'value':[1,2,3,4,5], "value_time":pd.date_range(now, periods=5, freq='h')})
 
     def get_data(self, *args, **kwargs):
         return self.ts
@@ -163,6 +165,8 @@ def catchment(nexus, fabric, workdir, mocker) -> Generator[CalibrationCatchment,
     data = deepcopy(config)['catchments'][id]['calibration']['CFE'] # type: ignore
     data = pd.DataFrame(data)
     data['model'] = 'CFE'
+    data.rename(columns={'name':'param'}, inplace=True)
+    data['fac'] = data['param'].factorize()[0]
     #now = pd.Timestamp.now().round('H')
     #ts = pd.DataFrame({'obs_flow':[1,2,3,4,5]}, index=pd.date_range(now, periods=5, freq='H'))
     start = output.index[0]
