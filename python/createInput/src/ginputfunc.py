@@ -1569,8 +1569,8 @@ def create_calib_config_file(
     # individual modules in the directory given by par_file
     calib_modules_config = list(settings.modules_all.loc[settings.modules_all['calibratable'],'name_config'])
     if os.path.isfile(par_file) and os.path.exists(par_file):
-        df_params = pd.read_csv(par_file,sep=None,comment='#',engine='python')
-        df_params = df_params.loc[df_params['model'] in calib_modules_config]
+        df_params = pd.read_fwf(par_file).copy()
+        df_params = df_params.loc[df_params['model'].isin(calib_modules_config)]
     else:
         par_dir = os.path.join(par_file,'')
         if os.path.exists(par_dir):
