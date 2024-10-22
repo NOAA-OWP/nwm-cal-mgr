@@ -23,6 +23,7 @@ import pandas as pd
 import yaml
 import logging
 logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
 from tempfile import mkstemp
 from createInput import settings
@@ -1534,7 +1535,7 @@ def create_realization_file(
     # save configuration into json file 
     with open(realization_file, 'w') as outfile:
         json.dump(g, outfile, indent=4, separators=(", ", ": "), sort_keys=False)
-    print(f'Realization file is created at {realization_file}')
+    logger.info(f'Realization file is created at {realization_file}')
 
 
 def create_calib_config_file(
@@ -1568,29 +1569,30 @@ def create_calib_config_file(
     # read from that file directly; otherwise gather this information from predefined calib_params files for 
     # individual modules in the directory given by par_file
     calib_modules_config = list(settings.modules_all.loc[settings.modules_all['calibratable'],'name_config'])
-    if os.path.isfile(par_file) and os.path.exists(par_file):
+    if os.path.isfile(par_file):
         df_params = pd.read_fwf(par_file).copy()
         df_params = df_params.loc[df_params['model'].isin(calib_modules_config)]
     else:
         par_dir = os.path.join(par_file,'')
-        if os.path.exists(par_dir):
+        if os.path.isdir(par_dir):
             df_params = pd.DataFrame()
             for m1 in modules:
                 m_ui = settings.modules_all.loc[settings.modules_all['module']==m1,'name_ui'].iloc[0]
                 m_config = settings.modules_all.loc[settings.modules_all['module']==m1,'name_config'].iloc[0]
                 if m_config in calib_modules_config:
-                    f1 = par_dir + '/calib_params_' + m_ui + '.csv'
+                    f1 = os.path.join(par_dir, 'calib_params_' + m_ui + '.csv')
                     if not os.path.exists(f1):
                         logger.error(f'Folder {par_dir} does not contain calibration parameter file for {m_ui}')
+                        continue
                     df_tmp = pd.read_csv(f1,sep=None,comment='#',engine='python')
                     df_tmp['model'] = m_config
                     df_params = pd.concat([df_params, df_tmp], ignore_index=True)
         else:
-            logger.error(f'File {par_file} does not exist and \
-                Folder {par_dir} does not exist or does not contain calibration parameter files for the chosen modules')
+            raise Exception(f'{par_file} is not a valid file and \
+                Folder {par_dir} does not contain calibration parameter files for the chosen modules')
 
     if len(df_params) == 0:
-        logger.error(f'No calibratable parameters found for the list of modules: {modules}')
+        raise Exception(f'No calibratable parameters found for the list of modules: {modules}')
     
     df_params.set_index('param', inplace=True)
     calib_params = df_params.groupby('model').groups
@@ -1620,4 +1622,4 @@ def create_calib_config_file(
     # Save configuration into yaml file
     with open(config_yaml_file, 'w') as file:
         yaml.dump(basin_yaml, file, sort_keys=False, default_flow_style=False, indent=2)
-    print(f'Calibration config file is created at: {config_yaml_file}')
+    logger.info(f'Calibration config file is created at: {config_yaml_file}')

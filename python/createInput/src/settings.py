@@ -5,7 +5,7 @@ import pandas as pd
 # Column 2: name used by the UI (API/GUI/CLI)
 # Column 3: name used in config files (calibration parameter file, 'model_type_name' in realization file)
 # Column 4: relevant hydrologic process(es). Note the correct order of processes: 
-#    SLOTH, Evapotranspiration, Glacier, Snow, Soil Moisture, Rainfal_runoff, Routing
+#    SLOTH, Evapotranspiration, Glacier_snow, Soil Moisture, Rainfal_runoff, Routing
 # Column 5: whether the module has calibratable parameters
 
 modules_all = pd.DataFrame([

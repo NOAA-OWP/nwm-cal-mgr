@@ -236,6 +236,7 @@ class UniformCalibrationSet(CalibrationSet, Adjustable):
                 filename_iter = os.path.join(calib_path1, output_iter_file + str('{:04d}').format(i) +'.csv')
                 flow_output.to_csv(filename_iter, index=False)
             flow_output.to_csv(last_output_file, index=False)
+
             shutil.move(self._output_file, os.path.join(os.path.dirname(last_output_file), '{}_last'.format(self._output_file)))
         if calib_path3 is None:
            calib_path3 = calib_path2

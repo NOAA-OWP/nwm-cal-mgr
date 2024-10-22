@@ -21,6 +21,7 @@ import geopandas as gpd
 import pandas as pd
 import logging
 logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
 from createInput import ginputfunc as gfun
 from createInput import settings
@@ -68,32 +69,32 @@ def create_input(filename):
 
     # get list of modules
     if not conf1['models']:
-        raise ValueError('Model must be specified')
+        raise Exception('Models must be specified')
     modules0 = [x.replace(" ", "") for x in re.split(',',conf1['models'])]
     modules = [settings.modules_all.loc[settings.modules_all['name_ui']==m1.lower(),'module'].iloc[0] for m1 in modules0]
     
     # add sloth if CFE or LASAM is selected
     module_found = [x for x in ['cfes','cfex','lasam'] if x in modules]
     if len(module_found)==1 and 'sloth' not in modules:
-        print("CFE or LASAM is used in the formulation. Add SLOTH to module list")
+        logger.info("CFE or LASAM is used in the formulation. SLOTH added to module list")
         modules = ['sloth'] + modules
 
     # make sure SMP and SFT are always selected together
     if 'smp' in modules and 'sft' not in modules:
-        print('SMP and SFT must be selected together. Add SFT to module list')
+        logger.info('SMP and SFT must be selected together. SFT added to module list')
         modules = modules + ['sft']
     if 'sft' in modules and 'smp' not in modules:
-        print('SMP and SFT must be selected together. Add SMP to module list')
+        logger.info('SMP and SFT must be selected together. SMP added to module list')
         modules = modules + ['smp']
 
     # always ensure troute is included
     if 'troute' not in modules:
-        print("T-Route must be included in the formulation. Add T-Route to module list")
+        logger.info("T-Route must be included in the formulation. T-Route added to module list")
         modules = modules + ['troute']
 
     # rearrange modules in order of hydrologic processes
     modules = [m1 for m1 in settings.modules_all['module'] if m1 in modules]
-    print(f"Final list of modules in formulation: {modules}\n")
+    logger.info(f"Final list of modules in formulation: {modules}\n")
 
     # make sure only one module is selected for each process (except for Soil_moisutre)
     procs = [p1 if type(p1) is list else [p1] for p1 in settings.modules_all['process']]
@@ -103,7 +104,7 @@ def create_input(filename):
         mods_all = settings.modules_all.loc[settings.modules_all['process']==p1,'module']
         mods = [m1 for m1 in modules if m1 in mods_all]
         if len(mods)>1:
-            logger.error(f'ERROR: Only one module can be selected for {p1} process')
+            raise Exception(f'Only one module can be selected for {p1} process')
 
     # library files for all modules included in the formulation
     lib_file = {}
@@ -127,7 +128,7 @@ def create_input(filename):
     nexus_file = os.path.join(input_dir, os.path.basename(gpkg_file)) 
     walk_file = input_dir + '{}'.format(basin) + '_crosswalk.json'
     if not os.path.exists(cat_file):
-        print(f'Creating symlink from {gpkg_file} to {cat_file}')
+        logger.info(f'Creating symlink from {gpkg_file} to {cat_file}')
         os.symlink(gpkg_file, cat_file)
     gfun.create_walk_file(basin, gpkg_file, walk_file)    
 
@@ -139,7 +140,7 @@ def create_input(filename):
         ffile = os.path.join(conf3['forcing_dir'], catID + '.csv')
         # Make sure we have the file
         if not os.path.exists(ffile):
-            print(f'Forcing file {ffile} does not exist')
+            logger.info(f'Forcing file {ffile} does not exist')
             missing_catchment_files.append(ffile)
         else:
             target = os.path.join(forcing_path, os.path.basename(ffile))
@@ -147,7 +148,7 @@ def create_input(filename):
                 #print(f'Creating symlink from {ffile} to {target}')
                 os.symlink(ffile, target)
     if missing_catchment_files:
-        raise ValueError(f'Missing catchment files in forcing data - {missing_catchment_files}')
+        raise Exception(f'Missing catchment files in forcing data - {missing_catchment_files}')
 
     # Extract streamflow observation
     if 'obs_dir' in conf3.keys():
@@ -188,7 +189,7 @@ def create_input(filename):
             else:
                 # Create symbolic link
                 os.symlink(conf3[m2+'_bmi_dir'], mod_input_dir, target_is_directory=True)
-                print(f'{m2}: create symlink from {conf3[m2+"_bmi_dir"]} to {mod_input_dir}')
+                logger.info(f'{m2}: create symlink from {conf3[m2+"_bmi_dir"]} to {mod_input_dir}')
         else:
             if m1 in ['cfes', 'cfex']:
                 gfun.create_cfe_input(catids, modules, attr_file, mod_input_dir)
@@ -210,13 +211,13 @@ def create_input(filename):
                 if 'cfe-s_bmi_dir' in conf3.keys() and conf3['cfe-s_bmi_dir'] != '':
                     cfe_dir = conf3['cfe-s_bmi_dir']
                     if not os.path.exists(cfe_dir):
-                        raise ValueError(f'Folder for CFE BMI config files does not exist: {cfe_dir}')
+                        raise Exception(f'Folder for CFE BMI config files does not exist: {cfe_dir}')
                 elif 'cfe-x_bmi_dir' in conf3.keys() and conf3['cfe-x_bmi_dir'] != '':
                     cfe_dir = conf3['cfe-x_bmi_dir']
                     if not os.path.exists(cfe_dir):
-                        raise ValueError(f'Folder for CFE BMI config files does not exist: {cfe_dir}')                    
+                        raise Exception(f'Folder for CFE BMI config files does not exist: {cfe_dir}')                    
                 else:
-                    raise ValueError(f'Folder for CFE BMI config files needs to be provided, via either cfe-s_bmi_dir or cfe-x_bmi_dir')
+                    raise Exception(f'Folder for CFE BMI config files needs to be provided, via either cfe-s_bmi_dir or cfe-x_bmi_dir')
                 
                 gfun.create_sft_smp_input(catids, modules, attr_file, cfe_dir, conf3['forcing_dir'], sft_dir, smp_dir)
 
@@ -240,10 +241,10 @@ def create_input(filename):
                         run_range = pd.to_datetime(time_period['run_time_period'][run_name])
                         nts = len(pd.date_range(start=run_range[0], end=run_range[1], freq='5min'))-1
                         gfun.create_troute_config(gpkg_file, routing_config_file, time_period['run_time_period'][run_name][0], nts)
-                        print(f'troute config file for {run_name1} is created at: {routing_config_file}')
+                        logger.info(f'troute config file for {run_name1} is created at: {routing_config_file}')
             
             if m1 != 'troute':
-                print(f'{m1}: input config files created at: {mod_input_dir}')
+                logger.info(f'{m1}: input config files created at: {mod_input_dir}')
                 
 
     # Create model realization file
