@@ -150,8 +150,14 @@ fi
 
 python_exit_code=$?
 
-# Ensure all files created by subprocesses have the correct permissions
-chmod -R 777 /ngencerf/data
+# Check if the script is being run as root
+if [ "$EUID" -ne 0 ]; then
+  echo "You are not running as root. Skipping chmod."
+else
+  # Ensure all files created by subprocesses have the correct permissions
+  chmod -R 777 /ngencerf/data
+fi
+
 
 if [ $python_exit_code -ne 0 ]; then
   echo "$(basename "$SCRIPT_PATH") exited with code $python_exit_code"

@@ -11,7 +11,7 @@ import os
 from pathlib import Path
 import shutil
 import time
-from typing import TYPE_CHECKING, Sequence
+from typing import TYPE_CHECKING, Sequence, Optional
 
 import netCDF4
 import pandas as pd
@@ -27,6 +27,8 @@ if TYPE_CHECKING:
     from pandas import DataFrame
     from .model import EvaluationOptions
 
+import logging
+logger = logging.getLogger(__name__)
 
 class CalibrationSet(Evaluatable):
     """A HY_Features based catchment with additional calibration information/functionality."""
@@ -37,8 +39,8 @@ class CalibrationSet(Evaluatable):
         start_time: str, 
         end_time: str, 
         eval_params: 'EvaluationOptions', 
-        obsflow_file: 'Path',
-        nwmflow_file: 'Path',
+        obsflow_file: Optional[Path],
+        nwmflow_file: Optional[Path],
         wb_lst: list,
 ) -> None:
         """Construct attributes for the CalibrationSet object.
@@ -61,23 +63,21 @@ class CalibrationSet(Evaluatable):
         self._output_file = routing_output
 
         # Read observation data if observation file is provided
-        if os.path.exists(obsflow_file):
-            obs = pd.read_csv(obsflow_file)
-            obs['value_date'] = pd.DatetimeIndex(obs['value_date'])
-            self._observed = obs.set_index('value_date')
+        if obsflow_file is not None:
+            if os.path.exists(obsflow_file):
+                logger.info(f'Read observed streamflow from: {obsflow_file}')
+                obs = pd.read_csv(obsflow_file)
+                obs['value_date'] = pd.DatetimeIndex(obs['value_date'])
+                self._observed = obs.set_index('value_date')
+            else:
+                logger.error(f'Filepath for observed streamflow is not valid: {obsflow_file}')
         else:
             # Otherwise pull observation from NWIS portal on-the-fly 
+            logger.info('Retrieving observed streamflow data from NWIS ...')
             obs =self._eval_nexus._hydro_location.get_data(start_time, end_time)
             self._observed = obs.set_index('value_time')['value'].resample('1H').nearest()
             self._observed.rename('obs_flow', inplace=True)
             self._observed = self._observed * 0.028316847 # Convert observation from ft^3/s to m^3/s
-
-        # read nwm retrospective streamflow
-        if os.path.exists(nwmflow_file):
-            nwm = pd.read_csv(nwmflow_file)
-            nwm.columns = ['value_date','sim_flow']
-            nwm['value_date'] = pd.DatetimeIndex(nwm['value_date'])
-            self._nwmflow = nwm.set_index('value_date')
 
         self._output = None
         self._eval_range = self.eval_params._eval_range
@@ -147,9 +147,11 @@ class CalibrationSet(Evaluatable):
     @property
     def nwmflow(self) -> 'DataFrame':
         """ NWM retrospective hydrograph fromfor this catchment."""
-        hydrograph = self._nwmflow
-        if hydrograph is None:
-            raise(RuntimeError("Error reading observation for {}".format(self._id)))
+        hydrograph = None
+        if hasattr(self,'_nwmflow'):
+            hydrograph = self._nwmflow
+        #if hydrograph is None:
+        #    raise(RuntimeError("Error reading NWM retrospective streamflow for {}".format(self._id)))
         return hydrograph
     
     @observed.setter
@@ -183,8 +185,8 @@ class UniformCalibrationSet(CalibrationSet, Adjustable):
         start_time: str, 
         end_time: str, 
         eval_params: 'EvaluationOptions', 
-        obsflow_file: 'Path', 
-        nwmflow_file: 'Path',
+        obsflow_file: Optional['Path'], 
+        nwmflow_file: Optional['Path'],
         wb_lst: list,
         params: dict = {},
 ) -> None:
@@ -234,6 +236,7 @@ class UniformCalibrationSet(CalibrationSet, Adjustable):
                 filename_iter = os.path.join(calib_path1, output_iter_file + str('{:04d}').format(i) +'.csv')
                 flow_output.to_csv(filename_iter, index=False)
             flow_output.to_csv(last_output_file, index=False)
+
             shutil.move(self._output_file, os.path.join(os.path.dirname(last_output_file), '{}_last'.format(self._output_file)))
         if calib_path3 is None:
            calib_path3 = calib_path2

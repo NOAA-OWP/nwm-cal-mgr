@@ -12,12 +12,12 @@ from math import log
 import os
 import subprocess
 from typing import Dict, List, TYPE_CHECKING, Optional, Union
-
 import numpy as np 
 import pandas as pd 
-
 import ngen.cal.metric_functions as mf
 import ngen.cal.plot_functions as plf
+import logging
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from ngen.cal.agent import Agent
@@ -178,13 +178,17 @@ def plot_valid_output(
     None
 
     """
-    # Output files from different validation runs
-    df0 = [calibration_object.nwmflow]
-    df0.append(calibration_object.observed)
+    # Gather streamflow observation and simulation from different validation runs
+    df0 = [calibration_object.observed]
+    if 'nwm_retro' in runs:
+        df0 = [agent.nwmflow, calibration_object.observed]
+
     for run1 in runs:
         if run1 == "nwm_retro":
             continue
         outfile = os.path.join(agent.valid_path, calibration_object.basinID + '_output_' + run1 + '.csv')
+        if not os.path.exists(outfile):
+            logger.error(f'File does not exist: {outfile}')
         df1 = pd.read_csv(outfile)
         df1['Time'] = pd.DatetimeIndex(df1['Time'])
         df1 = df1[['Time', calibration_object.streamflow_name]]

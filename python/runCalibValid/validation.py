@@ -6,14 +6,15 @@ parameter set and validation best run using the best calibrated parameter set.
 """
 
 import argparse
-from os import chdir
+import os
 from pathlib import Path
-
+import pandas as pd
 import yaml
-
 from ngen.cal.agent import Agent
 from ngen.cal.configuration import General
 from ngen.cal.validation_run import run_valid_ctrl_best 
+import logging
+logger = logging.getLogger(__name__)
 
 def main(general: General, model_conf):
 
@@ -24,14 +25,19 @@ def main(general: General, model_conf):
         import numpy as np
         np.random.seed(general.random_seed)
 
-    print("Starting Validation Run")
-
     # Initialize agent
     agent = Agent(model_conf, general.valid_path, general, general.log, general.restart)
+
+    # read nwm retrospective streamflow if exists
+    if agent.run_name != 'valid_control':
+        if 'nwmflow' not in model_conf.keys() or model_conf['nwmflow'] is None:
+            agent.nwmflow_file = ''
+            logger.info('No NWM retrospective streamflow simulation is available for this location')
+        else:
+            agent.nwmflow_file = model_conf['nwmflow'] 
     
     # Execute validation control and best simulation
     run_valid_ctrl_best(agent)
-
 
 if __name__ == "__main__":
 
@@ -48,6 +54,6 @@ if __name__ == "__main__":
     general = General(**conf['general'])
 
     # Change directory to workdir
-    chdir(general.workdir)
+    os.chdir(general.workdir)
 
     main(general, conf['model'])

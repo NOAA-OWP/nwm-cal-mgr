@@ -9,7 +9,7 @@ global_config = {
                     "name": "bmi_c",
                     "model_type_name": "CFE",
                     "main_output_variable": "Q_OUT",
-                    "init_config": "/Users/nels.frazier/workspace/ngen//data/bmi/c/cfe/cat-27_bmi_config.ini",
+                    "init_config": _where+"/data/bmi/c/cfe/cat-27_bmi_config.ini",
                     "allow_exceed_end_time": False,
                     "fixed_time_step": False,
                     "uses_forcing_file": False,
@@ -31,7 +31,7 @@ global_config = {
                         "multiplier": 465.8926732378259,
                         "expon": 7.813285220525254
                     },
-                    "library_file": "/Users/nels.frazier/workspace/ngen/extern/cfe/cmake_build/libcfebmi.dylib",
+                    "library_file": _where + "data/libcfebmi.dylib",
                     "registration_function": "register_bmi_cfe"
                 }
             }
@@ -39,7 +39,7 @@ global_config = {
         "forcing": {
             #FIXME regex not working???
             #"file_pattern": ".*{{ID}}.*csv",
-            "path":_where+"/data/cat-87_2015-12-01 00_00_00_2015-12-30 23_00_00.csv",
+            "path":_where+"/data/forcing/",
             "start_time": "2015-12-01 00:00:00",
             "end_time": "2015-12-30 23:00:00"
         }
@@ -63,7 +63,7 @@ catchment = {
                     "name": "bmi_c",
                     "model_type_name": "CFE",
                     "main_output_variable": "Q_OUT",
-                    "init_config": "/Users/nels.frazier/workspace/ngen//data/bmi/c/cfe/cat-27_bmi_config.ini",
+                    "init_config": _where + "/data/bmi/c/cfe/cat-27_bmi_config.ini",
                     "allow_exceed_end_time": False,
                     "fixed_time_step": False,
                     "uses_forcing_file": False,
@@ -85,13 +85,14 @@ catchment = {
                         "multiplier": 465.8926732378259,
                         "expon": 7.813285220525254
                     },
-                    "library_file": "/Users/nels.frazier/workspace/ngen/extern/cfe/cmake_build/libcfebmi.dylib",
+                    "library_file": _where + "data/libcfebmi.dylib",
                     "registration_function": "register_bmi_cfe"
                 }
             }
         ],
             "forcing": {
-                "path": _where+"/data/cat-87_2015-12-01 00_00_00_2015-12-30 23_00_00.csv",
+                #"path": _where+"/data/cat-87_2015-12-01 00_00_00_2015-12-30 23_00_00.csv",
+                "path": _where+"/data/forcing/cat-10617.csv",
                 "start_time": "2015-12-01 00:00:00",
                 "end_time": "2015-12-30 23:00:00"
             },
@@ -139,6 +140,8 @@ general_no_defaults = {"strategy":strategy_estimation,
                     "objectective_log_file": "test_obj_log"}
 
 general_w_defaults = {"strategy":strategy_estimation, 
+                     "name": "calib",
+                     "yaml_file": _where + "/data/01123000_config_calib.yaml",
                     "iterations": 10,
                     "evaluation_start": "2015-12-01 00:00:00", 
                     "evaluation_stop": "2015-12-30 23:00:00"}

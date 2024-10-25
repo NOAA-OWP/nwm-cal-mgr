@@ -144,7 +144,12 @@ def _evaluate(i: int, calibration_object: 'Evaluatable', agent: 'Agent', first_i
     # Save output
     calibration_object.save_calib_output(i, str(calibration_object.output_iter_file), str(calibration_object.last_output_file), agent.output_iter_path, 
                                          agent.job.workdir, agent.calib_path_output, calibration_object.save_output_iter_flag)
-    calibration_object.save_best_output(str(calibration_object.best_output_file), calibration_object.best_save_flag)
+    
+    # make sure output csv for best iteration is saved at first iteration
+    if i==0:
+        calibration_object.save_best_output(str(calibration_object.best_output_file), True)
+    else:
+        calibration_object.save_best_output(str(calibration_object.best_output_file), calibration_object.best_save_flag)
 
     # Save global best cost, and plot
     if agent.algorithm !='dds':

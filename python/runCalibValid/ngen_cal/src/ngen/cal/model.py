@@ -421,9 +421,10 @@ class EvaluationOptions(BaseModel):
         config_valid['time']['start_time'] = datetime.strftime(self._valid_range[0], '%Y-%m-%d %H:%M:%S')
         config_valid['time']['end_time'] = datetime.strftime(self._valid_range[1], '%Y-%m-%d %H:%M:%S')
 
-        # Replace namelist of Noah-OWP-Modular and add output variables to SFT related model for control and best run
+        # correct path for init_config for validation runs for modules with time periods info in these files 
+        # (currently Noah-OWP-Modular and UEB)
         for m in config_valid['global']['formulations'][0]['params']['modules']:
-            if m['params']['model_type_name'] == 'NoahOWP':
+            if m['params']['model_type_name'] in ['NoahOWP','UEB']:
                 m1 = m['params']['init_config']
                 m['params']['init_config'] = os.path.join(os.path.dirname(m1), os.path.basename(m1).replace('calib', 'valid'))
 
@@ -463,20 +464,7 @@ class EvaluationOptions(BaseModel):
             json.dump(config_valid, outfile, indent=4, separators=(", ", ": "), sort_keys=False)
 
         # Write yaml configuration file for validation run
-        self.create_valid_config_file(agent.yaml_file, agent.valid_path, config_valid_file, valid_run_name)
-
-    def write_valid_metric_file(self, valid_run_path: Path, valid_run_name: str, metrics: float) -> None:
-        """Write metrics from validation run into csv file.
-
-        Parameters
-        ----------
-        valid_run_path : directory for validation run 
-        valid_run_name : control or best validation run
-        metrics : statistical metrics
-
-        """
-        metric_out_file = os.path.join(valid_run_path, '{}'.format(self.basinID) + '_metrics_{}.csv'.format(valid_run_name))
-        metrics.to_csv(metric_out_file, index=False)
+        self.create_valid_config_file(agent.yaml_file, agent.valid_path, config_valid_file, valid_run_name) 
 
 
     def write_run_complete_file(self, run_name: str, path: 'Path') -> None:

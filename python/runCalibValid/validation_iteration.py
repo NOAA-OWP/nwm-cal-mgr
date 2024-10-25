@@ -15,6 +15,8 @@ import shutil
 from ngen.cal.agent import Agent
 from ngen.cal.configuration import General
 from ngen.cal.validation_run import run_valid_ctrl_best 
+import logging
+logger = logging.getLogger(__name__)
 
 def main(general: General, model_conf, worker:str, iteration:int):
 
@@ -68,7 +70,13 @@ def main(general: General, model_conf, worker:str, iteration:int):
 
     # Initialize agent
     agent_valid = Agent(conf_valid['model'], general_valid.valid_path, general_valid, general_valid.log, general_valid.restart)
-    
+
+    if 'nwmflow' not in model_conf.keys() or model_conf['nwmflow'] is None:
+        logger.info('No NWM retrospective streamflow simulation is available for this location')
+        agent_valid.nwmflow_file = ''
+    else:
+        agent_valid.nwmflow_file = model_conf['nwmflow']
+
     # Execcute validation simulation
     run_valid_ctrl_best(agent_valid)
 

@@ -8,8 +8,9 @@ import os
 import shutil
 import subprocess
 from typing import TYPE_CHECKING
-
 import pandas as pd
+import logging
+logger = logging.getLogger(__name__)
 
 from .plot_output import plot_valid_output
 from .search import _execute, _calc_metrics
@@ -31,42 +32,58 @@ def run_valid_ctrl_best(agent: 'Agent') -> None:
     None
 
     """
-    print("---Start " + agent.run_name + "---")
     shutil.copy(agent.realization_file, os.path.join(agent.job.workdir, os.path.basename(agent.realization_file)))
+
+    # read nwm retrospective streamflow if exists
+    if agent.run_name != 'valid_control':
+        if agent.nwmflow_file != '':
+            if os.path.exists(agent.nwmflow_file):
+                logger.info(f'Read NWM retrospective streamflow simulation from: {agent.nwmflow_file}')
+                nwm = pd.read_csv(agent.nwmflow_file)
+                nwm.columns = ['value_date','sim_flow']
+                nwm['value_date'] = pd.DatetimeIndex(nwm['value_date'])
+                agent.nwmflow = nwm.set_index('value_date')
+            else:
+                logger.error(f'File does not exist: {agent.nwmflow_file}')
+        else:
+            agent.nwmflow = None
 
     # Calculate metrics
     for calibration_object in agent.model.adjustables:
         with pushd(agent.job.workdir):
+            logger.info(f'Running simulation for {agent.run_name}')
             _execute(agent)
             time_period = {'calib': calibration_object.evaluation_range, 'valid': calibration_object.valid_evaluation_range, 
                            'full': calibration_object.full_evaluation_range}
-            metrics = pd.DataFrame()
-            for key, value in time_period.items():
-                result = _calc_metrics(calibration_object.output, calibration_object.observed, value, calibration_object.threshold)
-                tmp = {**{'run': agent.run_name, 'period': key}, **result}
-                metrics = pd.concat([metrics, pd.DataFrame([tmp])], ignore_index=True)
-                calibration_object.write_valid_metric_file(agent.workdir, agent.run_name, metrics)
+            outputs = [calibration_object.output]
+            runs = [agent.run_name]
+            if agent.run_name != 'valid_control':                                
+                if agent.nwmflow is not None:
+                    outputs.append(agent.nwmflow)
+                    runs.append('nwm_retro')
+            
+            for out1,run1 in zip(outputs,runs):
+                metrics = pd.DataFrame()
+                logger.info(f'Computing metrics for {run1}') 
+                for key, value in time_period.items():
+                    result = _calc_metrics(out1, calibration_object.observed, value, calibration_object.threshold)
+                    tmp = {**{'run': run1, 'period': key}, **result}
+                    metrics = pd.concat([metrics, pd.DataFrame([tmp])], ignore_index=True)
+                    metric_out_file = os.path.join(agent.workdir, '{}'.format(calibration_object.basinID) + '_metrics_{}.csv'.format(run1))      
+                    metrics.to_csv(metric_out_file, index=False)
 
             # Save and move output
             calibration_object.save_valid_output(calibration_object.basinID, agent.run_name, agent.valid_path, agent.job.workdir, agent.valid_path_output)
 
-            # compute metrics for nwm retrospective streamflow (for valid_control) or 
             # plot the validation plots (for valid_best or validation with alternative parameters)
-            if agent.run_name == 'valid_control':
-                metrics = pd.DataFrame()
-                for key, value in time_period.items():
-                    result = _calc_metrics(calibration_object.nwmflow, calibration_object.observed, value, calibration_object.threshold)
-                    tmp = {**{'run': 'nwm_retro', 'period': key}, **result}
-                    metrics = pd.concat([metrics, pd.DataFrame([tmp])], ignore_index=True)
-                    calibration_object.write_valid_metric_file(agent.workdir, 'nwm_retro', metrics)
-                
-            elif agent.run_name == 'valid_best':
-                runs = ['valid_control', 'valid_best', 'nwm_retro']
-                plot_valid_output(calibration_object, agent, runs, time_period)
-            else:
-                runs = ['valid_control', 'valid_best', 'nwm_retro', agent.run_name]
-                plot_valid_output(calibration_object, agent, runs, time_period)
-        
+            if agent.run_name != 'valid_control':
+                runs = ['valid_control', 'valid_best']
+                if agent.nwmflow is not None:
+                    runs.append('nwm_retro')
+                if agent.run_name != 'valid_best':
+                    runs.append(agent.run_name)
+                logger.info(f'Generating plots comparing {runs}')
+                plot_valid_output(calibration_object, agent, runs, time_period)        
 
             # Indicate completion 
             calibration_object.write_run_complete_file(agent.run_name, agent.workdir)

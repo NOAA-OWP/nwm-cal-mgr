@@ -15,6 +15,69 @@ from ngen.cal.configuration import General
 from ngen.cal.search import dds, dds_set, pso_search, gwo_search
 from ngen.cal.strategy import Algorithm
 
+import sys  
+import logging 
+from datetime import datetime, timezone
+import os
+import time
+
+LOG = logging.getLogger(__name__)
+
+def create_timestamp() -> str: 
+    now = datetime.now(timezone.utc)
+    return now.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3]
+    
+
+def log_level_set():
+    '''
+    Set logging level and specify logger configuration.
+    
+    Arguments
+    ---------
+    input_parameters (dict): User input logging parameters
+    
+    Returns
+    -------
+    None
+    
+    Notes
+    -----
+    In the absense of user-specified logging level, level defaults to DEBUG
+    See also https://docs.python.org/3/library/logging.html
+    
+    '''
+
+    log_level = 'DEBUG'
+    if True:
+        log_file_dir = f"/ngencerf/data/run-logs/ngen_cal_{create_timestamp()}/"
+        log_file_name = "ngen_cal_log.txt"
+        os.makedirs(log_file_dir, exist_ok=True)
+        logFilePath = os.path.join(log_file_dir, log_file_name)
+        try:
+            logFile = open(logFilePath, "a")
+            print(f"Logging into: {logFilePath}")
+        except IOError:
+            print(f"Can't Open local directory Log File: {logFilePath}", file=sys.stderr)
+        
+        logging.Formatter.converter = time.gmtime
+        logging.basicConfig(
+            force=True,
+            level=log_level,
+            format='%(asctime)s.%(msecs)03d NGEN_CAL %(levelname)s    %(message)s',
+            datefmt='%Y-%m-%dT%H:%M:%S',
+            handlers=[
+            logging.FileHandler(logFilePath, mode='a'),  # Log to a file
+            logging.StreamHandler(sys.stdout)  
+        ])
+    else:       
+        logging.basicConfig(
+            level=log_level,
+            format='%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)s - %(funcName)s]: %(message)s',
+            stream=sys.stderr,
+        )  
+
+    LOG.info("Inside log_level_set") 
+    
 def main(general: General, model_conf):
 
     # Seed the random number generators if requested
@@ -24,7 +87,10 @@ def main(general: General, model_conf):
         import numpy as np
         np.random.seed(general.random_seed)
 
-    print("Starting calib")
+    # setup logging
+    log_level_set()
+
+    LOG.info("Starting calib")
 
     """
     TODO calibrate each "catcment" independely, but there may be something interesting in grouping various formulation params
@@ -41,23 +107,23 @@ def main(general: General, model_conf):
         func = dds_set #FIXME what about explicit/dds
     elif general.strategy.algorithm == Algorithm.pso: #TODO how to restart PSO?
         if agent.model.strategy != "uniform":
-            print("Can only use PSO with the uniform model strategy")
+            LOG.info("Can only use PSO with the uniform model strategy")
             return
         if general.restart:
-            print("Restart not supported for PSO search, starting at 0")
+            LOG.info("Restart not supported for PSO search, starting at 0")
         func = pso_search
     elif general.strategy.algorithm == Algorithm.gwo: 
         if agent.model.strategy != "uniform":
-            print("Can only use GWO with the uniform model strategy")
+            LOG.info("Can only use GWO with the uniform model strategy")
             return
         if general.restart:
             start_iteration = agent.restart()
         func = gwo_search
 
-    print("Starting Iteration: {}".format(start_iteration))
-    print("Starting calibration loop")
+    LOG.info("Starting Iteration: {}".format(start_iteration))
+    LOG.info("Starting calibration loop")
     if general.strategy.algorithm in [Algorithm.pso, Algorithm.gwo]:
-        print(f"Note the full set of plots are only produced for the first worker at: {agent.job.workdir}")
+        LOG.info(f"Note the full set of plots are only produced for the first worker at: {agent.job.workdir}")
               
     # NOTE this assumes we calibrate each catchment independently, it may be possible to design an "aggregate" calibration
     # that works in a more sophisticated manner.

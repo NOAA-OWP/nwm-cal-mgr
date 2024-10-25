@@ -81,7 +81,7 @@ class EvaluatableCatchment(Evaluatable):
 
         # Use the nwis location to pull observation data
         obs = self.outflow._hydro_location.get_data(start_time, end_time)
-        self._observed = obs.set_index('value_time')['value'].resample('1H').nearest()
+        self._observed = obs.set_index('value_time')['value'].resample('1h').nearest()
         self._observed.rename('obs_flow', inplace=True)
 
         # Convert observation from ft^3/s to m^3/s

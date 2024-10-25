@@ -11,6 +11,8 @@ from typing import Dict, List, Optional, Union
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import logging
+logger = logging.getLogger(__name__)
 
 __all__ = ['plot_streamflow',
            'plot_streamflow_precipitation',
@@ -469,6 +471,13 @@ def scatterplot_objfun_metric(
     df = pd.read_csv(var_file)
     objcol = list(df.columns)[1]
     allcols = list(df.columns)[2:]
+    
+    # make sure objfunc is not NaN
+    df.dropna(subset=[objcol], inplace=True)
+    if df.shape[0] == 0:
+        logger.info('Not valid objfuc value; scatterplot for mmetrics cannot be created')
+        return
+    
     idx = df[df.iteration==best_iteration].index
 
     # Define figure arguments

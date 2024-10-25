@@ -348,10 +348,6 @@ class Evaluatable(ABC):
         """Create configuration files for validation run"""
         return self.eval_params.create_valid_realization_file(agent, params, valid_run_name)
 
-    def write_valid_metric_file(self, valid_run_path: Path, run_name: str, metrics: float) -> None:
-        """Write statistical metrics files for validation run"""
-        return self.eval_params.write_valid_metric_file(valid_run_path, run_name, metrics)
-
     def write_run_complete_file(self, run_name: str, path: Path) -> None:
         """Write empty file if calibration or validation run is completed"""
         return self.eval_params.write_run_complete_file(run_name, path)
