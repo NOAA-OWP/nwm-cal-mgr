@@ -18,6 +18,8 @@ import ngen.cal.metric_functions as mf
 import ngen.cal.plot_functions as plf
 import logging
 logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
+
 
 if TYPE_CHECKING:
     from ngen.cal.agent import Agent
@@ -77,7 +79,7 @@ def plot_calib_output(
     df_merged = df_merged.rename(columns={'obs_flow': 'Observation'})
     df_merged[['Control Run','Last Run','Best Run']] = df_merged[['Control Run','Last Run','Best Run']] 
     if df_merged.empty:
-        print("WARNING: can't merge different runs")
+        logger.warning("can't merge different runs")
     if eval_range:
         df_merged = df_merged.loc[eval_range[0]:eval_range[1]]
     df_merged.reset_index(inplace=True)

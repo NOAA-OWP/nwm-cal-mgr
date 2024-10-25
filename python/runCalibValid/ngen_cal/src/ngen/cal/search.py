@@ -22,6 +22,10 @@ from .plot_output import plot_calib_output, plot_cost_func
 from .utils import pushd, complete_msg 
 from .ngencerf import report
 
+import logging
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
+
 if TYPE_CHECKING:
     from ngen.cal import Adjustable, Evaluatable
     from ngen.cal.agent import Agent
@@ -80,7 +84,7 @@ def _calc_metrics(
     """
     df = pd.merge(simulated_hydrograph, observed_hydrograph, left_index=True, right_index=True)
     if df.empty:
-        print("WARNING: Cannot compute objective function, do time indicies align?")
+        logger.warning("Cannot compute objective function, do time indicies align?")
     if eval_range:
         df = df.loc[eval_range[0]:eval_range[1]]
  
@@ -132,8 +136,8 @@ def _evaluate(i: int, calibration_object: 'Evaluatable', agent: 'Agent', first_i
     # Update based on latest objective function and write log files
     calibration_object.update(i, score, log=True, algorithm=agent.algorithm)
     if info:
-        print("Current score {}\nBest score {}".format(score, calibration_object.best_score))
-        print("Best parameters at iteration {}".format(calibration_object.best_params))
+        logger.info("Current score {}\nBest score {}".format(score, calibration_object.best_score))
+        logger.info("Best parameters at iteration {}".format(calibration_object.best_params))
 
     # Save metrics
     calibration_object.write_metric_iter_file(i, score, metrics)
@@ -183,11 +187,11 @@ def dds_update(iteration: int, inclusion_probability: float, calibration_object:
     agent : Agent object
 
     """
-    print( "inclusion probability: {}".format(inclusion_probability) )
+    logger.info( "inclusion probability: {}".format(inclusion_probability) )
     neighborhood = calibration_object.variables.sample(frac=inclusion_probability)
     if neighborhood.empty:
         neighborhood = calibration_object.variables.sample(n=1)
-    print( "neighborhood:\n{}".format(neighborhood) )
+    #print( "neighborhood:\n{}".format(neighborhood) )
 
     # Generate new parameter set by perturbng the best parameters  
     calibration_object.df[str(iteration)] = calibration_object.df[agent.best_params]
@@ -234,7 +238,7 @@ def dds(start_iteration: int, iterations: int,  calibration_object: 'Evaluatable
     # Produce baseline simulation output using the default parameter set
     if start_iteration == 0:
         if calibration_object.output is None:
-            print("Running {} to produce initial simulation".format(agent.cmd))
+            logger.info("Running {} to produce initial simulation".format(agent.cmd))
             agent.update_config(start_iteration, calibration_object.df[[str(start_iteration), 'param', 'model']], calibration_object.id)
             _execute(agent, start_iteration)
         with pushd(agent.job.workdir):
@@ -247,7 +251,7 @@ def dds(start_iteration: int, iterations: int,  calibration_object: 'Evaluatable
         inclusion_probability = 1 - log(i)/log(iterations)
         dds_update(i, inclusion_probability, calibration_object, agent)
         # Run cmd 
-        print("Running {} for iteration {}".format(agent.cmd, i))
+        logger.info("Running {} for iteration {}".format(agent.cmd, i))
         _execute(agent, i)
         with pushd(agent.job.workdir):
             _evaluate(i, calibration_object, agent, first_iter_for_agent=False)
@@ -285,7 +289,7 @@ def dds_set(start_iteration: int, iterations: int, agent: 'Agent')->None:
         # Produce baseline simulation output using the default parameter set
         if start_iteration == 0:
             if calibration_set.output is None:
-                print("Running {} to produce initial simulation".format(agent.cmd))
+                logger.info("Running {} to produce initial simulation".format(agent.cmd))
                 _execute(agent, start_iteration)
             with pushd(agent.job.workdir):
                 _evaluate(0, calibration_set, agent, first_iter_for_agent=True, info=True)
@@ -299,7 +303,7 @@ def dds_set(start_iteration: int, iterations: int, agent: 'Agent')->None:
                 dds_update(i, inclusion_probability, calibration_object, agent)
 
             # Execute model run 
-            print("Running {} for iteration {}".format(agent.cmd, i))
+            logger.info("Running {} for iteration {}".format(agent.cmd, i))
             _execute(agent, i)
             with pushd(agent.job.workdir):
                 _evaluate(i, calibration_set, agent, first_iter_for_agent=False)
@@ -379,7 +383,7 @@ def pso_search(start_iteration: int, iterations: int,  agent: 'Agent') -> None:
     # and create a unique copy customized for each particle, so then each one gets an execution/update
     num_particles = agent.parameters.get('particles', 4)
     pool_size = agent.parameters.get("pool", 1)
-    print("Running PSO with {} particles using {} processes".format(num_particles, pool_size))
+    logger.info("Running PSO with {} particles using {} processes".format(num_particles, pool_size))
 
     # name of first agent
     agent_1st = os.path.basename(agent.job.workdir).replace('ngen_','').replace('_worker','')
@@ -393,7 +397,7 @@ def pso_search(start_iteration: int, iterations: int,  agent: 'Agent') -> None:
         #Produce the baseline simulation output for first agent
         if start_iteration == 0:
             if calibration_object.output is None:
-                print("Running {} to produce initial simulation".format(agent.cmd))
+                logger.info("Running {} to produce initial simulation".format(agent.cmd))
                 #agent.update_config(start_iteration, calibration_object.df[[str(start_iteration), 'param', 'model']], calibration_object.id)
                 calibration_object.df_fill(start_iteration)
                 agent.update_config(start_iteration, calibration_object.adf[[str(start_iteration), 'param', 'model']], calibration_object.id)                
@@ -425,8 +429,8 @@ def pso_search(start_iteration: int, iterations: int,  agent: 'Agent') -> None:
         cost, pos = optimizer.optimize(cf, iters=iterations, n_processes=None)
         calibration_object.df.loc[:,'global_best'] = pos
         calibration_object.check_point(agent.workdir)
-        print("Best params with cost {}:".format(cost))
-        print(calibration_object.df[['param','global_best']].set_index('param'))
+        logger.info("Best params with cost {}:".format(cost))
+        logger.info(calibration_object.df[['param','global_best']].set_index('param'))
 
         # Save and plot history  
         #cost_hist_file = calibration_object.write_hist_file(optimizer, agent, list(calibration_object.df['param']))
@@ -458,10 +462,10 @@ def gwo_search(start_iteration: int, iterations: int,  agent)->None:
     """
     global __iteration_counter
     __iteration_counter = start_iteration + 1 if start_iteration==0 else start_iteration
-    print("_iteration_counter is", __iteration_counter)
+    logger.info(f'_iteration_counter is {__iteration_counter}')
     num_particles = agent.parameters.get('particles', 10)
     pool_size = agent.parameters.get("pool", num_particles)
-    print("Running GWO with {} particles using {} processes".format(num_particles, pool_size))
+    logger.info("Running GWO with {} particles using {} processes".format(num_particles, pool_size))
     _pool = pool.Pool(pool_size)
 
     # name of first agent
@@ -478,7 +482,7 @@ def gwo_search(start_iteration: int, iterations: int,  agent)->None:
         #Produce the baseline simulation output for first agent
         if start_iteration == 0:
             if calibration_object.output is None:
-                print("Running {} to produce initial simulation".format(agent.cmd))
+                logger.info("Running {} to produce initial simulation".format(agent.cmd))
                 #agent.update_config(start_iteration, calibration_object.df[[str(start_iteration), 'param', 'model']], calibration_object.id)
                 calibration_object.df_fill(start_iteration)
                 agent.update_config(start_iteration, calibration_object.adf[[str(start_iteration), 'param', 'model']], calibration_object.id)                
@@ -498,8 +502,8 @@ def gwo_search(start_iteration: int, iterations: int,  agent)->None:
         cost, pos = optimizer.optimize(cf, iters=iterations, n_processes=None)
         calibration_object.df.loc[:,'global_best'] = pos
         calibration_object.check_point(agent.workdir)
-        print("Best params with cost {}:".format(cost))
-        print(calibration_object.df[['param','global_best']].set_index('param'))
+        logger.info("Best params with cost {}:".format(cost))
+        #logger.info(calibration_object.df[['param','global_best']].set_index('param'))
 
         # Save and plot history
         #cost_hist_file = calibration_object.write_hist_file(optimizer, agent, list(calibration_object.df['param']))

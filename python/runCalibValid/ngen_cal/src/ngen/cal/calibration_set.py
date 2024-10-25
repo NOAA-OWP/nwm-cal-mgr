@@ -29,6 +29,8 @@ if TYPE_CHECKING:
 
 import logging
 logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
+
 
 class CalibrationSet(Evaluatable):
     """A HY_Features based catchment with additional calibration information/functionality."""
@@ -124,8 +126,8 @@ class CalibrationSet(Evaluatable):
             hydrograph = self._output
 
         except FileNotFoundError:
-            print("{} not found. Current working directory is {}".format(self._output_file, os.getcwd()))
-            print("Setting output to None")
+            logger.info("{} not found. Current working directory is {}".format(self._output_file, os.getcwd()))
+            logger.info("Setting output to None")
             hydrograph = None
         except Exception as e:
             raise(e)

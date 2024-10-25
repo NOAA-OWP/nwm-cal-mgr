@@ -16,6 +16,10 @@ from scipy.stats import pearsonr
 from hydrotools.metrics import metrics as hm
 from .event_metric_functions import identify_events, separate_compound_events, pair_events, compute_event_metrics
 
+import logging
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
+
 __all__ = ['treat_values',
            'pearson_corr',
            'mean_abs_error',
@@ -481,30 +485,61 @@ def event_based_metrics(
 
     """
     # step 0: deal with missing observations & simulations
-    y_true = y_true.copy()
-    y_true = y_true.resample('h').first().ffill(limit=5)
-    y_pred = y_pred.copy()
-    y_pred = y_pred.resample('h').first().ffill(limit=5)    
+    
+    # first resample the data into hourly, do interpolation with short periods of missing data
+    y_true0 = y_true.copy()
+    y_true0 = y_true0.resample('h').first().interpolate(method='linear',limit=5,limit_direction='both')
 
-    if y_true.isnull().values.any() or y_pred.isnull().values.any():
+    y_pred0 = y_pred.copy()
+    y_pred0 = y_pred0.resample('h').first().interpolate(method='linear',limit=5,limit_direction='both')
+
+    # then break the data into a number of chunks without missing data, 
+    # so that event identification/pairing can be conducted separately for each chunk
+    
+    # 1) break the time series by NaN
+    y_true_chunks = np.split(y_true0, np.where(np.isnan(y_true0))[0])
+    # 2) remove NaN entries
+    y_true_chunks = [p1[~np.isnan(p1)] for p1 in y_true_chunks if not isinstance(p1, np.ndarray)]
+    # 3) remove series that are too short (for now, ignore chunks short than 10 hours)
+    y_true_chunks = [p1 for p1 in y_true_chunks if len(p1)>=10]
+
+    if len(y_true_chunks)==0:
+        logger.info('Events cannot be calculated due to missing data')
         return {'PKBIAS': np.nan, 'PKTE': np.nan, 'EVBIAS': np.nan}
-    else:
+    
+    events_all = pd.DataFrame()
+    for y_true in y_true_chunks:
+
+        # retrieve model simulation for the same time period
+        y_pred = y_pred0.loc[y_true.index]
+
         # step 1: initial event detection for observed and model streamflows
         events_obs = identify_events(y_true)
         events_mod = identify_events(y_pred)
+        if len(events_obs)==0:
+            continue
 
         # step 2: event discretization based on initial events for model and observations
         events_obs_new = separate_compound_events(events_obs, y_true)
         events_mod_new = separate_compound_events(events_mod, y_pred)
+        if len(events_obs_new)==0 or len(events_mod_new)==0:
+            continue
 
         # step 3: event pairing
         thresh_val = y_true.quantile(threshold)
         events_paired = pair_events(events_obs_new, events_mod_new, thresh_val)
 
-        # step 4: compute event-based metrics (and aggregate by median by default)
-        metrics = compute_event_metrics(events_paired, y_true, y_pred, aggregation)
+        # combine events from different chunks
+        events_all = pd.concat([events_all, events_paired], ignore_index=True)       
 
-        return {'PKBIAS': metrics['peak_bias'], 'PKTE': metrics['ptime_err'], 'EVBIAS': metrics['event_bias']}
+    # step 4: compute event-based metrics (and aggregate by median by default)
+    if len(events_all)>0:
+        metrics = compute_event_metrics(events_all, y_true0, y_pred0, aggregation)
+    else:
+        logger.info('No paired events found and event-based metrics cannot be calculated')
+        return {'PKBIAS': np.nan, 'PKTE': np.nan, 'EVBIAS': np.nan}        
+
+    return {'PKBIAS': metrics['peak_bias'], 'PKTE': metrics['ptime_err'], 'EVBIAS': metrics['event_bias']}
 
 
 _all_metrics = [

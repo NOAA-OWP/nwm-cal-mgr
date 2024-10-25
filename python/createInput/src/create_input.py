@@ -292,7 +292,7 @@ def create_input(filename):
         try:
             general_dict[s1] = conf1[s1]
         except KeyError as e:
-            print(f"Exception Key not found: {str(e)}")
+            logger.error(f"Exception: Key not found: {str(e)}")
             return 1
 
     general_dict['calibration_run_id'] = int(general_dict['calibration_run_id'])
@@ -309,7 +309,7 @@ def main():
     try:
         create_input(args.input_config)
     except Exception as e:
-        print(f"ERROR: uncaught exception: {e}")
+        logger.error(f"ERROR: uncaught exception: {e}")
         return 1
     return 0
 

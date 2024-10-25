@@ -66,7 +66,7 @@ def main(general: General, model_conf, worker:str, iteration:int):
     # Change directory to workdir
     os.chdir(general_valid.workdir)
 
-    print("Starting Validation Run")
+    logger.info("Starting Validation Run")
 
     # Initialize agent
     agent_valid = Agent(conf_valid['model'], general_valid.valid_path, general_valid, general_valid.log, general_valid.restart)
@@ -80,7 +80,7 @@ def main(general: General, model_conf, worker:str, iteration:int):
     # Execcute validation simulation
     run_valid_ctrl_best(agent_valid)
 
-    print("Validation completed")
+    logger.info("Validation completed")
 
 if __name__ == "__main__":
 

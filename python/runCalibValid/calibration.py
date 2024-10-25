@@ -129,7 +129,7 @@ def main(general: General, model_conf):
     LOG.info("Starting Iteration: {}".format(start_iteration))
     LOG.info("Starting calibration loop")
     if general.strategy.algorithm in [Algorithm.pso, Algorithm.gwo]:
-        LOG.warning(f"Note the full set of plots are only produced for the first worker at: {agent.job.workdir}")
+        LOG.info(f"The full set of plots are only produced for the first worker at: {agent.job.workdir}")
               
     # NOTE this assumes we calibrate each catchment independently, it may be possible to design an "aggregate" calibration
     # that works in a more sophisticated manner.

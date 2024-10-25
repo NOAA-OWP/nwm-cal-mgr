@@ -26,6 +26,11 @@ import yaml
 
 from .strategy import Objective
 
+import logging
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
+
+
 # additional constrained types
 PosInt = conint(gt=-1)
 
@@ -385,7 +390,7 @@ class EvaluationOptions(BaseModel):
         d['model']['realization'] = os.path.join(valid_run_path, valid_config_file)
         with open(d['general']['yaml_file'], 'w') as yfile:
             yaml.dump(d, yfile, sort_keys=False, default_flow_style=False, indent=2)
-        print("Config file for {} is created at {}".format(valid_run_name, d['general']['yaml_file']))
+        logger.info("Config file for {} is created at {}".format(valid_run_name, d['general']['yaml_file']))
 
     def create_valid_realization_file(self, agent: 'Agent', params: 'pd.DataFrame', valid_run_name: str) -> None:
         """Create model realization file for valiation control and best runs.
@@ -547,7 +552,7 @@ class EvaluationOptions(BaseModel):
     @validator("objective")
     def validate_objective(cls, value):
         if value is None:
-            print("Objective cannot be none -- setting default objective")
+            logger.info("Objective cannot be none -- setting default objective")
             value = Objective.kge
         return value
 
