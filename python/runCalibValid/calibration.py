@@ -49,8 +49,14 @@ def log_level_set():
 
     log_level = 'DEBUG'
     if True:
-        log_file_dir = f"/ngencerf/data/run-logs/ngen_cal_{create_timestamp()}/"
-        log_file_name = "ngen_cal_log.txt"
+        BASE_DIR = Path(__file__).resolve().parent.parent
+
+        if Path("/ngencerf/data").exists() :
+            log_file_dir = Path(f'/ngencerf/data/run-logs/ngen_cal_{create_timestamp()}/')
+        else :
+            log_file_dir = Path(BASE_DIR) / f'run-logs/ngen_cal_{create_timestamp()}/'
+
+        log_file_name = "ngen_cal.log"
         os.makedirs(log_file_dir, exist_ok=True)
         logFilePath = os.path.join(log_file_dir, log_file_name)
         try:
@@ -107,14 +113,14 @@ def main(general: General, model_conf):
         func = dds_set #FIXME what about explicit/dds
     elif general.strategy.algorithm == Algorithm.pso: #TODO how to restart PSO?
         if agent.model.strategy != "uniform":
-            LOG.info("Can only use PSO with the uniform model strategy")
+            LOG.warning("Can only use PSO with the uniform model strategy")
             return
         if general.restart:
-            LOG.info("Restart not supported for PSO search, starting at 0")
+            LOG.warning("Restart not supported for PSO search, starting at 0")
         func = pso_search
     elif general.strategy.algorithm == Algorithm.gwo: 
         if agent.model.strategy != "uniform":
-            LOG.info("Can only use GWO with the uniform model strategy")
+            LOG.warning("Can only use GWO with the uniform model strategy")
             return
         if general.restart:
             start_iteration = agent.restart()
@@ -123,7 +129,7 @@ def main(general: General, model_conf):
     LOG.info("Starting Iteration: {}".format(start_iteration))
     LOG.info("Starting calibration loop")
     if general.strategy.algorithm in [Algorithm.pso, Algorithm.gwo]:
-        LOG.info(f"Note the full set of plots are only produced for the first worker at: {agent.job.workdir}")
+        LOG.info(f"The full set of plots are only produced for the first worker at: {agent.job.workdir}")
               
     # NOTE this assumes we calibrate each catchment independently, it may be possible to design an "aggregate" calibration
     # that works in a more sophisticated manner.

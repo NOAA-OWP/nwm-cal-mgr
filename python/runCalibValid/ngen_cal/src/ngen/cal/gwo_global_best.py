@@ -42,6 +42,10 @@ from pyswarms.utils.reporter import Reporter
 
 from .gwo_swarms import SwarmOptimizer
 
+import logging
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
+
 
 class GlobalBestGWO(SwarmOptimizer):
     def __init__(
@@ -152,7 +156,7 @@ class GlobalBestGWO(SwarmOptimizer):
 
         # Compute cost of initial swarm  
         if self.start_iter == 0:
-            print("Compute cost of the initial swarm at iteration 1")
+            logger.info("Compute cost of the initial swarm at iteration 1")
             self.swarm.current_cost = compute_objective_function(self.swarm, objective_func, pool=pool, **kwargs)
             self.swarm.pbest_cost = self.swarm.current_cost 
             self.swarm.pbest_pos = self.swarm.position
@@ -161,7 +165,7 @@ class GlobalBestGWO(SwarmOptimizer):
             self.update_history(1)
             initial_iter = self.start_iter
         else:
-            print("Restart at iteration", self.start_iter)
+            logger.info("Restart at iteration", self.start_iter)
             alpha, beta, delta = self.swarm.leader_pos[0], self.swarm.leader_pos[1], self.swarm.leader_pos[2]
             initial_iter = self.start_iter - 2
 
