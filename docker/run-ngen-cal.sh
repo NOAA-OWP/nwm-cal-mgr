@@ -10,6 +10,11 @@ VALID_SCRIPT=/ngen-app/ngen-cal/python/runCalibValid/validation.py
 VALID_ITERATION_SCRIPT=/ngen-app/ngen-cal/python/runCalibValid/validation_iteration.py
 CREATE_INPUT_SCRIPT=/ngen-app/ngen-python/lib/python3.10/site-packages/createInput/create_input.py
 
+# Set the umask so files and directories are created with 777 permissions
+echo Setting umask
+umask 000
+umask -S
+
 # Function to display help message
 show_help() {
   echo "Usage: $(basename "$0") \<command\> \<input_file\> [worker_name iteration_number] [output_file] [venv_path]"
@@ -149,15 +154,6 @@ else
 fi
 
 python_exit_code=$?
-
-# Check if the script is being run as root
-if [ "$EUID" -ne 0 ]; then
-  echo "You are not running as root. Skipping chmod."
-else
-  # Ensure all files created by subprocesses have the correct permissions
-  chmod -R 777 /ngencerf/data
-fi
-
 
 if [ $python_exit_code -ne 0 ]; then
   echo "$(basename "$SCRIPT_PATH") exited with code $python_exit_code"
