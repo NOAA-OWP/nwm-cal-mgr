@@ -48,10 +48,12 @@ __all__ = [
            'create_walk_file',
            'create_cfe_input',
            'create_noah_input',
+           'create_noah_input_template',
            'create_sft_smp_input',
            'create_lasam_input',
            'create_snow17_input',
            'create_ueb_input',
+           'create_ueb_input_template',
            'create_sac_input',
            'create_pet_input',
            'change_topmodel_input',
@@ -333,6 +335,79 @@ def create_noah_input(
                 with open(namelst, 'w') as outfile:
                     outfile.writelines('\n'.join(nom_lst))
                     outfile.write("\n")
+
+
+def create_noah_input_template(
+    catids: List[str],
+    time_period: dict,
+    param_dir_source: Union[str, Path],
+    input_dir: Union[str, Path],
+    template_bmi_dir: Union[str, Path],
+)->None:
+
+    """ Create BMI configuration files for Noah-OWP-Modular based on template BMI files provided by the user (or NEDS)
+
+    Parameters
+    ----------
+    catids : catchment IDs in the basin
+    time_period : simulation and evaluation time period
+    param_dir_source : source directory containing Noah-OWP-Modular parameter files
+    input_dir: directory to save configuration files
+    template_bmi_dir: directory to template BMI files
+
+    Returns
+    ----------
+    None
+
+    """
+
+    # Create symlink for parameter directory
+    os.makedirs(input_dir, exist_ok=True)
+    noah_par_tables = ['SOILPARM.TBL','MPTABLE.TBL','GENPARM.TBL']
+    for par in noah_par_tables:
+        src = os.path.join(param_dir_source,par)
+        dst = os.path.join(input_dir,par)
+        
+        with open(src) as f:
+            # create a symbolic link for each parameter file
+            if os.path.exists(dst) or os.path.islink(dst):
+                logger.warning(f'File/link {dst} already exists')
+            else:
+                os.symlink(src, dst)
+                logger.info(f'Creating symlink from {src} to {dst}')
+
+    # Files for the calibration and validation run
+    for run_name in ['calib','valid']:
+        if time_period['run_time_period'][run_name][0] and time_period['run_time_period'][run_name][1]:
+
+            startdate = time_period['run_time_period'][run_name][0]
+            startdate = datetime.datetime.strptime(startdate, "%Y-%m-%d %H:%M:%S") + datetime.timedelta(hours=1)
+            startdate = startdate.strftime("%Y%m%d%H%M")
+            enddate = datetime.datetime.strptime(time_period['run_time_period'][run_name][1], "%Y-%m-%d %H:%M:%S").strftime("%Y%m%d%H%M")
+
+            # loop through template file for each catchment
+            for catID in catids:
+                file1 = glob.glob(os.path.join(template_bmi_dir,'*' + catID +'*.input'))
+                if len(file1) == 0:
+                    raise ValueError(f'No template BMI file found for {catID} in {template_bmi_dir}')
+                elif len(file1) > 1:
+                    raise ValueError(f'More than one template BMI file found for {catID} in {template_bmi_dir}')
+                with open(file1[0]) as f:
+                    lines = f.readlines()
+
+                for i1,l1 in enumerate(lines):
+                    if 'startdate' in l1:
+                        lines[i1] = "  " + "startdate".ljust(19) + "= " + "'" + startdate + "'" + "               ! UTC time start of simulation (YYYYMMDDhhmm)\n"
+                    elif 'enddate' in l1:
+                        lines[i1] = "  " + "enddate".ljust(19) + "= " + "'" + enddate + "'" + "               ! UTC time end of simulation (YYYYMMDDhhmm)\n"
+                    elif 'parameter_dir' in l1:
+                        lines[i1] = "  " + "parameter_dir".ljust(19) + "= " + "'" + input_dir + "\n'"
+
+                namelst = os.path.join(input_dir, '{}'.format(catID) + '_' + run_name + '.input')
+                with open(namelst, 'w') as outfile:
+                    outfile.writelines(lines)
+
+            logger.info(f'noah-owp-modular BMI config files for {run_name} created at {input_dir}/*_{run_name}.input')
 
 
 def create_sft_smp_input(
@@ -617,13 +692,14 @@ def create_ueb_input(
                 lat = dfa.loc[catID]['Y']
                 lon = dfa.loc[catID]['X']
                 input_file = os.path.join(ueb_input_dir, 'ueb-init-' +catID + '_' + run_name + '.dat')
-                param_file = os.path.join(ueb_input_dir, 'ueb_params-' +catID +'_' + run_name +  '.dat')
-                site_file = os.path.join(ueb_input_dir, 'ueb_sitevars-' +catID + '_' + run_name + '.dat')
-                inputctr_file = os.path.join(ueb_input_dir, 'ueb_inputctr-' +catID +'_' + run_name +  '.dat')
-                outputctr_file = os.path.join(ueb_input_dir, 'ueb_outputctr-' +catID +'_' + run_name +  '.dat')
+                param_file = os.path.join(ueb_input_dir, 'ueb_params-' +catID + '.dat')
+                site_file = os.path.join(ueb_input_dir, 'ueb_sitevars-' +catID + '.dat')
+                inputctr_file = os.path.join(ueb_input_dir, 'ueb_inputctr-' +catID + '.dat')
+                outputctr_file = os.path.join(ueb_input_dir, 'ueb_outputctr-' +catID + '.dat')
 
-                with open(param_file, "w") as f:
-                    f.writelines('\n'.join(param_list))
+                if run_name == 'calib':
+                    with open(param_file, "w") as f:
+                        f.writelines('\n'.join(param_list))
 
                 site_var_list = [
                 'Site and Initial Condition Input Variables',
@@ -725,8 +801,9 @@ def create_ueb_input(
                 f'{lon}' 
                 ]
 
-                with open(site_file, "w") as f:
-                    f.writelines('\n'.join(site_var_list))
+                if run_name == 'calib':
+                    with open(site_file, "w") as f:
+                        f.writelines('\n'.join(site_var_list))
 
 
                 input_ctr_list = [
@@ -772,8 +849,9 @@ def create_ueb_input(
                              '0.6'
                          ]
 
-                with open(inputctr_file, "w") as f:
-                    f.writelines('\n'.join(input_ctr_list))
+                if run_name == 'calib':
+                    with open(inputctr_file, "w") as f:
+                        f.writelines('\n'.join(input_ctr_list))
 
                 output_list = [
              'OUTPUT VARIABLES',
@@ -785,8 +863,9 @@ def create_ueb_input(
              'SWIT m SUM',
              'SWISM m SUM' ]
 
-                with open(outputctr_file, "w") as f:
-                    f.writelines('\n'.join(output_list))
+                if run_name == 'calib':
+                    with open(outputctr_file, "w") as f:
+                        f.writelines('\n'.join(output_list))
 
                 input_list = [
                           'UEBGrid Model Driver Test for TWDEF',
@@ -808,9 +887,82 @@ def create_ueb_input(
                 with open(input_file, "w") as f:
                     f.writelines('\n'.join(input_list))
 
-#            replace_path( site_file, param_dir_source, [ '1' ] )
-#            replace_path( inputctr_file, param_dir_source, [ '0', '1'] )
+
+def create_ueb_input_template(
+    catids: List[str],
+    time_period: dict,
+    input_dir: Union[str, Path],
+    template_bmi_dir: Union[str, Path],
+)->None:
+
+    """ Create BMI configuration files for UEB based on template BMI files provided by the user (or NEDS)
+
+    Parameters
+    ----------
+    catids : catchment IDs in the basin
+    time_period : simulation and evaluation time period
+    input_dir: directory to save configuration files
+    template_bmi_dir: directory to template BMI files
+
+    Returns
+    ----------
+    None
+
+    """
+
+    # Create parameter directory
+    os.makedirs(input_dir, exist_ok=True)
+
+    # create or link files for the calibration and validation runs
+    for run_name in ['calib','valid']:
+        if time_period['run_time_period'][run_name][0] and time_period['run_time_period'][run_name][1]:
       
+            startdate = time_period['run_time_period'][run_name][0]
+            startdate = datetime.datetime.strptime(startdate, "%Y-%m-%d %H:%M:%S") + datetime.timedelta(hours=1)
+            startdate = startdate.strftime("%Y%m%d%H%M")
+            enddate = datetime.datetime.strptime(time_period['run_time_period'][run_name][1], "%Y-%m-%d %H:%M:%S").strftime("%Y%m%d%H%M")
+
+            # loop through template file for each catchment
+            for catID in catids:
+                for str1 in ['ueb-init','ueb_inputctr','ueb_outputctr','ueb_params','ueb_sitevars']:
+                        
+                        if str1 != 'ueb-init':
+                            dst = os.path.join(input_dir, str1 + '-' + catID + '.dat')
+                        else:
+                            dst = os.path.join(input_dir, str1 + '-' + catID + '_' + run_name + '.dat')
+
+                        src = glob.glob(os.path.join(template_bmi_dir, str1 + '*' + catID +'*'))
+                        if len(src) == 0:
+                            raise ValueError(f'No template {str1} file found for {catID} in {template_bmi_dir}')
+                        elif len(src)> 1:
+                            raise ValueError(f'More than one template {str1} file found for {catID} in {template_bmi_dir}')
+                        with open(src[0]) as f:   
+                            if str1 != 'ueb-init':
+                                if run_name == 'calib':
+                                    # for files that are not init files (i.e., inputctr, outputctr, params, and sitevars files)
+                                    # create a symbolic link
+                                    if os.path.exists(dst) or os.path.islink(dst):
+                                        logger.warning(f'File/link {dst} already exists')
+                                    else: 
+                                        os.symlink(src[0], dst)
+                                        logger.info(f'Creating symlink from {src[0]} to {dst}')
+
+                            else:
+                                # for ueb-init files, read in the template
+                                lines = f.readlines()
+
+                                # then replace lines for the paths to params/sitevars/inputct/outputctr files 
+                                # and start and end times
+                                lines[1] = os.path.join(input_dir, 'ueb_params-' + catID + '.dat') + '\n'
+                                lines[2] = os.path.join(input_dir, 'ueb_sitevars-' + catID + '.dat') + '\n'
+                                lines[3] = os.path.join(input_dir, 'ueb_inputctr-' + catID +  '.dat') + '\n'
+                                lines[4] = os.path.join(input_dir, 'ueb_outputctr-' + catID +  '.dat') + '\n'
+                                lines[8] = f'{startdate[:4]} {startdate[4:6]} {startdate[6:8]} {startdate[8:10]}.0\n'
+                                lines[9] = f'{enddate[:4]} {enddate[4:6]} {enddate[6:8]} {enddate[8:10]}.0\n'   
+
+                                with open(dst, 'w') as outfile:
+                                    outfile.writelines(lines)
+
 
 def create_sac_input(
     catids: List[str],

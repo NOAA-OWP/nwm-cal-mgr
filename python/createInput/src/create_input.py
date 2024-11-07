@@ -183,18 +183,25 @@ def create_input(filename):
         # make symlinks to existing input files or create new input files
         if m1 in ['sloth']:
             pass
-        elif os.path.isdir(conf3[m2+'_bmi_dir']): 
+        # ignore t-route config files provided via the bmi_dir for now
+        elif m1!='troute' and os.path.isdir(conf3[m2+'_bmi_dir']): 
             if not os.listdir(conf3[m2+'_bmi_dir']):
                 raise ValueError(f'BMI folder {conf3[m2+"_bmi_dir"]} cannot be empty') 
             else:
-                # Create symbolic link
-                os.symlink(conf3[m2+'_bmi_dir'], mod_input_dir, target_is_directory=True)
-                logger.info(f'{m2}: create symlink from {conf3[m2+"_bmi_dir"]} to {mod_input_dir}')
+                # for noah-owp and ueb, update the template BMI files from NEDS (or the user) with correct time period and paths
+                if m1 == 'noah':
+                    gfun.create_noah_input_template(catids, time_period, conf3[m1+'_parameter_dir'], mod_input_dir,conf3[m2+"_bmi_dir"])
+                elif m1 == 'ueb':
+                    gfun.create_ueb_input_template(catids, time_period, mod_input_dir,conf3[m2+"_bmi_dir"])
+                else:
+                    # Create symbolic link
+                    os.symlink(conf3[m2+'_bmi_dir'], mod_input_dir, target_is_directory=True)
+                    logger.info(f'{m2}: create symlink from {conf3[m2+"_bmi_dir"]} to {mod_input_dir}')
         else:
             if m1 in ['cfes', 'cfex']:
                 gfun.create_cfe_input(catids, modules, attr_file, mod_input_dir)
             elif m1 == 'ueb':
-                gfun.create_ueb_input(catids, time_period, attr_file, conf3['ueb_parameter_dir'],mod_input_dir) 
+                gfun.create_ueb_input(catids, time_period, attr_file, conf3[m1+'_parameter_dir'],mod_input_dir) 
             elif m1 == 'snow17':
                 gfun.create_snow17_input(catids, attr_file, mod_input_dir)
             elif m1 == "pet":
@@ -202,7 +209,7 @@ def create_input(filename):
             elif m1 == "sac":
                 gfun.create_sac_input(catids, attr_file, mod_input_dir)
             elif m1 == 'noah':
-                gfun.create_noah_input(catids, time_period, attr_file, conf3['noah_parameter_dir'], mod_input_dir)
+                gfun.create_noah_input(catids, time_period, attr_file, conf3[m1+'_parameter_dir'], mod_input_dir)
             elif m1 == 'sft':
                 sft_dir = os.path.join(input_dir, 'sft_input')
                 smp_dir = os.path.join(input_dir, 'smp_input')
