@@ -184,6 +184,7 @@ def create_input(filename):
 
         # make symlinks to existing input files or create new input files
         bmi_dir = conf3.get(m2 + '_bmi_dir')
+        logger.info(f'bmi_dir exists: {os.path.isdir(bmi_dir)} - {bmi_dir}')
         if m1 in ['sloth']:
             pass
         # ignore t-route config files provided via the bmi_dir for now
