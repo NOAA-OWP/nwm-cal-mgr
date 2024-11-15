@@ -5,7 +5,7 @@ This is the main script to read calibration configuration file and execute calib
 """
 
 import argparse
-from os import chdir
+import os
 from pathlib import Path
 
 import yaml
@@ -106,6 +106,11 @@ def main(general: General, model_conf):
 
     # Initialize the starting agent
     agent = Agent(model_conf, general.calib_path, general, general.log, general.restart)
+    
+    # set environment variable for ngencerf backend
+    os.environ['NGEN_RESULTS_DIR'] = str(Path(agent.workdir).parent.parent)
+    logging.info(f'Set environment variable NGEN_RESULTS_DIR to: {os.environ["NGEN_RESULTS_DIR"]}')
+
     if general.strategy.algorithm == Algorithm.dds:
         start_iteration = general.start_iteration
         if general.restart:
@@ -160,6 +165,6 @@ if __name__ == "__main__":
     general = General(**conf['general'])
 
     # Change directory to workdir
-    chdir(general.workdir)
+    os.chdir(general.workdir)
 
     main(general, conf['model'])

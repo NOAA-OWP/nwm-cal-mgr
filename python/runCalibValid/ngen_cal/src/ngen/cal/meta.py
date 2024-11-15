@@ -58,7 +58,7 @@ class JobMeta:
 
         self._log_file = None
         if(log):
-            self._log_file = self._workdir/Path(name+".log")
+            self._log_file = self._workdir/Path(name+"_stdout_stderr.log")
 
     @property
     def workdir(self) -> 'Path':

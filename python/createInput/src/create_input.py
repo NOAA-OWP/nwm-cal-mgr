@@ -173,42 +173,44 @@ def create_input(filename):
 
         # module name used by the UI
         m2 = settings.modules_all.loc[settings.modules_all['module']==m1,'name_ui'].iloc[0]
-        logger.info(f"Processing module {m1}, {m2}")
+        #logger.info(f"Processing module {m1}, {m2}")
 
         # define module input directory
         mod_input_dir = os.path.join(input_dir, m2 + '_input')
         if os.path.isdir(mod_input_dir):
             if os.path.islink(mod_input_dir):
                 os.unlink(mod_input_dir)
-        logger.info(f"mod_input_dir: {mod_input_dir}")
+        #logger.info(f"mod_input_dir: {mod_input_dir}")
 
         # make symlinks to existing input files or create new input files
         bmi_dir = conf3.get(m2 + '_bmi_dir')
-        if bmi_dir:
-            logger.info(f'bmi_dir exists: {os.path.isdir(bmi_dir)} - {bmi_dir}')
+        #if bmi_dir:
+            #logger.info(f'bmi_dir exists: {os.path.isdir(bmi_dir)} - {bmi_dir}')
         if m1 in ['sloth']:
             pass
         # ignore t-route config files provided via the bmi_dir for now
         elif m1!='troute' and os.path.isdir(bmi_dir):
-            logger.info(f"directory exists: {bmi_dir}, {bmi_dir}")
+            #logger.info(f"directory exists: {bmi_dir}, {bmi_dir}")
+            logger.info(f'{m2}: create symlink from {bmi_dir} to {mod_input_dir}')
             if not os.listdir(bmi_dir):
                 raise ValueError(f'BMI folder {bmi_dir} cannot be empty')
             else:
-                logger.info(f"Found files in {bmi_dir}: {os.listdir(bmi_dir)} ")
+                #logger.info(f"Found files in {bmi_dir}: {os.listdir(bmi_dir)} ")
                 # for noah-owp and ueb, update the template BMI files from NEDS (or the user) with correct time period and paths
                 if m1 == 'noah':
                     gfun.create_noah_input_template(catids, time_period, conf3[m1+'_parameter_dir'], mod_input_dir,conf3[m2+"_bmi_dir"])
                 elif m1 == 'ueb':
-                    gfun.create_ueb_input_template(catids, time_period, mod_input_dir,conf3[m2+"_bmi_dir"])
+                    #gfun.create_ueb_input_template(catids, time_period, mod_input_dir,conf3[m2+"_bmi_dir"])
+                    gfun.create_ueb_input(catids, time_period, attr_file, conf3[m1+'_parameter_dir'],mod_input_dir,conf3[m2+"_bmi_dir"]) 
                 else:
                     # Create symbolic link
                     os.symlink(bmi_dir, mod_input_dir, target_is_directory=True)
-                    logger.info(f'{m2}: create symlink from {bmi_dir} to {mod_input_dir}')
+                    
         else:
             if m1 in ['cfes', 'cfex']:
                 gfun.create_cfe_input(catids, modules, attr_file, mod_input_dir)
             elif m1 == 'ueb':
-                gfun.create_ueb_input(catids, time_period, attr_file, conf3[m1+'_parameter_dir'],mod_input_dir) 
+                gfun.create_ueb_input(catids, time_period, attr_file, conf3[m1+'_parameter_dir'],mod_input_dir, '') 
             elif m1 == 'snow17':
                 gfun.create_snow17_input(catids, attr_file, mod_input_dir)
             elif m1 == "pet":

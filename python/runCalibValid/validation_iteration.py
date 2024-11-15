@@ -23,6 +23,10 @@ def main(general: General, model_conf, worker:str, iteration:int):
     # Initialize agent
     agent = Agent(model_conf, general.valid_path, general, general.log, general.restart)
 
+    # set environment variable for ngencerf backend
+    os.environ['NGEN_RESULTS_DIR'] = str(Path(agent.workdir).parent.parent)
+    logging.info(f'Set environment variable NGEN_RESULTS_DIR to: {os.environ["NGEN_RESULTS_DIR"]}')
+
     # read the parameter values from the *params_iteration.csv file
     file1 = Path(agent.calib_path,'ngen_'+worker+'_worker',conf['model']['eval_params']['basinID'] + '_params_iteration.csv')
     if not os.path.exists(file1):

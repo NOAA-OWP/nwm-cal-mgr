@@ -28,6 +28,10 @@ def main(general: General, model_conf):
     # Initialize agent
     agent = Agent(model_conf, general.valid_path, general, general.log, general.restart)
 
+    # set environment variable for ngencerf backend
+    os.environ['NGEN_RESULTS_DIR'] = str(Path(agent.workdir).parent.parent)
+    logging.info(f'Set environment variable NGEN_RESULTS_DIR to: {os.environ["NGEN_RESULTS_DIR"]}')
+
     # read nwm retrospective streamflow if exists
     if agent.run_name != 'valid_control':
         if 'nwmflow' not in model_conf.keys() or model_conf['nwmflow'] is None:
