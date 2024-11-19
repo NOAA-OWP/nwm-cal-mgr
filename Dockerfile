@@ -1,4 +1,5 @@
-FROM registry.sh.nextgenwaterprediction.com/ngwpc/nwm-ngen/ngen:latest
+ARG IMAGE_TAG=latest
+FROM registry.sh.nextgenwaterprediction.com/ngwpc/nwm-ngen/ngen:${IMAGE_TAG}
 
 RUN --mount=type=secret,id=GITLAB_TOKEN \ 
     set -eux; \
