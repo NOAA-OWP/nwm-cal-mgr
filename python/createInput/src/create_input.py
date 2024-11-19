@@ -272,6 +272,15 @@ def create_input(filename):
         m2 = settings.modules_all.loc[settings.modules_all['module']==m1,'name_ui'].iloc[0]
         bmi_dir[m1] = os.path.join(input_dir, m2 + '_input')
     rt_dict = {"routing": {"t_route_config_file_with_path": routing_config_file}} 
+
+    # "smp" must be before "sft" in the realization file
+    if "sft" in modules and "smp" in modules:
+        smp_index = modules.index("smp")
+        sft_index = modules.index("sft")
+        if smp_index > sft_index:
+            modules.remove("smp")
+            modules.insert(sft_index, "smp")
+        print(modules)
     gfun.create_realization_file(work_dir, lib_file, bmi_dir, forcing_path, realization_file, modules, time_period, rt_dict)
 
     # Create calibration configuration file 
