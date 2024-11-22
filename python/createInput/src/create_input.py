@@ -189,7 +189,7 @@ def create_input(filename):
         if m1 in ['sloth']:
             pass
         # ignore t-route config files provided via the bmi_dir for now
-        elif m1!='troute' and os.path.isdir(bmi_dir):
+        elif m1!='troute' and bmi_dir and os.path.isdir(bmi_dir):
             #logger.info(f"directory exists: {bmi_dir}, {bmi_dir}")
             logger.info(f'{m2}: create symlink from {bmi_dir} to {mod_input_dir}')
             if not os.listdir(bmi_dir):
