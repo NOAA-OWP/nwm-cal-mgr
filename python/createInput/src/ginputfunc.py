@@ -85,6 +85,10 @@ def create_walk_file(
     df_cat = gpd.read_file(gpkg_file, layer='divides')
     df_cat.set_index('divide_id', inplace=True)
     df_nexus = gpd.read_file(gpkg_file, layer='nexus')
+    df_network = gpd.read_file(gpkg_file, layer='network')
+    df_network = df_network[['toid','hl_uri']].drop_duplicates()
+    df_network.columns = ['id','hl_uri']
+    df_nexus = df_nexus.merge(df_network, on="id")
     df_nexus.set_index('id', inplace=True)
     df_flowpaths = gpd.read_file(gpkg_file, layer='flowpaths')
     df_flowpaths = df_flowpaths.sort_values('hydroseq')
@@ -94,9 +98,9 @@ def create_walk_file(
     cw = {}
     for x in df_cat.index:
         hu = df_nexus.loc[df_cat.loc[x, 'toid'], 'hl_uri']
-        if hu == 'NA' or not hu.startswith('Gages'): 
+        if hu is None or not hu.startswith('gages'): 
             catcw = {x: {"Gage_no": ""}}
-        elif hu.startswith('Gages'):  
+        elif hu.startswith('gages'):  
             if len(hu.split(','))>1 and gageID in hu:   
                 gage=gageID
             else:
@@ -965,8 +969,10 @@ def create_troute_config(
     # bmi_parameters 
     bmi_param = {"flowpath_columns": ["id", "toid", "lengthkm"],
                  "attributes_columns": ['attributes_id', 
-                                        'rl_gages',
-                                        'rl_NHDWaterbodyComID',
+                                        #'rl_gages',
+                                        #'rl_NHDWaterbodyComID',
+                                        'gage',
+                                        'WaterbodyID',
                                         'MusK',
                                         'MusX',
                                         'n',
@@ -1000,8 +1006,10 @@ def create_troute_config(
                "ncc": "nCC",
                "s0": "So",
                "bw": "BtmWdth",
-               "waterbody": "rl_NHDWaterbodyComID",
-               "gages": "rl_gages",
+               #"waterbody": "rl_NHDWaterbodyComID",
+               #"gages": "rl_gages",
+               "waterbody": "WaterbodyID",
+               "gages": "gage",
                "tw": "TopWdth",
                "twcc": "TopWdthCC",
                "musk": "MusK",

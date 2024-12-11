@@ -11,6 +11,7 @@ import argparse
 import configparser
 import copy
 from datetime import timedelta
+from pathlib import Path
 import os
 import sys
 import shutil
@@ -122,7 +123,8 @@ def create_input(filename):
     os.makedirs(input_dir, exist_ok=True)
 
     # Extract hydrofabric files
-    gpkg_file = os.path.join(conf3['hydrofab_dir'], 'gauge_'+ basin +'.gpkg')
+    #gpkg_file = os.path.join(conf3['hydrofab_dir'], 'gauge_'+ basin +'.gpkg')
+    gpkg_file = Path(conf3['hydrofab_file']).resolve(strict=True)
     catids = gpd.read_file(gpkg_file, layer='divides')['divide_id'].tolist()
     cat_file = os.path.join(input_dir, os.path.basename(gpkg_file)) 
     nexus_file = os.path.join(input_dir, os.path.basename(gpkg_file)) 
@@ -256,7 +258,7 @@ def create_input(filename):
                     if len(time_period['run_time_period'][run_name][0])!=0 & len(time_period['run_time_period'][run_name][0]):
                         run_range = pd.to_datetime(time_period['run_time_period'][run_name])
                         nts = len(pd.date_range(start=run_range[0], end=run_range[1], freq='5min'))-1
-                        gfun.create_troute_config(gpkg_file, routing_config_file, time_period['run_time_period'][run_name][0], nts)
+                        gfun.create_troute_config(str(gpkg_file), routing_config_file, time_period['run_time_period'][run_name][0], nts)
                         logger.info(f'troute config file for {run_name1} is created at: {routing_config_file}')
             
             if m1 != 'troute':
