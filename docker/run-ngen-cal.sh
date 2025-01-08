@@ -1,6 +1,9 @@
 #!/bin/bash
 
-# This shell script lives in the ngen-cal.  It is used by CerfServer when calling ngen-cal
+# Define valid commands
+VALID_COMMANDS=("calibration" "validation" "validation_iteration" "create_input")
+
+# This shell script lives in the ngen-cal repo.  It is used by CerfServer when calling ngen-cal
 
 # It is used by CerfServer directly when running in LOCAL mode.
 # It is used by the ngen-cal docker container when the server is running in DOCKER or PARALLEL_WORKS mode.
@@ -15,7 +18,7 @@ umask 000
 
 # Function to display help message
 show_help() {
-  echo "Usage: $(basename "$0") \<command\> \<input_file\> [worker_name iteration_number] [stdout_file] [venv_path]"
+  echo "Usage: $(basename "$0") <command> <input_file> [worker_name iteration_number] [stdout_file] [venv_path]"
   echo ""
   echo "COMMAND:"
   echo "  calibration          Run calibration script."
@@ -44,7 +47,7 @@ fi
 
 # Check if the command for the script is provided as the first argument
 if [ -z "$1" ]; then
-  echo "Error: No script command provided. Allowable commands are: 'calibration', 'validation', 'validation_iteration' or 'create_input'."
+  echo "Error: No script command provided. Allowable commands are: ${VALID_COMMANDS[*]}."
   show_help
 fi
 
@@ -70,7 +73,7 @@ case "$SCRIPT_COMMAND" in
     REQUIRED_ARGS=1
     ;;
   *)
-    echo "Error: Invalid script command: '$SCRIPT_COMMAND'.   Use 'calibration', 'validation', 'validation_iteration' or 'create_input'."
+    echo "Error: Invalid script command: '$SCRIPT_COMMAND'. Allowable commands are: ${VALID_COMMANDS[*]}."
     show_help
     ;;
 esac
