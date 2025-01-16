@@ -65,9 +65,25 @@ def create_input(filename):
     # get list of modules
     if not conf1['models']:
         raise Exception('Models must be specified')
+    logger.info(f"Available module names: {settings.modules_all['name_ui'].tolist()}")
+
     modules0 = [x.replace(" ", "") for x in re.split(',',conf1['models'])]
-    modules = [settings.modules_all.loc[settings.modules_all['name_ui']==m1.lower(),'module'].iloc[0] for m1 in modules0]
-    
+    modules = []
+    invalid_modules = []
+
+    for m1 in modules0:
+        filtered = settings.modules_all.loc[settings.modules_all['name_ui'] == m1.lower(), 'module']
+
+        if filtered.empty:
+            invalid_modules.append(m1)  # Collect invalid modules
+
+        else:
+            modules.append(filtered.iloc[0])  # Append the valid module
+
+    # Raise an error if any invalid modules were found
+    if invalid_modules:
+        raise ValueError(f"Invalid module(s) found: {', '.join(invalid_modules)}. Please check your configuration.")
+
     # add sloth if CFE or LASAM is selected
     module_found = [x for x in ['cfes','cfex','lasam'] if x in modules]
     if len(module_found)==1 and 'sloth' not in modules:
