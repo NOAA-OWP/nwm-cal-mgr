@@ -4,18 +4,37 @@ This is a class to hold model job run meta data.
 @author: Nels Frazer
 """
 
-import json
+import logging
+import os
+import random
+import string
 from pathlib import Path
-from tempfile import mkdtemp
 from typing import TYPE_CHECKING
 
-import pandas as pd # type: ignore
+import pandas as pd  # type: ignore
 
-from .configuration import General, Model
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from pathlib import Path
-    from pandas import DataFrame
+
+
+def _create_worker_dir(prefix: str, suffix: str, parent_dir: str) -> str:
+    """
+    Creates a worker directory with default permissions.
+
+    Args:
+        prefix (str): Prefix for the directory name.
+        suffix (str): Suffix for the directory name.
+        parent_dir (str): Parent directory where the worker directory will be created.
+
+    Returns:
+        str: The path to the created worker directory as a string.
+    """
+    unique_part = ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
+    worker_dir = os.path.join(parent_dir, f"{prefix}{unique_part}{suffix}")
+    os.makedirs(worker_dir)  # Uses default permissions based on umask
+    return worker_dir
 
 
 class JobMeta:
@@ -30,10 +49,12 @@ class JobMeta:
         log (bool, optional): Whether or not to create a log file for the job. Defaults to False.
 
         """
-        if(workdir is None):
-            self._workdir = Path( mkdtemp(dir=parent_workdir, prefix=name+"_", suffix="_worker") ).resolve()
+        if workdir is None:
+            self._workdir = Path(_create_worker_dir(prefix=name+"_", suffix="_worker", parent_dir=str(parent_workdir))).resolve()
+            logger.info(f'Creating new worker: {self._workdir}')
         else:
             self._workdir = workdir
+            logger.info(f'Using existing worker {self._workdir}')
 
         self._log_file = None
         if(log):
