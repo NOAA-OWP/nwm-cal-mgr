@@ -66,9 +66,6 @@ sonarqube:
       - .sonar/cache
   script:
     - sonar-scanner -X -Dsonar.verbose=true
-  rules:
-    # SonarQube CommunityEdition only supports analyzing a single branch.
-    - if: '$CI_COMMIT_BRANCH == "development"'
   allow_failure: true # FIXME
 
 container_scanning:
