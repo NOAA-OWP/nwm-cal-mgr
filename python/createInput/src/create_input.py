@@ -230,8 +230,8 @@ def create_input(filename):
                     gfun.create_noah_input_template(catids, time_period, conf3[m1+'_parameter_dir'], mod_input_dir,conf3[m2+"_bmi_dir"])
                 elif m1 == 'ueb':
                     gfun.create_ueb_input(catids, time_period, attr_file, conf3[m1+'_parameter_dir'],mod_input_dir,conf3[m2+"_bmi_dir"]) 
-                elif m1 == 'sac':
-                    gfun.change_sac_input(catids, mod_input_dir, conf3[m2+"_bmi_dir"])
+                elif m1 in ['sac','snow17']:
+                    gfun.change_sac_snow17_input(m1, catids, mod_input_dir, conf3[m2+"_bmi_dir"])                 
                 elif m1 == 'lasam':
                     gfun.change_lasam_input(catids, mod_input_dir, conf3[m2+"_bmi_dir"], conf3['lasam_parameter_dir'])
                 else:

@@ -9,13 +9,13 @@ import datetime
 import glob
 import json
 import os
-import re
-import sys
+#import re
+#import sys
 import shutil
-import subprocess
+#import subprocess
 import fnmatch
-from fileinput import FileInput
-from functools import partial
+#from fileinput import FileInput
+#from functools import partial
 from typing import List, Union, Dict
 from pathlib import Path
 import geopandas as gpd
@@ -55,7 +55,7 @@ __all__ = [
            'create_snow17_input',
            'create_ueb_input',
            'create_sac_input',
-           'change_sac_input',
+           'change_sac_snow17_input',
            'create_pet_input',
            'change_topmodel_input',
            'create_troute_config',
@@ -779,16 +779,18 @@ def create_sac_input(
             f.writelines('\n'.join(input_list))
 
 
-def change_sac_input(
+def change_sac_snow17_input(
+    module: str,
     catids: List[str], 
     input_dir: Union[str, Path],
     bmi_dir: Union[str, Path],
 )->None:
 
-    """ copy existing config files for sac-sma and change path to sac_param_file in sac-sma namelist input file
+    """ copy existing config files for snow17/sac-sma and change path to sac_param_file in snow17/sac-sma namelist input file
 
     Parameters
     ----------
+    module: "sac" or "snow17"
     catids : catchment IDs
     bmi_dir: directory for existing config files
     input_dir : directory for storing new config files
@@ -798,20 +800,28 @@ def change_sac_input(
     None   
 
     """
+    if module not in ['sac','snow17']:
+        raise Exception(f'Model must be either "sac" or "snow17"')
   
+    # handle parameter file naming convention 
+    str0 = module+'_params_' if module=='sac' else module+'_params-'
+
+    # parameter file entry in namelist file
+    str1 = module + "_param_file"
+
     # create input directory for storing new config files              
     os.makedirs(input_dir, exist_ok=True)
 
     # loop through all catchments
     for catID in catids:
-
+        
         # existing config files
-        namelist_file0 = os.path.join(bmi_dir, 'sac-init-{}'.format(catID) + '.namelist.input')
-        param_file0 = os.path.join(bmi_dir, 'sac_params_{}'.format(catID) + '.txt')
+        namelist_file0 = os.path.join(bmi_dir, module + '-init-{}'.format(catID) + '.namelist.input')
+        param_file0 = os.path.join(bmi_dir, str0 + '{}'.format(catID) + '.txt')
 
         # new config files to be created
-        namelist_file = os.path.join(input_dir, 'sac-init-{}'.format(catID) + '.namelist.input')
-        param_file = os.path.join(input_dir, 'sac_params_{}'.format(catID) + '.txt')   
+        namelist_file = os.path.join(input_dir, module + '-init-{}'.format(catID) + '.namelist.input')
+        param_file = os.path.join(input_dir, str0 + '{}'.format(catID) + '.txt')   
 
         # create symbolic link to the existing sac parameter file     
         if os.path.exists(param_file0):
@@ -825,10 +835,11 @@ def change_sac_input(
         with open(namelist_file0) as f:
             lines0 = f.readlines()
         lines1 = copy.deepcopy(lines0)
-        idx = [i for i, s in enumerate(lines0) if "sac_param_file" in s]
+
+        idx = [i for i, s in enumerate(lines0) if str1 in s]
         if len(idx) != 1:
-            raise Exception(f'No entry or more than one entry found for "sac_param_file" in namelist input file: {namelist_file0}')
-        lines1[idx[0]] = f'sac_param_file      = "{param_file}"\n'
+            raise Exception(f'No entry or more than one entry found for "{str1}" in namelist input file: {namelist_file0}')
+        lines1[idx[0]] = f'{str1}      = "{param_file}"\n'
 
         # Save to new namelist file
         if os.path.exists(namelist_file):
