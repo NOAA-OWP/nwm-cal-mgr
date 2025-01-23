@@ -26,19 +26,16 @@ basin = 01123000
 # -- soil moisture --: smp, sft (note: currently only implemented for when cfe-s, cfe-x or lasam is selected)
 # -- rainfall runoff --: cfe-s, cfe-x, topmodel, sac-sma, lasam
 # -- routing --: t-route
-#models = pet, ueb, cfe-s
-#models = noah-owp-modular,pet,topmodel,t-route
-#models = noah-owp-modular,sft,smp,cfe-s
-#models = noah-owp-modular,cfe-s
-models = pet,snow-17,sac-sma
-#models = pet,ueb,lasam
+#models = noah-owp-modular, cfe-x
+#models = noah-owp-modular,ueb,topmodel,t-route
+#models = noah-owp-modular,sft,cfe-s
+models = noah-owp-modular,topmodel
+#models = pet,ueb,cfe-s
 
 # User defined formulation name (used to create folder for inputs/outputs; so no space in the name)
-#formulation = pet_ueb_cfes
-#formulation = noah_pet_topmodel
-#formulation = noah_cfes
-formulation = pet_snow17_sac
-#formulation = pet_ueb_lasam
+#formulation = noah_ueb_top
+#formulation = noah_sft_cfes
+formulation = noah_top
 
 # Run name (currently only one option: calib)
 run_type = calib
@@ -63,8 +60,8 @@ objective_function = kge
 # Starting iteration number
 start_iteration = 0
 
-# Number of iterations
-number_iteration = 2 
+# Number of iterations01123000/PARAMS
+number_iteration = 3
 
 # Whether to restart calibration from a stopped iteration (0: Not; 1: Yes)
 # currently only option is 0 (i.e., no restart)
@@ -110,7 +107,7 @@ user_email =
 
 [DataFile]
 # Diretory for forcing data 
-forcing_dir = /home/yuqiong.liu/work/data/aorc_nwm/csv_basin_group1/Gage_01123000/
+forcing_dir = /home/yuqiong.liu/work/data/aorc_nwm/csv_basin_group1/Gage_01123000_new/
 
 # Diretory for streamflow observation  
 # If left blank or commented out, streamflow observations will be retrieved on the fly 
@@ -123,39 +120,42 @@ obs_dir = /home/yuqiong.liu/work/data/streamflow_obs/
 nwmretro_file = /home/yuqiong.liu/work/data/nwmv3_retro_streamflow/01123000.csv
 
 # Diretory for hydrofabric data   
-hydrofab_dir = /home/yuqiong.liu/work/data/camels1/
+hydrofab_file = /home/yuqiong.liu/work/data/gpkg_v2.2/CONUS/gages-01123000.gpkg
 
 # Diretories for module BMI config files (if blank, ngen-cal will create these files)
 topoflow_bmi_dir =
 #noah-owp-modular_bmi_dir = /home/yuqiong.liu/work/Gitlab/run/kge_dds/noah_cfe/01123000/Input/noah_input
-noah-owp-modular_bmi_dir = /home/yuqiong.liu/work/data/NEDS_files/noah-owp
+noah-owp-modular_bmi_dir = /home/yuqiong.liu/work/data/NEDS_files_new/01123000/PARAMS/USGS/Noah-OWP-Modular
 #noah-owp-modular_bmi_dir =
 snow-17_bmi_dir =
-#ueb_bmi_dir = /home/yuqiong.liu/work/Gitlab/run/kge_dds/ueb_pet_cfe/01123000/Input/ueb_input
+ueb_bmi_dir = /home/yuqiong.liu/work/data/NEDS_files_new/01123000/PARAMS/USGS/UEB
 #ueb_bmi_dir = /home/yuqiong.liu/work/data/NEDS_files/ueb
-ueb_bmi_dir = 
+#ueb_bmi_dir = 
 pet_bmi_dir =
-smp_bmi_dir =
-sft_bmi_dir =
+smp_bmi_dir = /home/yuqiong.liu/work/data/NEDS_files_new/01123000/PARAMS/USGS/SMP
+sft_bmi_dir = /home/yuqiong.liu/work/data/NEDS_files_new/01123000/PARAMS/USGS/SFT
+cfe-s_bmi_dir =
 #cfe-s_bmi_dir = /home/yuqiong.liu/work/Gitlab/run/kge_dds/noah_cfe/01123000/Input/cfe_input
-cfe-s_bmi_dir = 
-cfe-x_bmi_dir = /home/yuqiong.liu/work/Gitlab/run/kge_dds/noah_cfe.xaj/01123000/Input/cfe.xaj_input
-topmodel_bmi_dir = 
-sac-sma_bmi_dir =
-lasam_bmi_dir =
-t-route_bmi_dir = /home/yuqiong.liu/work/Gitlab/run/kge_DDS/pet_ueb_cfes/01123000/Input
+cfe-x_bmi_dir = 
+#cfe-x_bmi_dir = /home/yuqiong.liu/work/Gitlab/run/kge_dds/noah_cfe.xaj/01123000/Input/cfe.xaj_input
+topmodel_bmi_dir = /home/yuqiong.liu/work/data/NEDS_files_new/01123000/PARAMS/USGS/TopModel
+sac-sma_bmi_dir = /home/yuqiong.liu/work/data/NEDS_files_new/01123000/PARAMS/USGS/Sac-SMA.copy
+lasam_bmi_dir = /home/yuqiong.liu/work/data/NEDS_files_new/01123000/PARAMS/USGS/LASAM.copy
+t-route_bmi_dir = /home/yuqiong.liu/work/data/NEDS_files_new/01123000/PARAMS/USGS/T-Route
 
 # Special case for topmodel BMI files
 # if topmodel_bmi_dir is not provided, then topmd_dir is needed to provide template BMI config files or Topmodel, 
 # and ngen-cal will adjust the folder paths in these files to be consistent with the work directory setup
-topmd_dir = /home/yuqiong.liu/work/data/bmi_config/Topmodel
+#topmd_dir = /home/yuqiong.liu/work/data/bmi_config/Topmodel_v2.2
+#topmd_dir = /home/yuqiong.liu/work/data/NEDS_files_new/01123000/PARAMS/USGS/TopModel
 
 # Diretory or file for constant/additional module parameters (currently applicable to noah, lasam, and ueb)
 # these can be found in the ngne-cal source repo under ngne-cal/module_parameter_files
 noah_parameter_dir = /home/yuqiong.liu/work/Gitlab/ngen-cal/module_parameter_files/noah-owp-modular
 ueb_parameter_dir = /home/yuqiong.liu/work/Gitlab/ngen-cal/module_parameter_files/ueb
-lasam_soil_parameter_file = /home/yuqiong.liu/work/Gitlab/ngen-cal/module_parameter_files/lasam/vG_default_params.dat
-lasam_soil_class_file =  /home/yuqiong.liu/work/Gitlab/ngen-cal/module_parameter_files/lasam/lasam_soil_class.txt
+lasam_parameter_dir = /home/yuqiong.liu/work/Gitlab/ngen-cal/module_parameter_files/lasam
+#lasam_soil_parameter_file = /home/yuqiong.liu/work/Gitlab/ngen-cal/module_parameter_files/lasam/vG_default_params.dat
+#lasam_soil_class_file =  /home/yuqiong.liu/work/Gitlab/ngen-cal/module_parameter_files/lasam/lasam_soil_class.txt
 
 # Path for model attributes file (to derive initial parameters for certain modules: CFE, NOM, SMP/SFT)
 attributes_file = /home/yuqiong.liu/work/data/conus_model_attributes.parquet
@@ -183,4 +183,5 @@ sft_lib = /home/yuqiong.liu/work/Gitlab/ngen/extern/SoilFreezeThaw/cmake_build/l
 smp_lib = /home/yuqiong.liu/work/Gitlab/ngen/extern/SoilMoistureProfiles/cmake_build/libsmpbmi.so
 snow-17_lib = /home/yuqiong.liu/work/Gitlab/ngen/extern/snow17/cmake_build/libsnow17bmi.so
 topmodel_lib = /home/yuqiong.liu/work/Gitlab/ngen/extern/topmodel/cmake_build/libtopmodelbmi.so
-ueb_lib = /home/yuqiong.liu/work/Gitlab/ueb_bmi/cmake_build/src/libbmiuebcxx.so 
+#ueb_lib = /home/yuqiong.liu/work/Gitlab/ueb_bmi/cmake_build/src/libbmiuebcxx.so 
+ueb_lib = /home/yuqiong.liu/work/Gitlab/ngen/extern/ueb-bmi/cmake_build/src/libbmiuebcxx.so
