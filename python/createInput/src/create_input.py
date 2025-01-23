@@ -203,6 +203,19 @@ def create_input(filename):
             #logger.info(f'bmi_dir exists: {os.path.isdir(bmi_dir)} - {bmi_dir}')
         if m1 in ['sloth']:
             pass
+        elif m1 in ['topmodel']:
+            if not bmi_dir:
+                raise Exception(f'topmodel_bmi_dir not found in {filename}')
+            elif bmi_dir == '' or not os.path.exists(bmi_dir):
+                raise Exception(f'Valid path for topmodel_bmi_dir must be provided in {filename}')
+            else:
+                os.makedirs(mod_input_dir, exist_ok=True)
+                for catID in catids:
+                    run_file = os.path.join(bmi_dir, '{}_topmodel'.format(catID) + '.run')
+                    params_file = os.path.join(bmi_dir, '{}_topmodel_params'.format(catID) + '.dat')
+                    subcat_file = os.path.join(bmi_dir, '{}_topmodel_subcat'.format(catID) + '.dat')
+                    gfun.change_topmodel_input(catID, run_file, params_file, subcat_file, mod_input_dir)                
+
         # ignore t-route config files provided via the bmi_dir for now
         elif m1!='troute' and bmi_dir and os.path.isdir(bmi_dir):
             #logger.info(f"directory exists: {bmi_dir}, {bmi_dir}")
@@ -211,12 +224,16 @@ def create_input(filename):
                 raise ValueError(f'BMI folder {bmi_dir} cannot be empty')
             else:
                 #logger.info(f"Found files in {bmi_dir}: {os.listdir(bmi_dir)} ")
-                # for noah-owp and ueb, update the template BMI files from NEDS (or the user) with correct time period and paths
+                # for some modules (noah-owp, ueb, sac, topmodel,lasam), need to update the template BMI files 
+                # from NEDS (or the user) with correct time period and/or paths
                 if m1 == 'noah':
                     gfun.create_noah_input_template(catids, time_period, conf3[m1+'_parameter_dir'], mod_input_dir,conf3[m2+"_bmi_dir"])
                 elif m1 == 'ueb':
-                    #gfun.create_ueb_input_template(catids, time_period, mod_input_dir,conf3[m2+"_bmi_dir"])
                     gfun.create_ueb_input(catids, time_period, attr_file, conf3[m1+'_parameter_dir'],mod_input_dir,conf3[m2+"_bmi_dir"]) 
+                elif m1 == 'sac':
+                    gfun.change_sac_input(catids, mod_input_dir, conf3[m2+"_bmi_dir"])
+                elif m1 == 'lasam':
+                    gfun.change_lasam_input(catids, mod_input_dir, conf3[m2+"_bmi_dir"], conf3['lasam_parameter_dir'])
                 else:
                     # Create symbolic link
                     os.symlink(bmi_dir, mod_input_dir, target_is_directory=True)
@@ -255,14 +272,7 @@ def create_input(filename):
             elif m1 == 'smp':
                 continue
             elif m1 == 'lasam':
-                gfun.create_lasam_input(catids, conf3['lasam_soil_parameter_file'], conf3['lasam_soil_class_file'], mod_input_dir)
-            elif m1 == 'topmodel':
-                os.makedirs(mod_input_dir, exist_ok=True)
-                for catID in catids:
-                    run_file = os.path.join(conf3['topmd_dir'], '{}_topmodel'.format(catID) + '.run')
-                    params_file = os.path.join(conf3['topmd_dir'], '{}_topmodel_params'.format(catID) + '.dat')
-                    subcat_file = os.path.join(conf3['topmd_dir'], '{}_topmodel_subcat'.format(catID) + '.dat')
-                    gfun.change_topmodel_input(catID, run_file, params_file, subcat_file, mod_input_dir)
+                gfun.create_lasam_input(catids, mod_input_dir, conf3['lasam_parameter_dir'])
 
             elif m1 == 'troute':            
                 for file_name, run_name in zip(run_configs, ['calib','valid','valid']): 

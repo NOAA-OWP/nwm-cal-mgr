@@ -51,9 +51,11 @@ __all__ = [
            'create_noah_input_template',
            'create_sft_smp_input',
            'create_lasam_input',
+           'change_lasam_input',
            'create_snow17_input',
            'create_ueb_input',
            'create_sac_input',
+           'change_sac_input',
            'create_pet_input',
            'change_topmodel_input',
            'create_troute_config',
@@ -603,8 +605,8 @@ def create_ueb_input(
     attr_file : attributes file containing info on lat/lon/slope/aspect etc
     param_dir_source : directory containing UEB parameter files
     ueb_input_dir : directory for the UEB bmi configuration file
-    #sitevar_file_exists: whether to use exisiting sitevar files (e.g., from NEDS)
-    bmi_dir: directory path containing existing sitevar files (e.g., from NEDS)
+    #sitevar_file_exists: whether to use exisiting sitevar files (e.g., from EDS)
+    bmi_dir: directory path containing existing sitevar files (e.g., from EDS)
 
     Returns
     ----------
@@ -776,6 +778,65 @@ def create_sac_input(
         with open(input_file, "w") as f:
             f.writelines('\n'.join(input_list))
 
+
+def change_sac_input(
+    catids: List[str], 
+    input_dir: Union[str, Path],
+    bmi_dir: Union[str, Path],
+)->None:
+
+    """ copy existing config files for sac-sma and change path to sac_param_file in sac-sma namelist input file
+
+    Parameters
+    ----------
+    catids : catchment IDs
+    bmi_dir: directory for existing config files
+    input_dir : directory for storing new config files
+
+    Returns 
+    ----------
+    None   
+
+    """
+  
+    # create input directory for storing new config files              
+    os.makedirs(input_dir, exist_ok=True)
+
+    # loop through all catchments
+    for catID in catids:
+
+        # existing config files
+        namelist_file0 = os.path.join(bmi_dir, 'sac-init-{}'.format(catID) + '.namelist.input')
+        param_file0 = os.path.join(bmi_dir, 'sac_params_{}'.format(catID) + '.txt')
+
+        # new config files to be created
+        namelist_file = os.path.join(input_dir, 'sac-init-{}'.format(catID) + '.namelist.input')
+        param_file = os.path.join(input_dir, 'sac_params_{}'.format(catID) + '.txt')   
+
+        # create symbolic link to the existing sac parameter file     
+        if os.path.exists(param_file0):
+            os.symlink(param_file0, param_file)
+        else:
+            raise Exception(f'Parameter file does not exist: {param_file0}')
+        
+        # correct the path to sac parameter file in namelist input file
+        if not os.path.exists(namelist_file0):
+            raise Exception(f'Namelist file does not exist: {namelist_file0}')
+        with open(namelist_file0) as f:
+            lines0 = f.readlines()
+        lines1 = copy.deepcopy(lines0)
+        idx = [i for i, s in enumerate(lines0) if "sac_param_file" in s]
+        if len(idx) != 1:
+            raise Exception(f'No entry or more than one entry found for "sac_param_file" in namelist input file: {namelist_file0}')
+        lines1[idx[0]] = f'sac_param_file      = "{param_file}"\n'
+
+        # Save to new namelist file
+        if os.path.exists(namelist_file):
+            raise Exception(f'Namelist file {namelist_file} already exists')
+        with open(namelist_file, 'w') as outfile:
+            outfile.writelines(lines1)
+
+
 def create_pet_input(
     catids: List[str],
     attr_file: Union[str, Path],
@@ -831,9 +892,8 @@ def create_pet_input(
 
 def create_lasam_input(
     catids: List[str],
-    soil_param_file: str,
-    soil_class_file: Union[str, Path],
-    lasam_bmi_dir: Union[str, Path], 
+    input_dir: Union[str, Path], 
+    param_dir: Union[str, Path],
 )->None:
 
     """ Create BMI configuration file for Lumped Arid and Semi-arid Model 
@@ -841,10 +901,8 @@ def create_lasam_input(
     Parameters
     ----------
     catids : catchment IDs in the basin
-    cfe_bmi_dir : directory for the cfe bmi configuration file 
-    soil_param_file : soil hydraulic parameter file 
-    soil_class_file : soil texture class file 
-    lasam_bmi_dir : directory for the lasam bmi configuration file 
+    input_dir : directory for the lasam input configuration file 
+    param_dir: directory for static lasam parameter files
 
     Returns 
     ----------
@@ -852,8 +910,19 @@ def create_lasam_input(
 
     """
 
-    os.makedirs(lasam_bmi_dir, exist_ok=True)
+    os.makedirs(input_dir, exist_ok=True)
 
+    # make sure param_dir and parameter files exist
+    if param_dir and os.path.exists(param_dir):
+        soil_param_file = os.path.join(param_dir,'vG_default_params.dat')
+        if not os.path.exists(soil_param_file):
+            raise Exception(f'Soil params file does not exist: {soil_param_file}')
+        soil_class_file = os.path.join(param_dir,'lasam_soil_class.txt')
+        if not os.path.exists(soil_class_file):
+            raise Exception(f'Soil class file does not exist: {soil_class_file}')
+    else:
+        raise Exception(f'lasam_parameter_dir does not exist: {param_dir}')
+    
     # Create lasam list
     lasam_lst = ['verbosity=none',
                 'soil_params_file=' + soil_param_file,
@@ -885,11 +954,70 @@ def create_lasam_input(
         lasam_lst_catID = lasam_lst.copy()
         lasam_lst_catID[9] = lasam_lst_catID[9] + str(df_soil.loc[catID]['category'])
         #lasam_lst_catID[12] = lasam_lst_catID[12] + df.loc['giuh_ordinates'][0]
-        lasam_bmi_file = os.path.join(lasam_bmi_dir, catID + '_bmi_config_lasam.txt')
+        lasam_bmi_file = os.path.join(input_dir, catID + '_bmi_config_lasam.txt')
 
         with open(lasam_bmi_file, "w") as f:
             f.writelines('\n'.join(lasam_lst_catID))
 
+
+def change_lasam_input(
+    catids: List[str], 
+    input_dir: Union[str, Path],
+    bmi_dir: Union[str, Path],
+    param_dir: Union[str, Path],
+)->None:
+
+    """ copy existing config files for lasam and change path to soil_params_file in lasam config file
+
+    Parameters
+    ----------
+    catids : catchment IDs
+    bmi_dir: directory for existing config files
+    input_dir : directory for storing new config files
+    param_dir: path to lasam parameter files 
+
+    Returns 
+    ----------
+    None   
+
+    """
+  
+    # create input directory for storing new config files              
+    os.makedirs(input_dir, exist_ok=True)
+
+    # make sure param_dir exists
+    if param_dir and os.path.exists(param_dir):
+        param_file = os.path.join(param_dir,'vG_default_params.dat')
+        if not os.path.exists(param_file):
+            raise Exception(f'Soil_params_file does not exist: {param_file}')
+    else:
+        raise Exception(f'lasam_parameter_dir does not exist: {param_dir}')
+
+    # loop through all catchments
+    for catID in catids:
+
+        # existing config file
+        config_file0 = os.path.join(bmi_dir, '{}_bmi_config_lasam'.format(catID) + '.txt')
+
+        # new config file to be created
+        config_file = os.path.join(input_dir, '{}_bmi_config_lasam'.format(catID) + '.txt')
+        
+        # correct the path to soil_params_file in config file
+        if not os.path.exists(config_file0):
+            raise Exception(f'Namelist file does not exist: {config_file0}')
+        with open(config_file0) as f:
+            lines0 = f.readlines()
+        lines1 = copy.deepcopy(lines0)
+        idx = [i for i, s in enumerate(lines0) if "soil_params_file" in s]
+        if len(idx) != 1:
+            raise Exception(f'No entry or more than one entry found for "soil_params_file" in config file: {config_file0}')
+        lines1[idx[0]] = f'soil_params_file={param_file}\n'
+
+        # Save to new config file
+        if os.path.exists(config_file):
+            raise Exception(f'Config file {config_file} already exists')
+        with open(config_file, 'w') as outfile:
+            outfile.writelines(lines1)
 
 def change_topmodel_input(
     catID: str, 
