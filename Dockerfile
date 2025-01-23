@@ -1,4 +1,5 @@
-FROM registry.sh.nextgenwaterprediction.com/ngwpc/nwm-ngen/ngen:latest
+ARG  NGEN_VERSION=latest
+FROM registry.sh.nextgenwaterprediction.com/ngwpc/nwm-ngen/ngen:${NGEN_VERSION}
 
 RUN --mount=type=secret,id=GITLAB_TOKEN \ 
     set -eux; \
