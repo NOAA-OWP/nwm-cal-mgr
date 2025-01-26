@@ -497,7 +497,9 @@ def scatterplot_objfun_metric(
             if varname==allcols[0]:
                 ax.legend(handles=[bestpt], labels=["Best Iteration"], loc='lower right', frameon=False)
 
-        ax.set_xlim(left=0, right=df[objcol].max()*1.2)
+        xlim0 = df[objcol].max()*1.2
+        if xlim0 not in [np.nan, np.inf, np.inf]:
+            ax.set_xlim(left=0, right=xlim0)
         ax.tick_params(axis='both', which='major', labelsize=9)
         ax.set_title(varname)
         ax.grid(True, color='0.7', linewidth=0.6)
@@ -618,9 +620,10 @@ def plot_fdc_calib(
     fig, ax = plt.subplots(figsize=(10, 6), nrows=1, ncols=1)
     for i in range(len(colname)):
         data  = np.sort(df[colname[i]])[::-1]
-        ranks = len(data) - sp.rankdata(data, method='min') + 1
-        prob = np.array([(ranks[i]*100/(len(data))) for i in range(len(data))])
-        ax.plot(prob, data, c=cols[i], label=colname[i], linewidth=2, alpha=1)
+        if (data>0).sum()>0:
+            ranks = len(data) - sp.rankdata(data, method='min') + 1
+            prob = np.array([(ranks[i]*100/(len(data))) for i in range(len(data))])
+            ax.plot(prob, data, c=cols[i], label=colname[i], linewidth=2, alpha=1)
 
     ax.set(xlim=(0, 100))
     ax.tick_params(axis='both', which='major', labelsize=12)

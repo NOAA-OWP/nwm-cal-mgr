@@ -9,13 +9,13 @@ import datetime
 import glob
 import json
 import os
-import re
-import sys
+#import re
+#import sys
 import shutil
-import subprocess
+#import subprocess
 import fnmatch
-from fileinput import FileInput
-from functools import partial
+#from fileinput import FileInput
+#from functools import partial
 from typing import List, Union, Dict
 from pathlib import Path
 import geopandas as gpd
@@ -48,11 +48,14 @@ __all__ = [
            'create_walk_file',
            'create_cfe_input',
            'create_noah_input',
+           'create_noah_input_template',
            'create_sft_smp_input',
            'create_lasam_input',
+           'change_lasam_input',
            'create_snow17_input',
            'create_ueb_input',
            'create_sac_input',
+           'change_sac_snow17_input',
            'create_pet_input',
            'change_topmodel_input',
            'create_troute_config',
@@ -84,6 +87,10 @@ def create_walk_file(
     df_cat = gpd.read_file(gpkg_file, layer='divides')
     df_cat.set_index('divide_id', inplace=True)
     df_nexus = gpd.read_file(gpkg_file, layer='nexus')
+    df_network = gpd.read_file(gpkg_file, layer='network')
+    df_network = df_network[['toid','hl_uri']].drop_duplicates()
+    df_network.columns = ['id','hl_uri']
+    df_nexus = df_nexus.merge(df_network, on="id")
     df_nexus.set_index('id', inplace=True)
     df_flowpaths = gpd.read_file(gpkg_file, layer='flowpaths')
     df_flowpaths = df_flowpaths.sort_values('hydroseq')
@@ -93,9 +100,9 @@ def create_walk_file(
     cw = {}
     for x in df_cat.index:
         hu = df_nexus.loc[df_cat.loc[x, 'toid'], 'hl_uri']
-        if hu == 'NA' or not hu.startswith('Gages'): 
+        if hu is None or not hu.startswith('gages'): 
             catcw = {x: {"Gage_no": ""}}
-        elif hu.startswith('Gages'):  
+        elif hu.startswith('gages'):  
             if len(hu.split(','))>1 and gageID in hu:   
                 gage=gageID
             else:
@@ -335,6 +342,79 @@ def create_noah_input(
                     outfile.write("\n")
 
 
+def create_noah_input_template(
+    catids: List[str],
+    time_period: dict,
+    param_dir_source: Union[str, Path],
+    input_dir: Union[str, Path],
+    template_bmi_dir: Union[str, Path],
+)->None:
+
+    """ Create BMI configuration files for Noah-OWP-Modular based on template BMI files provided by the user (or NEDS)
+
+    Parameters
+    ----------
+    catids : catchment IDs in the basin
+    time_period : simulation and evaluation time period
+    param_dir_source : source directory containing Noah-OWP-Modular parameter files
+    input_dir: directory to save configuration files
+    template_bmi_dir: directory to template BMI files
+
+    Returns
+    ----------
+    None
+
+    """
+
+    # Create symlink for parameter directory
+    os.makedirs(input_dir, exist_ok=True)
+    noah_par_tables = ['SOILPARM.TBL','MPTABLE.TBL','GENPARM.TBL']
+    for par in noah_par_tables:
+        src = os.path.join(param_dir_source,par)
+        dst = os.path.join(input_dir,par)
+        
+        with open(src) as f:
+            # create a symbolic link for each parameter file
+            if os.path.exists(dst) or os.path.islink(dst):
+                logger.warning(f'File/link {dst} already exists')
+            else:
+                os.symlink(src, dst)
+                logger.info(f'Creating symlink from {src} to {dst}')
+
+    # Files for the calibration and validation run
+    for run_name in ['calib','valid']:
+        if time_period['run_time_period'][run_name][0] and time_period['run_time_period'][run_name][1]:
+
+            startdate = time_period['run_time_period'][run_name][0]
+            startdate = datetime.datetime.strptime(startdate, "%Y-%m-%d %H:%M:%S") + datetime.timedelta(hours=1)
+            startdate = startdate.strftime("%Y%m%d%H%M")
+            enddate = datetime.datetime.strptime(time_period['run_time_period'][run_name][1], "%Y-%m-%d %H:%M:%S").strftime("%Y%m%d%H%M")
+
+            # loop through template file for each catchment
+            for catID in catids:
+                file1 = glob.glob(os.path.join(template_bmi_dir,'*' + catID +'*.input'))
+                if len(file1) == 0:
+                    raise ValueError(f'No template BMI file found for {catID} in {template_bmi_dir}')
+                elif len(file1) > 1:
+                    raise ValueError(f'More than one template BMI file found for {catID} in {template_bmi_dir}')
+                with open(file1[0]) as f:
+                    lines = f.readlines()
+
+                for i1,l1 in enumerate(lines):
+                    if 'startdate' in l1:
+                        lines[i1] = "  " + "startdate".ljust(19) + "= " + "'" + startdate + "'" + "               ! UTC time start of simulation (YYYYMMDDhhmm)\n"
+                    elif 'enddate' in l1:
+                        lines[i1] = "  " + "enddate".ljust(19) + "= " + "'" + enddate + "'" + "               ! UTC time end of simulation (YYYYMMDDhhmm)\n"
+                    elif 'parameter_dir' in l1:
+                        lines[i1] = "  " + "parameter_dir".ljust(19) + "= " + "'" + input_dir + "\n'"
+
+                namelst = os.path.join(input_dir, '{}'.format(catID) + '_' + run_name + '.input')
+                with open(namelst, 'w') as outfile:
+                    outfile.writelines(lines)
+
+            logger.info(f'noah-owp-modular BMI config files for {run_name} created at {input_dir}/*_{run_name}.input')
+
+
 def create_sft_smp_input(
     catids: List[str],  
     modules: List[str], 
@@ -441,7 +521,7 @@ def create_snow17_input(
     dfa = pd.read_parquet(attr_file)
     dfa.set_index("divide_id", inplace=True)
 
-    param_list = ['hru_id HHWM8IL HHWM8IU',
+    param_list = ['hru_id hru2 hru1',
             'hru_area 2994.7 1271.3',
             'latitude 47.78 47.78',
             'elev 1612.50 2153.35',
@@ -470,7 +550,7 @@ def create_snow17_input(
 
     for catID in catids:
         input_file = os.path.join(snow17_input_dir, 'snow17-init-' +catID + '.namelist.input')
-        param_file = os.path.join(snow17_input_dir, 'snow17_params-' +catID + '.HHWM8.txt')
+        param_file = os.path.join(snow17_input_dir, 'snow17_params-' +catID + '.txt')
 
         with open(param_file, "w") as f:
             f.writelines('\n'.join(param_list))
@@ -511,7 +591,9 @@ def create_ueb_input(
     time_period: dict,
     attr_file: Union[str, Path],
     param_dir_source: Union[str, Path],
-    ueb_input_dir: str
+    ueb_input_dir: str,
+    #sitevar_file_exists: bool,
+    bmi_dir: Union[str, Path]
 )->None:
 
     """ Create BMI configuration file for ueb
@@ -523,6 +605,8 @@ def create_ueb_input(
     attr_file : attributes file containing info on lat/lon/slope/aspect etc
     param_dir_source : directory containing UEB parameter files
     ueb_input_dir : directory for the UEB bmi configuration file
+    #sitevar_file_exists: whether to use exisiting sitevar files (e.g., from EDS)
+    bmi_dir: directory path containing existing sitevar files (e.g., from EDS)
 
     Returns
     ----------
@@ -531,79 +615,57 @@ def create_ueb_input(
    """
     os.makedirs(ueb_input_dir, exist_ok=True)
 
+    # Create symlink for constant parameter files
+    const_file_str = ['inputctr','outputctr','params']
+    const_files = {}
+    for par in const_file_str:
+        src = Path(param_dir_source,'ueb_'+par+'.dat').resolve(strict=True)
+        dst = os.path.join(ueb_input_dir,'ueb_'+par+'.dat')
+        const_files.update({par: dst})
+        with open(src) as f:
+            if not os.path.exists(dst):
+                os.symlink(src, dst)        
+
     # Read hydrofabric attribute file
     dfa = pd.read_parquet(attr_file)
     dfa.set_index("divide_id", inplace=True)
 
-    param_list = [
-               'Model Parameters',
-               'irad:  Radiation control flag (0=from ta, 1= input qsi, 2= input qsi,qli 3= input qnet)',
-               '2',
-               'ireadalb:  Albedo reading control flag (0=albedo is computed internally, 1 albedo is read)',
-               '0',
-               'tr: Temperature above which all is rain (3 C)',
-               '3   ',
-               'ts: Temperature below which all is snow (-1 C)',
-               '-1        ',
-               'ems: Emissivity of snow (nominally 0.99)',
-               '0.98  ',
-               'cg:  Ground heat capacity (nominally 2.09 KJ/kg/C)',
-               '2.09          ',
-               'z: Nominal meas. heights for air temp. and humidity (2m)',
-               '2 ',
-               'zo:  Surface aerodynamic roughness (m)',
-               '0.010     ',
-               'rho: Snow Density (Nominally 450 kg/m^3)',
-               '337 ',
-               'rhog:  Soil Density (nominally 1700 kg/m^3)',
-               '1700 ',
-               'lc: Liquid holding capacity of snow (0.05)',
-               '0.05     ',
-               'ks:  Snow Saturated hydraulic conductivity (20 m/hr)',
-               '20',
-               'de:  Thermally active depth of soil (0.1 m)',
-               '0.1   ',
-               'avo:  Visual new snow albedo (0.95)',
-               '0.85 ',
-               'anir0: NIR new snow albedo (0.65)',
-               '0.65 ',
-               'lans: The thermal conductivity of fresh (dry) snow (W/m-K)',
-               '0.278   ',
-               'lang: the thermal conductivity of soil (W/m-K)',
-               '1.11  ',
-               'wlf:  Low frequency fluctuation in deep snow/soil layer ',
-               '0.0654      ',
-               'rd1: Amplitude correction coefficient of heat conduction (1)',
-               '1 ',
-               'dnews:  The threshold depth of for new snow (0.001 m)',
-               '0.001  ',
-               'emc:   Emissivity of canopy',
-               '0.98   ',
-               'alpha: Scattering coefficient for solar radiation',
-               '0.5   ',
-               'alphal:   Scattering coefficient for long wave radiation',
-               '0.0  ',
-               'g: leaf orientation with respect to zenith angle',
-               '0.5   ',
-               'uc:  Unloading rate coefficient (Per hour) (Hedstrom and Pomeroy, 1998)',
-               '0.004626286  ',
-               'as:  Fraction of extraterrestrial radiation on cloudy day, Shuttleworth (1993)  ',
-               '0.25   ',
-               'Bs:     (as+bs):Fraction of extraterrestrial radiation on clear day, Shuttleworth ',
-               '0.5      ',
-               'lambda: Ratio of direct atm radiation to diffuse, worked out from Dingman ',
-               '0.857143 ',
-               'rimax:  Maximum value of Richardson number for stability correction',
-               '0.16',
-               'wcoeff: Wind decay coefficient for the forest',
-               '0.5     ',
-               'a: A in Bristow-Campbell formula for atmospheric transmittance',
-               '0.8      ',
-               'c: C in Bristow-Campbell formula for atmospheric transmittance',
-               '2.4 '
-    ]
+    # sitevars file
+    for catID in catids:
+        tslp = dfa.loc[catID]['slope_mean']
+        azimuth = dfa.loc[catID]['aspect_c_mean']
+        lat = dfa.loc[catID]['Y']
+        lon = dfa.loc[catID]['X']
 
-    # Files for the calibration and validation run
+        site_file = os.path.join(ueb_input_dir, 'ueb_sitevars-' +catID + '.dat')
+        if bmi_dir != '':
+            src = glob.glob(os.path.join(bmi_dir, 'ueb_sitevars*' + catID +'*'))
+            if len(src) == 0:
+                raise ValueError(f'No sitevars file found for {catID} in {bmi_dir}')
+            elif len(src)> 1:
+                raise ValueError(f'More than one sitevars file found for {catID} in {bmi_dir}')
+            with open(src[0]) as f:   
+                # create a symbolic link
+                if os.path.exists(site_file) or os.path.islink(site_file):
+                    pass
+                    #logger.warning(f'File/link {dst} already exists')
+                else: 
+                    os.symlink(src[0], site_file)
+                    #logger.info(f'Creating symlink from {src[0]} to {site_file}')                    
+
+        else: # create the sitevars file based on a template file
+            temp_file = Path(param_dir_source, 'ueb_sitevars.dat').resolve(strict=True)
+            with open(temp_file) as f:
+                lines = f.readlines()
+            lines[39] = f'{tslp}\n'
+            lines[42] = f'{azimuth}\n'
+            lines[45] = f'{lat}\n'
+            lines[96] = f'{lon}\n'
+
+            with open(site_file, 'w') as outfile:
+                outfile.writelines(lines) 
+
+    # ueb-init files need to be created for both calibration and validation runs
     for run_name in ['calib','valid']:
         if time_period['run_time_period'][run_name][0] and time_period['run_time_period'][run_name][1]:
             # Date
@@ -612,188 +674,13 @@ def create_ueb_input(
             startdate = startdate.strftime("%Y%m%d%H%M")
             enddate = datetime.datetime.strptime(time_period['run_time_period'][run_name][1], "%Y-%m-%d %H:%M:%S").strftime("%Y%m%d%H%M")
             for catID in catids:
-                tslp = dfa.loc[catID]['slope_mean']
-                azimuth = dfa.loc[catID]['aspect_c_mean']
-                lat = dfa.loc[catID]['Y']
-                lon = dfa.loc[catID]['X']
-                input_file = os.path.join(ueb_input_dir, 'ueb-init-' +catID + '_' + run_name + '.dat')
-                param_file = os.path.join(ueb_input_dir, 'ueb_params-' +catID +'_' + run_name +  '.dat')
-                site_file = os.path.join(ueb_input_dir, 'ueb_sitevars-' +catID + '_' + run_name + '.dat')
-                inputctr_file = os.path.join(ueb_input_dir, 'ueb_inputctr-' +catID +'_' + run_name +  '.dat')
-                outputctr_file = os.path.join(ueb_input_dir, 'ueb_outputctr-' +catID +'_' + run_name +  '.dat')
-
-                with open(param_file, "w") as f:
-                    f.writelines('\n'.join(param_list))
-
-                site_var_list = [
-                'Site and Initial Condition Input Variables',
-                'USic:  Energy content initial condition (kg m-3)',
-                '0',
-                '0.0',
-                'WSis:  Snow water equivalent initial condition (m)',
-                '0',
-                '0.0',
-                'Tic:  Snow surface dimensionless age initial condition ',
-                '0',
-                '0.0',
-                'WCic:  Snow water equivalent of canopy conditio(m) ',
-                '0',
-                '0.0',
-                'df: Drift factor multiplier',
-                '0                ',
-                '1.0  ',
-                'apr: Average atmospheric pressure         ',
-                '0        ',
-                '74000.0   ',
-                'Aep: Albedo extinction coefficient             ',
-                '0                ',
-                '0.1  ',
-                'cc: Canopy coverage fraction         ',
-                '0          ',
-                '0.7 ',
-                'hcan: Canopy height           ',
-                '0          ',
-                '12.0',
-                'lai: Leaf area index',
-                '0          ',
-                '7.5		',
-                'Sbar: Maximum snow load held per unit branch area        ',
-                '0               ',
-                '6.6',
-                'ycage: Forest age flag for wind speed profile parameterization            ',
-                '0             ',
-                '1.00  ',
-                'slope: A 2-D grid that contains the slope at each grid point     ',
-                '0          ',
-                f'{tslp}',
-                'aspect: A 2-D grid that contains the aspect at each grid point   ',
-                '0       ',
-                f'{azimuth}',
-                'latitude: A 2-D grid that contains the latitude at each grid point    ',
-                '0             ',
-                f'{lat}',
-                'subalb: Albedo (fraction 0-1) of the substrate beneath the snow (ground, or glacier)',
-                '0',
-                '0.25',
-                'subtype: Type of beneath snow substrate encoded as (0 = Ground/Non Glacier, 1=Clean Ice/glacier, 2= Debris covered ice/glacier, 3= Glacier snow accumulation zone)',
-                '0        ',
-                '0.0',
-                'gsurf: The fraction of surface melt that runs off (e.g. from a glacier)',
-                '0',
-                '0.0',
-                'b01: Bristow-Campbell B for January (1)',
-                '0',
-                '6.743      ',
-                'b02: Bristow-Campbell B for February (2)',
-                '0',
-                '7.927    ',
-                'b03: Bristow-Campbell B for March(3)',
-                '0',
-                '8.055  ',
-                'b04: Bristow-Campbell B for April (4)',
-                '0',
-                '8.602 ',
-                'b05: Bristow-Campbell B for may (5)',
-                '0',
-                '8.43  ',
-                'b06: Bristow-Campbell B for June (6)',
-                '0',
-                '9.76',
-                'b07: Bristow-Campbell B for July (7)',
-                '0',
-                '0.0    ',
-                'b08:  Bristow-Campbell B for August (8)',
-                '0',
-                '0.0  ',
-                'b09: Bristow-Campbell B for September (9)',
-                '0',
-                '0.0   ',
-                'b10: Bristow-Campbell B for October (10)',
-                '0',
-                '7.4  ',
-                'b11: Bristow-Campbell B for November (11)',
-                '0',
-                '9.14    ',
-                'b12: Bristow-Campbell B for December (12)',
-                '0',
-                '6.67 ',
-                'ts_last:  degree celsius ',
-                '0',
-                '-9999',
-                'longitude: A 2-D grid that contains the latitude at each grid ',
-                '0',
-                f'{lon}' 
-                ]
-
-                with open(site_file, "w") as f:
-                    f.writelines('\n'.join(site_var_list))
-
-
-                input_ctr_list = [
-                             'Input Control file',
-                             'Prec: Precipitation  (always required)',
-                             '3   ',
-                             '0',
-                             'Ta: Air temperature  (always required)',
-                             '3  ',
-                             '0',
-                             'Tmin: Min Air temperature ',
-                             '2',
-                             '0',
-                             'Tmax: Max Air temperature  ',
-                             '2',
-                             '0',
-                             'v: Wind speed   (always required)',
-                             '3',
-                             '1',
-                             'RH: Relative Humidity   (always required)',
-                             '3',
-                             '40',
-                             'Vp: Air vapor pressure   ',
-                             '2',
-                             '0.5',
-                             'AP: Air pressure   (always required)',
-                             '3',
-                             '74000			//press Pressure Time 3',
-                             'Qsi: Incoming shortwave(kJ/m2/hr)   (only required if irad=1 or 2)',
-                             '3',
-                             '0             ',
-                             'Qli: Long wave radiation(kJ/m2/hr)',
-                             '3',
-                             '0',
-                             'Qnet: Net radiation(kJ/m2/hr)   (only required if irad=3)',
-                             '2  ',
-                             '0',
-                             'Qg: Ground heat flux   (kJ/m2/hr)        ',
-                             '2',
-                             '0 		    ',
-                             'Snowalb: Snow albedo (0-1).  (only required if ireadalb=1) The albedo of the snow surface to be used when the internal albedo calculations are to be overridden',
-                             '2',
-                             '0.6'
-                         ]
-
-                with open(inputctr_file, "w") as f:
-                    f.writelines('\n'.join(input_ctr_list))
-
-                output_list = [
-             'OUTPUT VARIABLES',
-             '1                 // number of point details; put 0 if no point output needed ',
-             f'0 0 {catID}_Point00.txt    // y, x coordinates, output file name                       ',
-             '0                //number of netcdf outputs; put 0 if no netcdf output needed',
-             '0                   //number of aggregated output variables',
-             'SWE m AVE           //name/symbol unit Aggregation operation (look up the dictionary "UEB_Variables_Symbols.dat" for the symbol, Operation SUM or AVE)',
-             'SWIT m SUM',
-             'SWISM m SUM' ]
-
-                with open(outputctr_file, "w") as f:
-                    f.writelines('\n'.join(output_list))
-
+                input_file = os.path.join(ueb_input_dir, 'ueb-init-' +catID + '_' + run_name +'.dat')
                 input_list = [
                           'UEBGrid Model Driver Test for TWDEF',
-                          param_file,
+                          const_files['params'],
                           site_file,
-                          inputctr_file,
-                          outputctr_file,
+                          const_files['inputctr'],
+                          const_files['outputctr'],
                           param_dir_source + '/aggout.nc ',
                           param_dir_source + '/watershed_onecell.nc',
                           'watershed y x',
@@ -808,9 +695,6 @@ def create_ueb_input(
                 with open(input_file, "w") as f:
                     f.writelines('\n'.join(input_list))
 
-#            replace_path( site_file, param_dir_source, [ '1' ] )
-#            replace_path( inputctr_file, param_dir_source, [ '0', '1'] )
-      
 
 def create_sac_input(
     catids: List[str],
@@ -837,7 +721,7 @@ def create_sac_input(
     dfa = pd.read_parquet(attr_file)
     dfa.set_index("divide_id", inplace=True)
 
-    param_list = ['hru_id HHWM8IL HHWM8IU',
+    param_list = ['hru_id hru1 hru2',
             'hru_area 2994.7 1271.3',
             'uztwm 29.7257 31.9842',
             'uzfwm 22.8335 86.7465',
@@ -857,8 +741,8 @@ def create_sac_input(
             'rserv 0.3000 0.3000']
 
     for catID in catids:
-        input_file = os.path.join(sac_input_dir, 'sac-init-' +catID + '-HHWM8.namelist.input')
-        param_file = os.path.join(sac_input_dir, 'sac_params-' +catID + '.HHWM8.txt')
+        input_file = os.path.join(sac_input_dir, 'sac-init-' +catID + '.namelist.input')
+        param_file = os.path.join(sac_input_dir, 'sac_params-' +catID + '.txt')
 
         with open(param_file, "w") as f:
             f.writelines('\n'.join(param_list))
@@ -893,6 +777,76 @@ def create_sac_input(
                 ]
         with open(input_file, "w") as f:
             f.writelines('\n'.join(input_list))
+
+
+def change_sac_snow17_input(
+    module: str,
+    catids: List[str], 
+    input_dir: Union[str, Path],
+    bmi_dir: Union[str, Path],
+)->None:
+
+    """ copy existing config files for snow17/sac-sma and change path to sac_param_file in snow17/sac-sma namelist input file
+
+    Parameters
+    ----------
+    module: "sac" or "snow17"
+    catids : catchment IDs
+    bmi_dir: directory for existing config files
+    input_dir : directory for storing new config files
+
+    Returns 
+    ----------
+    None   
+
+    """
+    if module not in ['sac','snow17']:
+        raise Exception(f'Model must be either "sac" or "snow17"')
+  
+    # handle parameter file naming convention 
+    str0 = module+'_params_' if module=='sac' else module+'_params-'
+
+    # parameter file entry in namelist file
+    str1 = module + "_param_file"
+
+    # create input directory for storing new config files              
+    os.makedirs(input_dir, exist_ok=True)
+
+    # loop through all catchments
+    for catID in catids:
+        
+        # existing config files
+        namelist_file0 = os.path.join(bmi_dir, module + '-init-{}'.format(catID) + '.namelist.input')
+        param_file0 = os.path.join(bmi_dir, str0 + '{}'.format(catID) + '.txt')
+
+        # new config files to be created
+        namelist_file = os.path.join(input_dir, module + '-init-{}'.format(catID) + '.namelist.input')
+        param_file = os.path.join(input_dir, str0 + '{}'.format(catID) + '.txt')   
+
+        # create symbolic link to the existing sac parameter file     
+        if os.path.exists(param_file0):
+            os.symlink(param_file0, param_file)
+        else:
+            raise Exception(f'Parameter file does not exist: {param_file0}')
+        
+        # correct the path to sac parameter file in namelist input file
+        if not os.path.exists(namelist_file0):
+            raise Exception(f'Namelist file does not exist: {namelist_file0}')
+        with open(namelist_file0) as f:
+            lines0 = f.readlines()
+        lines1 = copy.deepcopy(lines0)
+
+        idx = [i for i, s in enumerate(lines0) if str1 in s]
+        if len(idx) != 1:
+            raise Exception(f'No entry or more than one entry found for "{str1}" in namelist input file: {namelist_file0}')
+        lines1[idx[0]] = f'{str1}      = "{param_file}"\n'
+
+        # Save to new namelist file
+        if os.path.exists(namelist_file):
+            raise Exception(f'Namelist file {namelist_file} already exists')
+        with open(namelist_file, 'w') as outfile:
+            outfile.writelines(lines1)
+
 
 def create_pet_input(
     catids: List[str],
@@ -949,9 +903,8 @@ def create_pet_input(
 
 def create_lasam_input(
     catids: List[str],
-    soil_param_file: str,
-    soil_class_file: Union[str, Path],
-    lasam_bmi_dir: Union[str, Path], 
+    input_dir: Union[str, Path], 
+    param_dir: Union[str, Path],
 )->None:
 
     """ Create BMI configuration file for Lumped Arid and Semi-arid Model 
@@ -959,10 +912,8 @@ def create_lasam_input(
     Parameters
     ----------
     catids : catchment IDs in the basin
-    cfe_bmi_dir : directory for the cfe bmi configuration file 
-    soil_param_file : soil hydraulic parameter file 
-    soil_class_file : soil texture class file 
-    lasam_bmi_dir : directory for the lasam bmi configuration file 
+    input_dir : directory for the lasam input configuration file 
+    param_dir: directory for static lasam parameter files
 
     Returns 
     ----------
@@ -970,8 +921,19 @@ def create_lasam_input(
 
     """
 
-    os.makedirs(lasam_bmi_dir, exist_ok=True)
+    os.makedirs(input_dir, exist_ok=True)
 
+    # make sure param_dir and parameter files exist
+    if param_dir and os.path.exists(param_dir):
+        soil_param_file = os.path.join(param_dir,'vG_default_params.dat')
+        if not os.path.exists(soil_param_file):
+            raise Exception(f'Soil params file does not exist: {soil_param_file}')
+        soil_class_file = os.path.join(param_dir,'lasam_soil_class.txt')
+        if not os.path.exists(soil_class_file):
+            raise Exception(f'Soil class file does not exist: {soil_class_file}')
+    else:
+        raise Exception(f'lasam_parameter_dir does not exist: {param_dir}')
+    
     # Create lasam list
     lasam_lst = ['verbosity=none',
                 'soil_params_file=' + soil_param_file,
@@ -1003,11 +965,70 @@ def create_lasam_input(
         lasam_lst_catID = lasam_lst.copy()
         lasam_lst_catID[9] = lasam_lst_catID[9] + str(df_soil.loc[catID]['category'])
         #lasam_lst_catID[12] = lasam_lst_catID[12] + df.loc['giuh_ordinates'][0]
-        lasam_bmi_file = os.path.join(lasam_bmi_dir, catID + '_bmi_config_lasam.txt')
+        lasam_bmi_file = os.path.join(input_dir, catID + '_bmi_config_lasam.txt')
 
         with open(lasam_bmi_file, "w") as f:
             f.writelines('\n'.join(lasam_lst_catID))
 
+
+def change_lasam_input(
+    catids: List[str], 
+    input_dir: Union[str, Path],
+    bmi_dir: Union[str, Path],
+    param_dir: Union[str, Path],
+)->None:
+
+    """ copy existing config files for lasam and change path to soil_params_file in lasam config file
+
+    Parameters
+    ----------
+    catids : catchment IDs
+    bmi_dir: directory for existing config files
+    input_dir : directory for storing new config files
+    param_dir: path to lasam parameter files 
+
+    Returns 
+    ----------
+    None   
+
+    """
+  
+    # create input directory for storing new config files              
+    os.makedirs(input_dir, exist_ok=True)
+
+    # make sure param_dir exists
+    if param_dir and os.path.exists(param_dir):
+        param_file = os.path.join(param_dir,'vG_default_params.dat')
+        if not os.path.exists(param_file):
+            raise Exception(f'Soil_params_file does not exist: {param_file}')
+    else:
+        raise Exception(f'lasam_parameter_dir does not exist: {param_dir}')
+
+    # loop through all catchments
+    for catID in catids:
+
+        # existing config file
+        config_file0 = os.path.join(bmi_dir, '{}_bmi_config_lasam'.format(catID) + '.txt')
+
+        # new config file to be created
+        config_file = os.path.join(input_dir, '{}_bmi_config_lasam'.format(catID) + '.txt')
+        
+        # correct the path to soil_params_file in config file
+        if not os.path.exists(config_file0):
+            raise Exception(f'Namelist file does not exist: {config_file0}')
+        with open(config_file0) as f:
+            lines0 = f.readlines()
+        lines1 = copy.deepcopy(lines0)
+        idx = [i for i, s in enumerate(lines0) if "soil_params_file" in s]
+        if len(idx) != 1:
+            raise Exception(f'No entry or more than one entry found for "soil_params_file" in config file: {config_file0}')
+        lines1[idx[0]] = f'soil_params_file={param_file}\n'
+
+        # Save to new config file
+        if os.path.exists(config_file):
+            raise Exception(f'Config file {config_file} already exists')
+        with open(config_file, 'w') as outfile:
+            outfile.writelines(lines1)
 
 def change_topmodel_input(
     catID: str, 
@@ -1087,8 +1108,10 @@ def create_troute_config(
     # bmi_parameters 
     bmi_param = {"flowpath_columns": ["id", "toid", "lengthkm"],
                  "attributes_columns": ['attributes_id', 
-                                        'rl_gages',
-                                        'rl_NHDWaterbodyComID',
+                                        #'rl_gages',
+                                        #'rl_NHDWaterbodyComID',
+                                        'gage',
+                                        'WaterbodyID',
                                         'MusK',
                                         'MusX',
                                         'n',
@@ -1122,8 +1145,10 @@ def create_troute_config(
                "ncc": "nCC",
                "s0": "So",
                "bw": "BtmWdth",
-               "waterbody": "rl_NHDWaterbodyComID",
-               "gages": "rl_gages",
+               #"waterbody": "rl_NHDWaterbodyComID",
+               #"gages": "rl_gages",
+               "waterbody": "WaterbodyID",
+               "gages": "gage",
                "tw": "TopWdth",
                "twcc": "TopWdthCC",
                "musk": "MusK",
@@ -1352,7 +1377,7 @@ def create_realization_file(
                                 "params": {
                                     "model_type_name": get_model_type_name('sac'),
                                     "library_file": lib_mod['sac'],
-                                    "init_config": os.path.join(bmi_dir['sac'], 'sac-init-{{id}}-HHWM8.namelist.input'),
+                                    "init_config": os.path.join(bmi_dir['sac'], 'sac-init-{{id}}.namelist.input'),
                                     "allow_exceed_end_time": True, "fixed_time_step": False, "uses_forcing_file": False,
                                     "main_output_variable": "tci",
                                 }}

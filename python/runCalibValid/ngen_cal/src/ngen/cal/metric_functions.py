@@ -41,6 +41,7 @@ def treat_values(
     remove_neg: Optional[bool] = False, 
     remove_na: Optional[bool] = False, 
     replace_zero: Optional[bool] = False,
+    replace_inf: Optional[bool] = False,
 ) -> pd.DataFrame:
     """Remove NaN, inf and negative values, and replace zero values of time series.
 
@@ -53,6 +54,7 @@ def treat_values(
         the ith element of both observation or simulation is removed.
     replace_zero : If True, when the zero value occurs at the ith element of observation or simulation, 
         all observation and simulation are added with 1/100 of mean of observation according to Pushpalatha et al (2012).
+    replace_inf: If True, replace inf and -inf with NaN values
 
     Returns
     -------
@@ -86,7 +88,13 @@ def treat_values(
     # Replace zero values
     if replace_zero:
         if df[colnames[1:]].min().values.min() <= 0.0001:
-            df[colnames[1:]] = df[colnames[1:]] + 1.0/100.0*df[colnames[1]].mean()
+            #df[colnames[1:]] = df[colnames[1:]] + 1.0/100.0*df[colnames[1]].mean()
+            df[colnames[1:]] = df[colnames[1:]] + 0.00001
+
+    # Remove inf values
+    if replace_inf:
+        inf_index = df.isin([np.inf, -np.inf])
+        df[inf_index] = np.nan
 
     return df
 
@@ -580,23 +588,30 @@ def calculate_all_metrics(
 
     metric_name = {"pearson_corr": "CORR", "mean_abs_error": "MAE", "root_mean_squared_error": "RMSE", "rmse_std_ratio": "RSR",
                    "percent_bias": "PBIAS", "Weighted_NSE": "NSEWt", "KGE": "KGE"}
-    result = {}
-    for f in _all_metrics:
-        if f.__name__ == "pearson_corr":
-            result.update({metric_name[f.__name__]: f(y_true, y_pred)[0]})
-        elif f.__name__ == "NSE":
-            result.update({f.__name__: f(y_true, y_pred)})
-            result.update({"NSELOG": f(y_true, y_pred, fun = "log", epsilon = "Pushpalatha2012")})
-            result.update({"NNSE": f(y_true, y_pred, normalized=True)})
-        elif f.__name__ == "categorical_score":
-            if threshold:
-                result.update(f(y_true, y_pred, threshold))
+    
+    if len(y_pred)<2:
+        keys = ['CORR','MAE','RMSE','RSR','PBIAS','NSE','NSELOG','NNSE','NSEWt','KGE',
+                'POD','FAR','CSI','FBIAS','HSEG_FDC','MSEG_FDC','LSEG_FDC','PKBIAS','PKTE','EVBIAS']
+        result = {key: np.nan for key in keys}
+    else:
+        result = {}
+        for f in _all_metrics:
+            if f.__name__ == "pearson_corr":
+                result.update({metric_name[f.__name__]: f(y_true, y_pred)[0]})
+            elif f.__name__ == "NSE":
+                result.update({f.__name__: f(y_true, y_pred)})
+                result.update({"NSELOG": f(y_true, y_pred, fun = "log", epsilon = "Pushpalatha2012")})
+                result.update({"NNSE": f(y_true, y_pred, normalized=True)})
+            elif f.__name__ == "categorical_score":
+                if threshold:
+                    result.update(f(y_true, y_pred, threshold))
+                else:
+                    result.update({'POD': np.nan, 'FAR': np.nan, 'CSI': np.nan, 'FBIAS': np.nan})
+            elif f.__name__ == "pbias_fdc":
+                result.update(f(y_true, y_pred))
+            elif f.__name__ == "event_based_metrics":
+                result.update(f(y_true, y_pred, threshold_event))
             else:
-                result.update({'POD': np.nan, 'FAR': np.nan, 'CSI': np.nan, 'FBIAS': np.nan})
-        elif f.__name__ == "pbias_fdc":
-            result.update(f(y_true, y_pred))
-        elif f.__name__ == "event_based_metrics":
-            result.update(f(y_true, y_pred, threshold_event))
-        else:
-            result.update({metric_name[f.__name__]: f(y_true, y_pred)})
+                result.update({metric_name[f.__name__]: f(y_true, y_pred)})
+
     return result

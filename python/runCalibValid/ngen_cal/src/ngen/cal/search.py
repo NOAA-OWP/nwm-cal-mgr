@@ -90,7 +90,7 @@ def _calc_metrics(
  
     df.reset_index(inplace=True)
 
-    df = treat_values(df, remove_neg = True, remove_na = True)
+    df = treat_values(df, remove_neg = True, remove_na = True, replace_zero=True)
 
     # reset the time index (needed for calculation of event-based metrics)
     df.set_index(df.columns[0], inplace=True)
@@ -124,14 +124,24 @@ def _evaluate(i: int, calibration_object: 'Evaluatable', agent: 'Agent', first_i
     obj_group1 = ['kge','nse','nnse','nselog','corr','csi','pod']
     obj_group2 = ['rmse','mae','rsr','far','pkbias','pkte','evbias']
     obj_group3 = ['pbias','lseg_fdc','hseg_fdc']
-    if calibration_object.eval_params.objective in obj_group1:
-        score = 1 - metric_objective_function if calibration_object.target == 'min' else metric_objective_function
-    elif calibration_object.eval_params.objective in obj_group2:
-        score = metric_objective_function if calibration_object.target == 'min' else 1-metric_objective_function
-    elif calibration_object.eval_params.objective in obj_group3:
-        score = abs(metric_objective_function) if calibration_object.target == 'min' else 1-abs(metric_objective_function)
+    if np.isnan(metric_objective_function):
+        if calibration_object.target == 'min':
+            score = np.inf
+            logger.info(f'Objective function cannot be calculated for this iteration. Set it to Inf')
+        elif calibration_object.target == 'max':
+            score = -np.inf
+            logger.info(f'Objective function cannot be calculated for this iteration. Set it to -Inf')
+        else:
+            raise Exception(f'Optimization target can only be min or max. {calibration_object.target} is not supported')
     else:
-        raise Exception(calibration_object.eval_params.objective + " is not supported for objective function")
+        if calibration_object.eval_params.objective in obj_group1:
+            score = 1 - metric_objective_function if calibration_object.target == 'min' else metric_objective_function
+        elif calibration_object.eval_params.objective in obj_group2:      
+            score = metric_objective_function if calibration_object.target == 'min' else 1-metric_objective_function
+        elif calibration_object.eval_params.objective in obj_group3:
+            score = abs(metric_objective_function) if calibration_object.target == 'min' else 1-abs(metric_objective_function)
+        else:
+            raise Exception(calibration_object.eval_params.objective + " is not supported for objective function")
       
     # Update based on latest objective function and write log files
     calibration_object.update(i, score, log=True, algorithm=agent.algorithm)

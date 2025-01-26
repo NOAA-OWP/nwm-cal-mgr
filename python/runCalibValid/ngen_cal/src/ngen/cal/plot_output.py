@@ -84,7 +84,7 @@ def plot_calib_output(
         df_merged = df_merged.loc[eval_range[0]:eval_range[1]]
     df_merged.reset_index(inplace=True)
     df_merged = df_merged.rename(columns={'index': 'Time'})
-    df_merged = mf.treat_values(df_merged, remove_neg = True)
+    df_merged = mf.treat_values(df_merged, remove_neg = True, replace_inf=True)
     df_merged_copy1 = copy.deepcopy(df_merged)
      
     # Plot hydrograph
