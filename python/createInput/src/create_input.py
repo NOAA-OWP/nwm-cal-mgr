@@ -242,7 +242,7 @@ def create_input(filename):
             if m1 in ['cfes', 'cfex']:
                 gfun.create_cfe_input(catids, modules, attr_file, mod_input_dir)
             elif m1 == 'ueb':
-                gfun.create_ueb_input(catids, time_period, attr_file, conf3[m1+'_parameter_dir'],mod_input_dir, '') 
+                gfun.create_ueb_input(catids, time_period, attr_file, conf3[m1+'_parameter_dir'],mod_input_dir, '')
             elif m1 == 'snow17':
                 gfun.create_snow17_input(catids, attr_file, mod_input_dir)
             elif m1 == "pet":
@@ -292,7 +292,7 @@ def create_input(filename):
     realization_file = work_dir + '/{}'.format(basin) + '_realization_config_bmi_calib.json' 
     routing_config_file = os.path.join(work_dir + '/Input', '{}'.format(basin) + run_configs[0])
     bmi_dir = {}
-    modules1 = [m1 for m1 in modules if m1 not in ['sloth','troute']]
+    #modules1 = [m1 for m1 in modules if m1 not in ['sloth','troute']]
     for m1 in modules:
         m2 = settings.modules_all.loc[settings.modules_all['module']==m1,'name_ui'].iloc[0]
         bmi_dir[m1] = os.path.join(input_dir, m2 + '_input')
@@ -305,7 +305,6 @@ def create_input(filename):
         if smp_index > sft_index:
             modules.remove("smp")
             modules.insert(sft_index, "smp")
-        print(modules)
     gfun.create_realization_file(work_dir, lib_file, bmi_dir, forcing_path, realization_file, modules, time_period, rt_dict)
 
     # Create calibration configuration file 
