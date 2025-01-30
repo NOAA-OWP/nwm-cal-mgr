@@ -605,7 +605,6 @@ def create_ueb_input(
     attr_file : attributes file containing info on lat/lon/slope/aspect etc
     param_dir_source : directory containing UEB parameter files
     ueb_input_dir : directory for the UEB bmi configuration file
-    #sitevar_file_exists: whether to use exisiting sitevar files (e.g., from EDS)
     bmi_dir: directory path containing existing sitevar files (e.g., from EDS)
 
     Returns
@@ -675,6 +674,7 @@ def create_ueb_input(
             enddate = datetime.datetime.strptime(time_period['run_time_period'][run_name][1], "%Y-%m-%d %H:%M:%S").strftime("%Y%m%d%H%M")
             for catID in catids:
                 input_file = os.path.join(ueb_input_dir, 'ueb-init-' +catID + '_' + run_name +'.dat')
+                site_file = os.path.join(ueb_input_dir, 'ueb_sitevars-' +catID + '.dat')
                 input_list = [
                           'UEBGrid Model Driver Test for TWDEF',
                           const_files['params'],
