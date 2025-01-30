@@ -618,12 +618,16 @@ def create_ueb_input(
     const_file_str = ['inputctr','outputctr','params']
     const_files = {}
     for par in const_file_str:
-        src = Path(param_dir_source,'ueb_'+par+'.dat').resolve(strict=True)
+        src = Path(param_dir_source,'ueb_'+par+'.dat').absolute()
+        if not os.path.exists(src):
+            raise FileNotFoundError(src)
         dst = os.path.join(ueb_input_dir,'ueb_'+par+'.dat')
         const_files.update({par: dst})
         with open(src) as f:
             if not os.path.exists(dst):
-                os.symlink(src, dst)        
+                os.symlink(src, dst)
+                logger.info(f'Creating symlink from {src} to {dst}')
+
 
     # Read hydrofabric attribute file
     dfa = pd.read_parquet(attr_file)
@@ -650,7 +654,7 @@ def create_ueb_input(
                     #logger.warning(f'File/link {dst} already exists')
                 else: 
                     os.symlink(src[0], site_file)
-                    #logger.info(f'Creating symlink from {src[0]} to {site_file}')                    
+                    logger.info(f'Creating symlink from {src[0]} to {site_file}')
 
         else: # create the sitevars file based on a template file
             temp_file = Path(param_dir_source, 'ueb_sitevars.dat').resolve(strict=True)
