@@ -9,14 +9,9 @@ Example usage: python create_input.py input.config
 
 import argparse
 import configparser
-import copy
-from datetime import timedelta
 import os
 import sys
-import shutil
-import time
 import re
-import numpy as np
 import geopandas as gpd
 import pandas as pd
 import logging
@@ -70,9 +65,25 @@ def create_input(filename):
     # get list of modules
     if not conf1['models']:
         raise Exception('Models must be specified')
+    logger.info(f"Available module names: {settings.modules_all['name_ui'].tolist()}")
+
     modules0 = [x.replace(" ", "") for x in re.split(',',conf1['models'])]
-    modules = [settings.modules_all.loc[settings.modules_all['name_ui']==m1.lower(),'module'].iloc[0] for m1 in modules0]
-    
+    modules = []
+    invalid_modules = []
+
+    for m1 in modules0:
+        filtered = settings.modules_all.loc[settings.modules_all['name_ui'] == m1.lower(), 'module']
+
+        if filtered.empty:
+            invalid_modules.append(m1)  # Collect invalid modules
+
+        else:
+            modules.append(filtered.iloc[0])  # Append the valid module
+
+    # Raise an error if any invalid modules were found
+    if invalid_modules:
+        raise ValueError(f"Invalid module(s) found: {', '.join(invalid_modules)}. Please check your configuration.")
+
     # add sloth if CFE or LASAM is selected
     module_found = [x for x in ['cfes','cfex','lasam'] if x in modules]
     if len(module_found)==1 and 'sloth' not in modules:
@@ -122,7 +133,11 @@ def create_input(filename):
     os.makedirs(input_dir, exist_ok=True)
 
     # Extract hydrofabric files
-    gpkg_file = os.path.join(conf3['hydrofab_dir'], 'gauge_'+ basin +'.gpkg')
+    #gpkg_file = os.path.join(conf3['hydrofab_dir'], 'gauge_'+ basin +'.gpkg')
+    #gpkg_file = Path(conf3['hydrofab_file']).resolve(strict=True)
+    gpkg_file = conf3['hydrofab_file']
+    if not os.path.exists(gpkg_file):
+        raise Exception(f'File does not exist: {gpkg_file}')
     catids = gpd.read_file(gpkg_file, layer='divides')['divide_id'].tolist()
     cat_file = os.path.join(input_dir, os.path.basename(gpkg_file)) 
     nexus_file = os.path.join(input_dir, os.path.basename(gpkg_file)) 
@@ -173,28 +188,61 @@ def create_input(filename):
 
         # module name used by the UI
         m2 = settings.modules_all.loc[settings.modules_all['module']==m1,'name_ui'].iloc[0]
+        #logger.info(f"Processing module {m1}, {m2}")
 
         # define module input directory
         mod_input_dir = os.path.join(input_dir, m2 + '_input')
         if os.path.isdir(mod_input_dir):
             if os.path.islink(mod_input_dir):
                 os.unlink(mod_input_dir)
+        #logger.info(f"mod_input_dir: {mod_input_dir}")
 
         # make symlinks to existing input files or create new input files
+        bmi_dir = conf3.get(m2 + '_bmi_dir')
+        #if bmi_dir:
+            #logger.info(f'bmi_dir exists: {os.path.isdir(bmi_dir)} - {bmi_dir}')
         if m1 in ['sloth']:
             pass
-        elif os.path.isdir(conf3[m2+'_bmi_dir']): 
-            if not os.listdir(conf3[m2+'_bmi_dir']):
-                raise ValueError(f'BMI folder {conf3[m2+"_bmi_dir"]} cannot be empty') 
+        elif m1 in ['topmodel']:
+            if not bmi_dir:
+                raise Exception(f'topmodel_bmi_dir not found in {filename}')
+            elif bmi_dir == '' or not os.path.exists(bmi_dir):
+                raise Exception(f'Valid path for topmodel_bmi_dir must be provided in {filename}')
             else:
-                # Create symbolic link
-                os.symlink(conf3[m2+'_bmi_dir'], mod_input_dir, target_is_directory=True)
-                logger.info(f'{m2}: create symlink from {conf3[m2+"_bmi_dir"]} to {mod_input_dir}')
+                os.makedirs(mod_input_dir, exist_ok=True)
+                for catID in catids:
+                    run_file = os.path.join(bmi_dir, '{}_topmodel'.format(catID) + '.run')
+                    params_file = os.path.join(bmi_dir, '{}_topmodel_params'.format(catID) + '.dat')
+                    subcat_file = os.path.join(bmi_dir, '{}_topmodel_subcat'.format(catID) + '.dat')
+                    gfun.change_topmodel_input(catID, run_file, params_file, subcat_file, mod_input_dir)                
+
+        # ignore t-route config files provided via the bmi_dir for now
+        elif m1!='troute' and bmi_dir and os.path.isdir(bmi_dir):
+            #logger.info(f"directory exists: {bmi_dir}, {bmi_dir}")
+            logger.info(f'{m2}: create symlink from {bmi_dir} to {mod_input_dir}')
+            if not os.listdir(bmi_dir):
+                raise ValueError(f'BMI folder {bmi_dir} cannot be empty')
+            else:
+                #logger.info(f"Found files in {bmi_dir}: {os.listdir(bmi_dir)} ")
+                # for some modules (noah-owp, ueb, sac, topmodel,lasam), need to update the template BMI files 
+                # from NEDS (or the user) with correct time period and/or paths
+                if m1 == 'noah':
+                    gfun.create_noah_input_template(catids, time_period, conf3[m1+'_parameter_dir'], mod_input_dir,conf3[m2+"_bmi_dir"])
+                elif m1 == 'ueb':
+                    gfun.create_ueb_input(catids, time_period, attr_file, conf3[m1+'_parameter_dir'],mod_input_dir,conf3[m2+"_bmi_dir"]) 
+                elif m1 in ['sac','snow17']:
+                    gfun.change_sac_snow17_input(m1, catids, mod_input_dir, conf3[m2+"_bmi_dir"])                 
+                elif m1 == 'lasam':
+                    gfun.change_lasam_input(catids, mod_input_dir, conf3[m2+"_bmi_dir"], conf3['lasam_parameter_dir'])
+                else:
+                    # Create symbolic link
+                    os.symlink(bmi_dir, mod_input_dir, target_is_directory=True)
+                    
         else:
             if m1 in ['cfes', 'cfex']:
                 gfun.create_cfe_input(catids, modules, attr_file, mod_input_dir)
             elif m1 == 'ueb':
-                gfun.create_ueb_input(catids, time_period, attr_file, conf3['ueb_parameter_dir'],mod_input_dir) 
+                gfun.create_ueb_input(catids, time_period, attr_file, conf3[m1+'_parameter_dir'],mod_input_dir, '')
             elif m1 == 'snow17':
                 gfun.create_snow17_input(catids, attr_file, mod_input_dir)
             elif m1 == "pet":
@@ -202,7 +250,7 @@ def create_input(filename):
             elif m1 == "sac":
                 gfun.create_sac_input(catids, attr_file, mod_input_dir)
             elif m1 == 'noah':
-                gfun.create_noah_input(catids, time_period, attr_file, conf3['noah_parameter_dir'], mod_input_dir)
+                gfun.create_noah_input(catids, time_period, attr_file, conf3[m1+'_parameter_dir'], mod_input_dir)
             elif m1 == 'sft':
                 sft_dir = os.path.join(input_dir, 'sft_input')
                 smp_dir = os.path.join(input_dir, 'smp_input')
@@ -224,14 +272,7 @@ def create_input(filename):
             elif m1 == 'smp':
                 continue
             elif m1 == 'lasam':
-                gfun.create_lasam_input(catids, conf3['lasam_soil_parameter_file'], conf3['lasam_soil_class_file'], mod_input_dir)
-            elif m1 == 'topmodel':
-                os.makedirs(mod_input_dir, exist_ok=True)
-                for catID in catids:
-                    run_file = os.path.join(conf3['topmd_dir'], '{}_topmodel'.format(catID) + '.run')
-                    params_file = os.path.join(conf3['topmd_dir'], '{}_topmodel_params'.format(catID) + '.dat')
-                    subcat_file = os.path.join(conf3['topmd_dir'], '{}_topmodel_subcat'.format(catID) + '.dat')
-                    gfun.change_topmodel_input(catID, run_file, params_file, subcat_file, mod_input_dir)
+                gfun.create_lasam_input(catids, mod_input_dir, conf3['lasam_parameter_dir'])
 
             elif m1 == 'troute':            
                 for file_name, run_name in zip(run_configs, ['calib','valid','valid']): 
@@ -251,11 +292,19 @@ def create_input(filename):
     realization_file = work_dir + '/{}'.format(basin) + '_realization_config_bmi_calib.json' 
     routing_config_file = os.path.join(work_dir + '/Input', '{}'.format(basin) + run_configs[0])
     bmi_dir = {}
-    modules1 = [m1 for m1 in modules if m1 not in ['sloth','troute']]
+    #modules1 = [m1 for m1 in modules if m1 not in ['sloth','troute']]
     for m1 in modules:
         m2 = settings.modules_all.loc[settings.modules_all['module']==m1,'name_ui'].iloc[0]
         bmi_dir[m1] = os.path.join(input_dir, m2 + '_input')
     rt_dict = {"routing": {"t_route_config_file_with_path": routing_config_file}} 
+
+    # "smp" must be before "sft" in the realization file
+    if "sft" in modules and "smp" in modules:
+        smp_index = modules.index("smp")
+        sft_index = modules.index("sft")
+        if smp_index > sft_index:
+            modules.remove("smp")
+            modules.insert(sft_index, "smp")
     gfun.create_realization_file(work_dir, lib_file, bmi_dir, forcing_path, realization_file, modules, time_period, rt_dict)
 
     # Create calibration configuration file 

@@ -84,7 +84,7 @@ def plot_calib_output(
         df_merged = df_merged.loc[eval_range[0]:eval_range[1]]
     df_merged.reset_index(inplace=True)
     df_merged = df_merged.rename(columns={'index': 'Time'})
-    df_merged = mf.treat_values(df_merged, remove_neg = True)
+    df_merged = mf.treat_values(df_merged, remove_neg = True, replace_inf=True)
     df_merged_copy1 = copy.deepcopy(df_merged)
      
     # Plot hydrograph
@@ -112,7 +112,7 @@ def plot_calib_output(
         plotfile = os.path.join(fig_path, calibration_object.basinID + '_fdc_iteration.png')  
     title  = 'Flow Duration Curve at Iteration = ' + str(i) + '\n' + calibration_object.station_name
     df_merged_copy3 = copy.deepcopy(df_merged)
-    df_merged_copy3 = mf.treat_values(df_merged_copy3, remove_neg = True, remove_na=True, replace_zero=True)
+    df_merged_copy3 = mf.treat_values(df_merged_copy3, remove_neg = True, remove_na=True, replace_zero=True, replace_inf=True)
     plf.plot_fdc_calib(df_merged_copy3, plotfile, title)
 
     # Plot time series of streamflow and precipitation 
@@ -203,7 +203,7 @@ def plot_valid_output(
     df_merged = df_merged.rename(columns={'sim_flow': 'nwm_retro'})
     df_merged.reset_index(inplace=True)
     df_merged = df_merged.rename(columns={'index': 'Time'})
-    df_merged = mf.treat_values(df_merged, remove_neg = True)
+    df_merged = mf.treat_values(df_merged, remove_neg = True, replace_inf=True)
     df_merged_copy1 = copy.deepcopy(df_merged)
 
     # Plot hydrograph
@@ -215,7 +215,7 @@ def plot_valid_output(
 
     # Plot flow duration curve
     df_merged_copy2 = copy.deepcopy(df_merged)
-    df_merged_copy2 = mf.treat_values(df_merged_copy2, remove_neg = True, remove_na=True, replace_zero=True)
+    df_merged_copy2 = mf.treat_values(df_merged_copy2, remove_neg = True, remove_na=True, replace_zero=True, replace_inf=True)
     plotfile = os.path.join(fig_path, calibration_object.basinID + '_fdc_valid_run.png')
     title  = 'Flow Duration Curve during Calibration and Validation period'  + '\n' + calibration_object.station_name
     plf.plot_fdc_valid(df_merged_copy2, plotfile, title, time_period)
