@@ -114,8 +114,8 @@ def create_walk_file(
                     catcw = {x: {"Gage_no": gage}}
                 else: 
                     # Select nearest one among multiple catchments draining to the gage 
-                    if subdf['id'][-1].replace('wb','cat') == x:
-                         print(x)
+                    if subdf['id'].iloc[-1].replace('wb', 'cat') == x:
+                         logger.info(f'Catchment {x}')
                          catcw = {x: {"Gage_no": gage}}
                     else:
                          catcw = {x: {"Gage_no": ""}}

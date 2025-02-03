@@ -85,44 +85,55 @@ def plot_calib_output(
     df_merged.reset_index(inplace=True)
     df_merged = df_merged.rename(columns={'index': 'Time'})
     df_merged = mf.treat_values(df_merged, remove_neg = True, replace_inf=True)
-    df_merged_copy1 = copy.deepcopy(df_merged)
+
+    # remove first day from time series (i.e., 24 hourly time steps), 
+    # since typically there are unrealistically large values during the first few time steps
+    df_merged = df_merged.iloc[24:]
      
-    # Plot hydrograph
-    fig_path = agent.plot_iter_path
-    if calibration_object.save_plot_iter_flag:
-        plotfile = os.path.join(fig_path, calibration_object.basinID + '_hydrograph_iteration_' + str('{:04d}').format(i) + '.png')  
-    else: 
-        plotfile = os.path.join(fig_path, calibration_object.basinID + '_hydrograph_iteration.png')  
-    title  = 'Hydrograph at Iteration = ' + str(i) + '\n' + calibration_object.station_name
-    plf.plot_streamflow(df_merged_copy1, plotfile, title)
-
-    # Plot scatterplot of streamflow from observation and other runs
-    if calibration_object.save_plot_iter_flag:
-        plotfile = os.path.join(fig_path, calibration_object.basinID + '_scatterplot_streamflow_iteration_' + str('{:04d}').format(i) + '.png')  
-    else: 
-        plotfile = os.path.join(fig_path, calibration_object.basinID + '_scatterplot_streamflow_iteration.png')  
-    title = 'Scatterplot of Streaflow at Iteration = ' + str(i) + '\n' + calibration_object.station_name
-    df_merged_copy2 = copy.deepcopy(df_merged)
-    plf.scatterplot_streamflow(df_merged_copy2, plotfile, title)
-
-    # Plot flow duration curve from observation and other runs
-    if calibration_object.save_plot_iter_flag:
-        plotfile = os.path.join(fig_path, calibration_object.basinID + '_fdc_iteration_' + str('{:04d}').format(i) + '.png')  
-    else: 
-        plotfile = os.path.join(fig_path, calibration_object.basinID + '_fdc_iteration.png')  
-    title  = 'Flow Duration Curve at Iteration = ' + str(i) + '\n' + calibration_object.station_name
-    df_merged_copy3 = copy.deepcopy(df_merged)
-    df_merged_copy3 = mf.treat_values(df_merged_copy3, remove_neg = True, remove_na=True, replace_zero=True, replace_inf=True)
-    plf.plot_fdc_calib(df_merged_copy3, plotfile, title)
-
-    # Plot time series of streamflow and precipitation 
-    if calibration_object.save_plot_iter_flag:
-        plotfile = os.path.join(fig_path, calibration_object.basinID + '_streamflow_precip_iteration_' + str('{:04d}').format(i) + '.png')
+    # only produce streamflow plots if df_merged is not empty
+    if len(df_merged) < 1:
+        logger.warning(f'streamflow time series, scatter plots, and FDC plots cannot be created due to lack of valid streamflow data')
     else:
-        plotfile = os.path.join(fig_path, calibration_object.basinID + '_streamflow_precip_iteration.png')
-    title  = 'Streamflow and Total Precipitation at Iteration = ' + str(i) + '\n' + calibration_object.station_name
-    df_merged_copy4 = copy.deepcopy(df_merged)
-    plf.plot_streamflow_precipitation(df_merged_copy4, agent.df_precip, plotfile, title)
+        # Plot hydrograph
+        fig_path = agent.plot_iter_path
+        if calibration_object.save_plot_iter_flag:
+            plotfile = os.path.join(fig_path, calibration_object.basinID + '_hydrograph_iteration_' + str('{:04d}').format(i) + '.png')  
+        else: 
+            plotfile = os.path.join(fig_path, calibration_object.basinID + '_hydrograph_iteration.png')  
+        title  = 'Hydrograph at Iteration = ' + str(i) + '\n' + calibration_object.station_name
+        df_merged_copy1 = copy.deepcopy(df_merged)
+        plf.plot_streamflow(df_merged_copy1, plotfile, title)
+
+        # Plot scatterplot of streamflow from observation and other runs
+        if calibration_object.save_plot_iter_flag:
+            plotfile = os.path.join(fig_path, calibration_object.basinID + '_scatterplot_streamflow_iteration_' + str('{:04d}').format(i) + '.png')  
+        else: 
+            plotfile = os.path.join(fig_path, calibration_object.basinID + '_scatterplot_streamflow_iteration.png')  
+        title = 'Scatterplot of Streaflow at Iteration = ' + str(i) + '\n' + calibration_object.station_name
+        df_merged_copy2 = copy.deepcopy(df_merged)
+        plf.scatterplot_streamflow(df_merged_copy2, plotfile, title)
+
+        # Plot flow duration curve from observation and other runs
+        if calibration_object.save_plot_iter_flag:
+            plotfile = os.path.join(fig_path, calibration_object.basinID + '_fdc_iteration_' + str('{:04d}').format(i) + '.png')  
+        else: 
+            plotfile = os.path.join(fig_path, calibration_object.basinID + '_fdc_iteration.png')  
+        title  = 'Flow Duration Curve at Iteration = ' + str(i) + '\n' + calibration_object.station_name
+        df_merged_copy3 = copy.deepcopy(df_merged)
+        df_merged_copy3 = mf.treat_values(df_merged_copy3, remove_neg = True, remove_na=True, replace_zero=True)
+        if len(df_merged_copy3) < 1:
+            logger.warning(f'Plot of Flow Duration Curve cannot be created due to lack of valid streamflow data')
+        else:
+            plf.plot_fdc_calib(df_merged_copy3, plotfile, title)
+
+        # Plot time series of streamflow and precipitation 
+        if calibration_object.save_plot_iter_flag:
+            plotfile = os.path.join(fig_path, calibration_object.basinID + '_streamflow_precip_iteration_' + str('{:04d}').format(i) + '.png')
+        else:
+            plotfile = os.path.join(fig_path, calibration_object.basinID + '_streamflow_precip_iteration.png')
+        title  = 'Streamflow and Total Precipitation at Iteration = ' + str(i) + '\n' + calibration_object.station_name
+        df_merged_copy4 = copy.deepcopy(df_merged)
+        plf.plot_streamflow_precipitation(df_merged_copy4, agent.df_precip, plotfile, title)
 
     # Plot scatterplot between objective function and iteration
     if calibration_object.save_plot_iter_flag:
@@ -204,28 +215,40 @@ def plot_valid_output(
     df_merged.reset_index(inplace=True)
     df_merged = df_merged.rename(columns={'index': 'Time'})
     df_merged = mf.treat_values(df_merged, remove_neg = True, replace_inf=True)
-    df_merged_copy1 = copy.deepcopy(df_merged)
 
-    # Plot hydrograph
-    fig_path = agent.valid_path_plot
-    plotfile = os.path.join(fig_path, calibration_object.basinID + '_hydrograph_valid_run.png')
-    title  = 'Hydrograph during Calibration and Validation period'  + '\n' + calibration_object.station_name
-    plf.plot_streamflow(df_merged_copy1, plotfile, title, calibration_object.evaluation_range[0], calibration_object.evaluation_range[1],
+    # remove first day from time series (i.e., 24 hourly time steps), 
+    # since typically there are unrealistically large values during the first few time steps
+    df_merged = df_merged.iloc[24:]
+     
+    # only produce streamflow plots if df_merged is not empty
+    if len(df_merged) < 1:
+        logger.warning(f'streamflow time series, scatter plots, and FDC plots cannot be created due to lack of valid streamflow data')
+    else:
+
+        # Plot hydrograph
+        df_merged_copy1 = copy.deepcopy(df_merged)
+        fig_path = agent.valid_path_plot
+        plotfile = os.path.join(fig_path, calibration_object.basinID + '_hydrograph_valid_run.png')
+        title  = 'Hydrograph during Calibration and Validation period'  + '\n' + calibration_object.station_name
+        plf.plot_streamflow(df_merged_copy1, plotfile, title, calibration_object.evaluation_range[0], calibration_object.evaluation_range[1],
                         calibration_object.valid_evaluation_range[0], calibration_object.valid_evaluation_range[1])
 
-    # Plot flow duration curve
-    df_merged_copy2 = copy.deepcopy(df_merged)
-    df_merged_copy2 = mf.treat_values(df_merged_copy2, remove_neg = True, remove_na=True, replace_zero=True, replace_inf=True)
-    plotfile = os.path.join(fig_path, calibration_object.basinID + '_fdc_valid_run.png')
-    title  = 'Flow Duration Curve during Calibration and Validation period'  + '\n' + calibration_object.station_name
-    plf.plot_fdc_valid(df_merged_copy2, plotfile, title, time_period)
+        # Plot flow duration curve
+        df_merged_copy2 = copy.deepcopy(df_merged)
+        df_merged_copy2 = mf.treat_values(df_merged_copy2, remove_neg = True, remove_na=True, replace_zero=True)
+        if len(df_merged_copy2) < 1:
+            logger.warning(f'Plot of Flow Duration Curve cannot be created due to lack of valid streamflow data')
+        else:            
+            plotfile = os.path.join(fig_path, calibration_object.basinID + '_fdc_valid_run.png')
+            title  = 'Flow Duration Curve during Calibration and Validation period'  + '\n' + calibration_object.station_name
+            plf.plot_fdc_valid(df_merged_copy2, plotfile, title, time_period)
 
-    # Plot time series of streamflow and precipitation 
-    df_merged_copy3 = copy.deepcopy(df_merged)
-    plotfile = os.path.join(fig_path, calibration_object.basinID + '_streamflow_precip_valid_run.png')
-    title  = 'Streamflow and Total Precipitation during Calibration and Validation Period ' + '\n' + calibration_object.station_name
-    plf.plot_streamflow_precipitation(df_merged_copy3, agent.df_precip, plotfile, title, calibration_object.evaluation_range[0], 
-        calibration_object.evaluation_range[1], calibration_object.valid_evaluation_range[0], calibration_object.valid_evaluation_range[1])
+        # Plot time series of streamflow and precipitation 
+        df_merged_copy3 = copy.deepcopy(df_merged)
+        plotfile = os.path.join(fig_path, calibration_object.basinID + '_streamflow_precip_valid_run.png')
+        title  = 'Streamflow and Total Precipitation during Calibration and Validation Period ' + '\n' + calibration_object.station_name
+        plf.plot_streamflow_precipitation(df_merged_copy3, agent.df_precip, plotfile, title, calibration_object.evaluation_range[0], 
+            calibration_object.evaluation_range[1], calibration_object.valid_evaluation_range[0], calibration_object.valid_evaluation_range[1])
 
     # Plot metrics
     mdf = pd.DataFrame()
