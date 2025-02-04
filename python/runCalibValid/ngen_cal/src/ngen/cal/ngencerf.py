@@ -20,6 +20,7 @@ def report(calibration_run_id: int, iteration: int, worker: str, first_iteration
     
     headers = {
         "Content-Type": "application/json",
+        "Accept": "application/json",
         "Authorization": f"Bearer {auth_token}"
     }
 
@@ -32,7 +33,7 @@ def report(calibration_run_id: int, iteration: int, worker: str, first_iteration
         message = response_json.get('message')
         logger.info(f'Response from report_iteration: {message}')
     except requests.exceptions.HTTPError as e:
-        logger.error(f"Call to NgenCerf Server  {url} failed with {response.status_code}.")
-        logger.error(f"Response from NgenCerf Server: response.text - {str(e)}")
+        logger.error(f"Call to NgenCerf Server {url} failed with {str(e)}.")
+        logger.error(f"Response from NgenCerf Server: {response.text}")
         return
 
