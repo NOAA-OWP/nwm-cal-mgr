@@ -65,7 +65,8 @@ def plot_streamflow(
     df['Dates'] = ts
 
     # Plot
-    df = df.iloc[24:] # remove first day with possible big values
+    # this treatment is moved to plot_calib_output & plot_valid_output in plot_functions.py
+    #df = df.iloc[24:] # remove first day with possible big values
     max0 = math.ceil(pd.melt(df, id_vars=['Time'], value_vars=colname[1:])['value'].max()) * 1.02
     cols = ['black', 'blue', 'orange', 'tab:green','tab:cyan'] # ['k','C1','C0','C3']
     fig, ax = plt.subplots(figsize=(10, 6), dpi=120, tight_layout=True)
@@ -135,7 +136,8 @@ def plot_streamflow_precipitation(
     dfp['Dates'] = ts
 
     # Plot
-    df = df.iloc[24:] # remove first day with possible big values
+    # this treatment is moved to plot_calib_output & plot_valid_output in plot_functions.py
+    #df = df.iloc[24:] # remove first day with possible big values
     max0 = math.ceil(pd.melt(df, id_vars=colname[0], value_vars=colname[1:])['value'].max()) * 1.02
     maxp = math.ceil(dfp['RAINRATE'].max())
     if maxp > 500: 
@@ -221,7 +223,8 @@ def scatterplot_streamflow(
 
     # Obtain column names and value range
     colname = list(df.columns)
-    df = df.iloc[24:] # remove first day with possible big values
+    # this treatment is moved to plot_calib_output & plot_valid_output in plot_functions.py
+    #df = df.iloc[24:] # remove first day with possible big values
     max0 = math.ceil(pd.melt(df, id_vars=['Time'], value_vars=colname[1:])['value'].max()) * 1.02
 
     # Plot
@@ -293,7 +296,8 @@ def plot_output(
     list1= [x + '_Control' for x in colname[0:4]]
     list2= [x + '_Best' for x in colname[0:4]]
     list1.extend(list2)
-    df = df.iloc[24:] # remove first day with possible big values
+    # this treatment is moved to plot_calib_output & plot_valid_output in plot_functions.py
+    #df = df.iloc[24:] # remove first day with possible big values
     max1= math.ceil(pd.melt(df, id_vars=['Time'], value_vars=[*list1, 'Observation'])['value'].max())*1.04
     max2 = math.ceil(df[colname[5] + '_Control'].max())*1.02
 
@@ -613,7 +617,8 @@ def plot_fdc_calib(
 
     # Figure arguments
     colname = list(df.columns)[1:]
-    df = df.iloc[24:] # remove first day with possible big values
+    # this treatment is moved to plot_calib_output & plot_valid_output in plot_functions.py
+    #df = df.iloc[24:] # remove first day with possible big values
 
     # Plot
     cols = ['k', 'b', 'orange', 'tab:green']
@@ -666,7 +671,8 @@ def plot_fdc_valid(
 
     # Figure arguments
     colname = list(df.columns)[1:]
-    df = df.iloc[24:] # remove initial big values
+    # this treatment is moved to plot_calib_output & plot_valid_output in plot_functions.py
+    #df = df.iloc[24:] # remove initial big values
     #max0 = math.ceil(pd.melt(df, id_vars=[df.columns[0]], value_vars=colname[1:])['value'].max()) * 1.02
 
     # Plot
