@@ -9,14 +9,9 @@ import datetime
 import glob
 import json
 import os
-#import re
-#import sys
 import shutil
-#import subprocess
 import fnmatch
-#from fileinput import FileInput
-#from functools import partial
-from typing import List, Union, Dict
+from typing import List, Union, Dict, Optional
 from pathlib import Path
 import geopandas as gpd
 import pandas as pd
@@ -50,6 +45,7 @@ __all__ = [
            'create_noah_input',
            'create_noah_input_template',
            'create_sft_smp_input',
+           'change_smp_input',
            'create_lasam_input',
            'change_lasam_input',
            'create_snow17_input',
@@ -422,7 +418,7 @@ def create_noah_input_template(
                     elif 'enddate' in l1:
                         lines[i1] = "  " + "enddate".ljust(19) + "= " + "'" + enddate + "'" + "               ! UTC time end of simulation (YYYYMMDDhhmm)\n"
                     elif 'parameter_dir' in l1:
-                        lines[i1] = "  " + "parameter_dir".ljust(19) + "= " + "'" + input_dir + "\n'"
+                        lines[i1] = "  " + "parameter_dir".ljust(19) + "= " + "'" + input_dir + "'\n"
 
                 namelst = os.path.join(input_dir, '{}'.format(catID) + '_' + run_name + '.input')
                 with open(namelst, 'w') as outfile:
@@ -1050,6 +1046,116 @@ def change_lasam_input(
         with open(config_file, 'w') as outfile:
             outfile.writelines(lines1)
 
+def change_smp_input(
+    catids: List[str], 
+    input_dir: Union[str, Path],
+    bmi_dir: Union[str, Path],
+    sm_frac_depth: float=0.4,
+    sm_profile_depth: float=0.1,
+)-> float:
+
+    """ copy existing config files for smp and change soil moisture depths as needed
+
+    Parameters
+    ----------
+    catids : catchment IDs
+    bmi_dir: directory for existing config files
+    input_dir : directory for storing new config files
+    sm_frac_depth: depth (m) at which to output soil moisture fraction 
+    sm_profile_depth: depth (m) at which to output soil moisture (from the first soil layer)
+
+    Returns 
+    ----------
+    sm_profile_depth, since it may be changed here to soil_z[0]   
+
+    """
+
+    # create input directory for storing new config files              
+    os.makedirs(input_dir, exist_ok=True)
+
+    # loop through all catchments
+    for catID in catids:
+
+        # existing config file
+        config_file0 = os.path.join(bmi_dir, '{}_bmi_config_smp'.format(catID) + '.txt')
+
+        # new config file to be created
+        config_file = os.path.join(input_dir, '{}_bmi_config_smp'.format(catID) + '.txt')
+        
+        # read config file
+        if not os.path.exists(config_file0):
+            raise Exception(f'Config file for SMP does not exist: {config_file0}')
+        with open(config_file0) as f:
+            lines0 = f.readlines()
+        lines1 = copy.deepcopy(lines0)
+
+        # adjust soil_moisture_fraction_depth if needed
+        str1 = "soil_moisture_fraction_depth"
+        idx = [i for i, s in enumerate(lines0) if str1 in s]
+        if len(idx)==0:
+            lines1 = lines1.append(f'{str1}={sm_frac_depth}[m]\n')
+        elif len(idx)==1:
+            lines1[idx[0]] = f'{str1}={sm_frac_depth}[m]\n'  
+        else:
+            raise Exception(f'More than one entry found for {str1} in config file: {config_file0}')
+
+        # read soil depths for different layers (currently SMP is limited to 4 layers only)
+        idx = [i for i, s in enumerate(lines0) if "soil_z" in s]
+        if len(idx) != 1:
+            raise Exception(f'No entry or more than one entry found for "soil_z" in config file: {config_file0}')
+        depths = lines1[idx[0]].split("=")[1].split("[")[0].split(',')
+        depths = list(map(float, depths))
+        
+        # make sure depths are in ascending order (since they are accumulative)
+        is_ascending = all(earlier <= later for earlier, later in zip(depths, depths[1:]))
+        if not is_ascending:
+            raise ValueError(f'Accumulative soil layer depths in soil_z in {config_file0} must be in ascending order: {depths}')
+
+        # convert depths to meters if needed    
+        unit1 = lines1[idx[0]].split("=")[1].split("[")[1].split(']')[0].lower()
+        if unit1 == 'm':
+            pass
+        elif unit1 == "cm":
+            depths = [d/100 for d in depths]
+        elif unit1 == "mm":
+            depths = [d/1000 for d in depths]
+        else:
+            raise ValueError(f'Unit {unit1} is not supported for soil_z in {config_file0}; supported units are m, mm, and cm')
+
+        # adjust soil_z for soil_moisture_fraction_depth
+        if not any(value == sm_frac_depth for value in depths):
+            depths = depths[::-1]
+            for i1, d1 in enumerate(depths):
+                if d1 < sm_frac_depth:
+                    depths[i1] = sm_frac_depth
+                    break
+            depths = depths[::-1]
+            if catID==catids[0]:
+                logger.info(f'soil_z in {config_file0} is adjusted to include {str1} {sm_frac_depth}[m]')
+
+        # adjust 1st element of soil_z for soil_moisture_profile output depth (soil_moisture_profile from SMP is an array and 
+        # currently ngen can only output the first element of arrays)
+        if sm_profile_depth != depths[0]:
+            if sm_profile_depth > depths[1]:
+                if catID==catids[0]:
+                    logger.warning(f'sm_profile_depth ({sm_profile_depth}m) is greater than soil_z[1] in {config_file0}; output soil moisture at soil_z[0]({depths[0]}m) instead')
+            else:
+                depths[0] = sm_profile_depth
+                if catID==catids[0]:
+                    logger.info(f'soil_z[0] in { config_file0} reset to {sm_profile_depth} to output soil moisture value properly')
+
+        list_depth = ",".join(list(map(str, depths)))
+        lines1[idx[0]] = f'soil_z={list_depth}[m]\n'
+
+        # Save to new config file
+        if os.path.exists(config_file) and catID==catids[0]:
+            logger.info(f'Config file {config_file} exists; overwrite it')
+        with open(config_file, 'w') as outfile:
+            outfile.writelines(lines1)
+    
+    return depths[0]
+
+
 def change_topmodel_input(
     catID: str, 
     runfile: Union[str, Path], 
@@ -1254,39 +1360,69 @@ def var_mapping(
     modules: List[str],
     pet_in: str,
     pcp_in: str,
+    output_dict: dict,
 )-> Dict[str,str]:
-    """ create variable nameing mapping based on modules
+    """ create variable name mapping based on modules
     
     Parameters
     ----------
     modules: list of modules in the formulation
     pet_in: module input variable name for evapotranspiration   
     pcp_in: module input variable name for precipitation
+    output_dict: dictionary defining which output variables to write out
 
     Returns 
     ----------
-    Variable name mapping dictionary
+    Variable name mapping dictionary (for module inputs and outputs). 
+    Currently the following outputs are included:
+        swe_out: output variable name for SWE (snow water equivalent)
+        sm_out: output variable names for soil mositure fraction and soil moisture profile
 
     """
-    var_maps = {}
+    var_maps = {'input':{}, 'output':{}}
 
     # only needed when CFE is not coupled to SFT/SMP
-    if ('cfes' in modules or 'cfex' in modules) and ('sft' not in modules):
-        var_maps["ice_fraction_schaake"] = "sloth_ice_fraction_schaake"
-        var_maps["ice_fraction_xinanjiang"] = "sloth_ice_fraction_xinanjiang"
-        var_maps["soil_moisture_profile"] = "sloth_smp"
+    if ('cfes' in modules or 'cfex' in modules) and ('sft' not in modules) and ('smp' not in modules):
+        var_maps['input']["ice_fraction_schaake"] = "sloth_ice_fraction_schaake"
+        var_maps['input']["ice_fraction_xinanjiang"] = "sloth_ice_fraction_xinanjiang"
+        var_maps['input']["soil_moisture_profile"] = "sloth_smp"
         
     # PET
     if 'noah' in modules and 'pet' not in modules:
-        var_maps[pet_in] = "EVAPOTRANS"
+        var_maps['input'][pet_in] = "EVAPOTRANS"
         
     # snowmelt
     if 'snow17' in modules:
-        var_maps[pcp_in] = 'raim' 
+        var_maps['input'][pcp_in] = 'raim' 
+        if output_dict['output_swe']:
+            var_maps['output']['swe_out'] = 'sneqv'
+            var_maps['output']['swe_out_header'] = 'SWE_mm'
+        else:
+            var_maps['output']['swe_out'] = ''
     elif 'ueb' in modules:
-        var_maps[pcp_in] = "SWIT"    
+        var_maps['input'][pcp_in] = "SWIT" 
+        if output_dict['output_swe']:  
+            var_maps['output']['swe_out'] = 'SWE'
+            var_maps['output']['swe_out_header'] = 'SWE_m'
+        else:
+            var_maps['output']['swe_out'] = ''
     elif 'noah' in modules: # check noah last since it can also be included to provided ET
-        var_maps[pcp_in] = "QINSUR"         
+        var_maps['input'][pcp_in] = "QINSUR" 
+        if output_dict['output_swe']:
+            var_maps['output']['swe_out'] = 'SNEQV'  
+            var_maps['output']['swe_out_header'] = 'SWE_mm' 
+        else:
+            var_maps['output']['swe_out'] = ''
+    else:
+        var_maps['output']['swe_out'] = ''
+
+    # soil moisture fraction
+    if 'smp' in modules and output_dict['output_sm']:
+        var_maps['output']['sm_out'] = ['soil_moisture_fraction','soil_moisture_profile']
+        var_maps['output']['sm_out_header'] = ['sm_frac_' + str(output_dict['sm_frac_depth']) + 'm',
+                                               'sm_profile_' + str(output_dict['sm_profile_depth']) + 'm']   
+    else:
+        var_maps['output']['sm_out'] = ''
 
     return var_maps     
 
@@ -1304,6 +1440,7 @@ def create_realization_file(
     modules: List[str], 
     time_period: dict, 
     rt_dict: dict,
+    output_dict: dict,
 )-> None:
 
     """ Create realization file for the specified model and module
@@ -1318,6 +1455,7 @@ def create_realization_file(
     model: model and module combination 
     time_period : simulation and evaluation time period
     rt_dict : routing model source file directory and configuration file  
+    output_dict: whether to output certain variables (currently SWE and soil moisture) 
 
     Returns 
     ----------
@@ -1334,6 +1472,12 @@ def create_realization_file(
             os.symlink(value, lib_mod_link)
 
     model_configs = {}
+
+    smp_cfg_path_str = None
+    if 'smp' in modules:
+        smp_cfg_path_str = os.path.join(bmi_dir['smp'], '{{id}}_bmi_config_smp.txt')
+        
+
     # noah 
     if 'noah' in modules:
         model_configs['noah'] = {"name": "bmi_fortran", 
@@ -1368,7 +1512,7 @@ def create_realization_file(
         # variable name mapping section
         pet_in = "water_potential_evaporation_flux"
         pcp_in = "atmosphere_water__liquid_equivalent_precipitation_rate"
-        model_configs[m1]["params"]["variables_names_map"] = var_mapping(modules, pet_in, pcp_in)
+        var_maps = var_mapping(modules, pet_in, pcp_in, output_dict)
 
         # module output variable for input to t-route
         main_output_variable = "Q_OUT" 
@@ -1386,7 +1530,7 @@ def create_realization_file(
         # variable name mapping section
         pet_in = "water_potential_evaporation_flux"
         pcp_in = "atmosphere_water__liquid_equivalent_precipitation_rate"
-        model_configs['topmodel']["params"]["variables_names_map"] = var_mapping(modules, pet_in, pcp_in)
+        var_maps = var_mapping(modules, pet_in, pcp_in, output_dict)
 
         # module output variable for input to t-route
         main_output_variable = "Qout"
@@ -1405,9 +1549,8 @@ def create_realization_file(
         # variable name mapping section
         pet_in = "pet"
         pcp_in = "precip"
-        var_maps = var_mapping(modules, pet_in, pcp_in)
-        var_maps['tair'] = "land_surface_air__temperature"
-        model_configs['sac']["params"]["variables_names_map"] = var_maps
+        var_maps = var_mapping(modules, pet_in, pcp_in, output_dict)
+        var_maps['input']['tair'] = "land_surface_air__temperature"
 
         # module output variable for input to t-route
         main_output_variable = "tci"
@@ -1546,7 +1689,7 @@ def create_realization_file(
         # variable name mapping section
         pet_in = "potential_evapotranspiration_rate"
         pcp_in = "precipitation_rate"
-        model_configs['lasam']["params"]["variables_names_map"] = var_mapping(modules, pet_in, pcp_in)
+        var_maps = var_mapping(modules, pet_in, pcp_in, output_dict)
 
         # module output variable for input to t-route
         main_output_variable = "total_discharge"
@@ -1560,9 +1703,33 @@ def create_realization_file(
                          "uses_forcing_file": False,
                          "main_output_variable": main_output_variable}}
 
+    # Output section
+    output_config = {'output_variables':[], 'output_header_fields':[]}
+    for key, value in output_dict.items():
+        if key=='output_swe' and var_maps['output']['swe_out'] != '':
+            if value:
+                output_config['output_variables'] = output_config['output_variables'] + [var_maps['output']['swe_out']]
+                output_config['output_header_fields'] = output_config['output_header_fields'] + [var_maps['output']['swe_out_header']]
 
+        elif key=='output_sm' and var_maps['output']['sm_out'] != '':
+            if value:
+                output_config['output_variables'] = output_config['output_variables'] + var_maps['output']['sm_out']
+                output_config['output_header_fields'] = output_config['output_header_fields'] + var_maps['output']['sm_out_header']                
+    if output_config['output_variables'] != []:
+        gbmain['params']['output_variables'] = output_config['output_variables']
+    if output_config['output_header_fields'] != []:
+        gbmain['params']['output_header_fields'] = output_config['output_header_fields']
+
+    # determine the RR module in the current formulation
+    rr_mod1 = [m1 for m1 in modules if 'Rainfall_runoff' in settings.modules_all.loc[settings.modules_all['module']==m1, 'process'].values[0]]
+    if len(rr_mod1) == 0:
+        raise Exception(f'No rainfall-runoff module is selected')
+    elif len(rr_mod1) >1:
+        raise Exception(f'More than one rainfall-runoff module is selected: {rr_mod1}')
+    rr_mod1 = rr_mod1[0]
 
     # modules section    
+    model_configs[rr_mod1]["params"]["variables_names_map"] = var_maps['input']
     gbmain["params"]["modules"] = [model_configs[m1] for m1 in modules if m1 != 'troute']
 
     # global configuration
@@ -1626,7 +1793,7 @@ def create_calib_config_file(
                 if m_config in calib_modules_config:
                     f1 = os.path.join(par_file, 'calib_params_' + m_ui + '.csv')
                     if not os.path.exists(f1):
-                        logger.error(f'Folder {par_file} does not contain calibration parameter file for {m_ui}')
+                        logger.warning(f'Folder {par_file} does not contain calibration parameter file for {m_ui}')
                         continue
                     df_tmp = pd.read_csv(f1,sep=None,comment='#',engine='python')
                     df_tmp['model'] = m_config

@@ -280,11 +280,26 @@ class NgenBase(ModelExec):
             params (pd.DataFrame): _description_
             id (str): _description_
         """
-        
+
         if id is None: #Update global
             module = self.ngen_realization.global_config.formulations[0].params
         else: #update specific catchment
             module = self.ngen_realization.catchments[id].formulations[0].params
+        modules = [m.params.model_name for m in module.modules]
+
+        if (('SMP' in modules) or ('SFT' in modules)) and ('CFE' in modules):           
+            params0 = params.copy(deep=1)
+            for m1 in ['SMP','SFT']:
+                if m1 not in modules:
+                    continue
+                for p1 in ['b','maxsmc','satpsi']:
+                    par1 = params0.loc[(params0['model']=='CFE') & (params0['param']==p1)]
+                    if len(par1)==1:
+                        par2 = par1.copy(deep=1)
+                        par2['model'] = m1
+                        if p1 == 'maxsmc':
+                            par2['param'] = 'smcmax'
+                        params = pd.concat([params, par2])
 
         groups = params.set_index('param').groupby('model')
         if isinstance(module, MultiBMI):

@@ -107,15 +107,21 @@ def create_input(filename):
     modules = [m1 for m1 in settings.modules_all['module'] if m1 in modules]
     logger.info(f"Final list of modules in formulation: {modules}\n")
 
-    # make sure only one module is selected for each process (except for Soil_moisutre)
-    procs = [p1 if type(p1) is list else [p1] for p1 in settings.modules_all['process']]
-    procs = list(set([p1 for p2 in procs for p1 in p2]))
-    procs.remove("Soil_moisture")
+    
+    # check modules selected for each process
+    procs = []
+    for p1 in settings.modules_all['process']:
+        procs = list(set(procs + p1))
     for p1 in procs:
-        mods_all = settings.modules_all.loc[settings.modules_all['process']==p1,'module']
-        mods = [m1 for m1 in modules if m1 in mods_all]
-        if len(mods)>1:
+        mods = [m1 for m1 in modules if p1 in settings.modules_all.loc[settings.modules_all['module']==m1, 'process'].values[0]]
+
+        # make sure only one module is selected for each process (except for Soil_moisture and Glacier_snow)
+        if len(mods)>1 and p1 not in ['Soil_moisture','Glacier_snow']:
             raise Exception(f'Only one module can be selected for {p1} process')
+
+        # one and only one module must be selected for rainfall-runoff and PET
+        if (p1 in ['Evapotranspiration', 'Rainfall_runoff']) and (len(mods)==0):
+            raise Exception(f'At least one module must be selected for {p1} process')
 
     # library files for all modules included in the formulation
     lib_file = {}
@@ -133,8 +139,6 @@ def create_input(filename):
     os.makedirs(input_dir, exist_ok=True)
 
     # Extract hydrofabric files
-    #gpkg_file = os.path.join(conf3['hydrofab_dir'], 'gauge_'+ basin +'.gpkg')
-    #gpkg_file = Path(conf3['hydrofab_file']).resolve(strict=True)
     gpkg_file = conf3['hydrofab_file']
     if not os.path.exists(gpkg_file):
         raise Exception(f'File does not exist: {gpkg_file}')
@@ -175,6 +179,26 @@ def create_input(filename):
     else:
         obsflow_file = None
 
+    # whether to output SWE or soil moisture (default to False)
+    output_dict = dict()
+    for s1 in ['output_swe', 'output_sm']:
+        if (s1 not in conf2.keys()) or (conf2[s1] is None) or (conf2[s1]==''):
+            output_dict[s1] = False
+        elif conf2[s1].lower()=='true':
+            output_dict[s1] = True
+        elif conf2[s1].lower()=='false':
+            output_dict[s1] = False   
+        else:
+            raise ValueError(f'Invalid value provided for {s1}')   
+    
+    # define depth (in meters) to output soil moisture at
+    output_dict['sm_frac_depth'] = 0.4
+    output_dict['sm_profile_depth'] = 0.1
+    if output_dict['output_sm']:
+        for s1 in ['sm_profile_depth', 'sm_frac_depth']:
+            if (s1 in conf2.keys()) and (conf2[s1]!=''):
+                output_dict[s1] = float(conf2[s1])
+
     # loop through modules to create input files
     # always create CFE inputs first since sft/smp need data from CFE inputs if they are selected
     attr_file = conf3['attributes_file']
@@ -188,19 +212,15 @@ def create_input(filename):
 
         # module name used by the UI
         m2 = settings.modules_all.loc[settings.modules_all['module']==m1,'name_ui'].iloc[0]
-        #logger.info(f"Processing module {m1}, {m2}")
 
         # define module input directory
         mod_input_dir = os.path.join(input_dir, m2 + '_input')
         if os.path.isdir(mod_input_dir):
             if os.path.islink(mod_input_dir):
                 os.unlink(mod_input_dir)
-        #logger.info(f"mod_input_dir: {mod_input_dir}")
 
         # make symlinks to existing input files or create new input files
         bmi_dir = conf3.get(m2 + '_bmi_dir')
-        #if bmi_dir:
-            #logger.info(f'bmi_dir exists: {os.path.isdir(bmi_dir)} - {bmi_dir}')
         if m1 in ['sloth']:
             pass
         elif m1 in ['topmodel']:
@@ -218,14 +238,13 @@ def create_input(filename):
 
         # ignore t-route config files provided via the bmi_dir for now
         elif m1!='troute' and bmi_dir and os.path.isdir(bmi_dir):
-            #logger.info(f"directory exists: {bmi_dir}, {bmi_dir}")
-            logger.info(f'{m2}: create symlink from {bmi_dir} to {mod_input_dir}')
+            
             if not os.listdir(bmi_dir):
                 raise ValueError(f'BMI folder {bmi_dir} cannot be empty')
             else:
-                #logger.info(f"Found files in {bmi_dir}: {os.listdir(bmi_dir)} ")
-                # for some modules (noah-owp, ueb, sac, topmodel,lasam), need to update the template BMI files 
-                # from NEDS (or the user) with correct time period and/or paths
+                # For some modules (noah-owp, ueb, sac, topmodel,lasam), need to update the template BMI files 
+                # from EDS (or the user) with correct time period and/or paths
+                # For SMP, the depth to output soil moisture may need to be adjusted 
                 if m1 == 'noah':
                     gfun.create_noah_input_template(catids, time_period, conf3[m1+'_parameter_dir'], mod_input_dir,conf3[m2+"_bmi_dir"])
                 elif m1 == 'ueb':
@@ -234,8 +253,11 @@ def create_input(filename):
                     gfun.change_sac_snow17_input(m1, catids, mod_input_dir, conf3[m2+"_bmi_dir"])                 
                 elif m1 == 'lasam':
                     gfun.change_lasam_input(catids, mod_input_dir, conf3[m2+"_bmi_dir"], conf3['lasam_parameter_dir'])
+                elif m1 == "smp" and output_dict['output_sm']:
+                    output_dict['sm_profile_depth'] = gfun.change_smp_input(catids, mod_input_dir, conf3[m2+"_bmi_dir"], output_dict['sm_frac_depth'], output_dict['sm_profile_depth'])
                 else:
                     # Create symbolic link
+                    logger.info(f'{m2}: create symlink from {bmi_dir} to {mod_input_dir}')
                     os.symlink(bmi_dir, mod_input_dir, target_is_directory=True)
                     
         else:
@@ -305,7 +327,8 @@ def create_input(filename):
         if smp_index > sft_index:
             modules.remove("smp")
             modules.insert(sft_index, "smp")
-    gfun.create_realization_file(work_dir, lib_file, bmi_dir, forcing_path, realization_file, modules, time_period, rt_dict)
+
+    gfun.create_realization_file(work_dir, lib_file, bmi_dir, forcing_path, realization_file, modules, time_period, rt_dict, output_dict)
 
     # Create calibration configuration file 
     calib_config_file = os.path.join(work_dir + '/Input', '{}'.format(basin) + '_config_calib.yaml')
