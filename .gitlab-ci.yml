@@ -46,6 +46,11 @@ unit-test:
   script:
     - echo "Running Unit Tests..."
     - cd /ngen-app/ngen-cal
+    # Debugging commands to check the current commit
+    - echo "Current Git commit hash:"
+    - git rev-parse HEAD  # Shows the current commit hash being used
+    - echo "Last commit log:"
+    - git log -1 --oneline  # Shows the last commit log to verify the latest commit
     - pytest --log-cli-level 0 ./python/runCalibValid/ngen_conf/tests/
     - pytest --log-cli-level 0 ./python/runCalibValid/ngen_cal/tests/
 
