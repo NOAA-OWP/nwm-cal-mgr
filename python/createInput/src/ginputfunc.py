@@ -59,7 +59,6 @@ __all__ = [
            'create_calib_config_file',
           ]
 
-
 def create_walk_file(
     gageID: str, 
     gpkg_file: Union[str, Path], 
@@ -83,16 +82,25 @@ def create_walk_file(
     df_cat = gpd.read_file(gpkg_file, layer='divides')
     df_cat.set_index('divide_id', inplace=True)
     df_nexus = gpd.read_file(gpkg_file, layer='nexus')
-    ### YLiu: read hl_uri info from hydrolocations layer instead of network,
-    ### since in oCONUS v2.2 gpkg files, hl_uri is only available in the hydrolocations layer
-    #df_network = gpd.read_file(gpkg_file, layer='network')
-    #df_network = df_network[['toid','hl_uri']].drop_duplicates()
-    #df_network.columns = ['id','hl_uri']
-    #df_nexus = df_nexus.merge(df_network, on="id")
+    
+    # read hl_uri info from nextwork or hydrolocations layers 
+    df_network = gpd.read_file(gpkg_file, layer='network')
     df_hydro = gpd.read_file(gpkg_file, layer='hydrolocations')
-    df_hydro = df_hydro[['nex_id','hl_uri']].drop_duplicates()
-    df_hydro.columns = ['id','hl_uri']
-    df_nexus = df_nexus.merge(df_hydro, on="id")
+    if (len(df_network)>0) and ('toid' in df_network.columns) and ('hl_uri' in df_network.columns) and (df_network['hl_uri'].str.contains(gageID).any()):
+        df_network = df_network[['toid','hl_uri']].drop_duplicates()
+        df_network.columns = ['id','hl_uri']
+        df_nexus = df_nexus.merge(df_network, on="id")
+    else:
+        if (len(df_hydro)>0) and ('nex_id' in df_hydro.columns) and ('hl_uri' in df_hydro.columns) and (df_hydro['hl_uri'].str.contains(gageID).any()):
+            df_hydro = df_hydro[['nex_id','hl_uri']].drop_duplicates()
+            df_hydro.columns = ['id','hl_uri']
+            df_nexus = df_nexus.merge(df_hydro, on="id")
+
+    if 'hl_uri' not in df_nexus.columns:
+        if ('hl_uri' not in df_network.columns) and ('hl_uri' not in df_hydro.columns):
+            logger.info(f'{gageID}: hl_uri not found in network or hydrolocations layers in {gpkg_file}')
+        else:
+            logger.info(f'{gageID}: gage ID not found in hl_uri column in network or hydrolocations layers in {gpkg_file}')
 
     df_nexus.set_index('id', inplace=True)
     df_flowpaths = gpd.read_file(gpkg_file, layer='flowpaths')
@@ -103,43 +111,42 @@ def create_walk_file(
     cw = {}
     for x in df_cat.index:
         nex_id = df_cat.loc[x, 'toid']
-        if nex_id not in df_nexus.index:
-            continue
-        hu_list = df_nexus.loc[nex_id, 'hl_uri']
-        if (type(hu_list) is str) or (hu_list is None):
-            hu_list = [hu_list]
-        elif type(hu_list) is pd.Series:
-            hu_list = list(hu_list)
-        else:
-            raise Exception(f'Unsupported return value for hl_uri; it can only be None, or a string or a series')
+        catcw = {x: {"Gage_no": ""}}
+        if nex_id in df_nexus.index:
+            hu_list = df_nexus.loc[nex_id, 'hl_uri']
+            if (type(hu_list) is str) or (hu_list is None):
+                hu_list = [hu_list]
+            elif type(hu_list) is pd.Series:
+                hu_list = list(hu_list)
+            else:
+                raise Exception(f'Unsupported return value for hl_uri; it can only be None, or a string or a series')
 
-        for hu in hu_list:
-            if hu is None or not hu.lower().startswith('gage'): 
-                catcw = {x: {"Gage_no": ""}}
-            elif hu.lower().startswith('gage'):  
-                if len(hu.split(','))>1 and gageID in hu:   
-                    gage=gageID
-                else:
-                    gage = hu.split('-')[1]
-                gageid.append(gage) 
-                if gage == gageID:
-                    subdf = df_flowpaths.loc[[df_cat.loc[x, 'toid']]]
-                    if subdf.shape[0] == 1:
-                        catcw = {x: {"Gage_no": gage}}
-                    else: 
-                        # Select nearest one among multiple catchments draining to the gage 
-                        if subdf['id'].iloc[-1].replace('wb','cat') == x:
+            for hu in hu_list:
+                if hu and hu.lower().startswith('gage'):  
+                    if len(hu.split(','))>1 and gageID in hu:   
+                        gage=gageID
+                    else:
+                        gage = hu.split('-')[1]
+                    gageid.append(gage) 
+                    if gage == gageID:
+                        subdf = df_flowpaths.loc[[df_cat.loc[x, 'toid']]]
+                        if subdf.shape[0] == 1: 
                             catcw = {x: {"Gage_no": gage}}
-                        else:
-                            catcw = {x: {"Gage_no": ""}}
-                else:
-                    catcw = {x: {"Gage_no": ""}}
-            cw.update(catcw)
+                            break
+                        else:                                                        
+                            # Select nearest one among multiple catchments draining to the gage 
+                            if subdf['id'].iloc[-1].replace('wb','cat') == x:
+                                catcw = {x: {"Gage_no": gage}}
+                                break
+
+        cw.update(catcw)
+
     if len(set(gageid))>1:    
         logger.info(f'More than 1 gage found in hydrofabric GeoPackage file {gpkg_file}')
     with open(walk_file, 'w') as outfile:
-        json.dump(cw, outfile, indent=4, separators=(", ", ": "), sort_keys=False)
+        json.dump(cw, outfile, indent=4, separators=(", ", ": "), sort_keys=False)    
 
+        
 def create_cfe_input(
     catids: List[str],  
     modules: List[str],
