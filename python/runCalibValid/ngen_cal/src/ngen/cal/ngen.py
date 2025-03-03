@@ -285,7 +285,11 @@ class NgenBase(ModelExec):
             module = self.ngen_realization.global_config.formulations[0].params
         else: #update specific catchment
             module = self.ngen_realization.catchments[id].formulations[0].params
-        modules = [m.params.model_name for m in module.modules]
+
+        if hasattr(module,'modules'):
+            modules = [m.params.model_name for m in module.modules]
+        else:
+            modules = [module.model_name]
 
         if (('SMP' in modules) or ('SFT' in modules)) and ('CFE' in modules):           
             params0 = params.copy(deep=1)
