@@ -84,7 +84,7 @@ def create_walk_file(
     df_nexus = gpd.read_file(gpkg_file, layer='nexus')
     
     # read hl_uri info from network or hydrolocations layers and make sure the gageID is contained in the hl_uri column
-    # check the hydrolocations layer first, if conditions are not met, check the network layer
+    # check the network layer first, if conditions are not met, check the hydrolocations layer
     df_network = gpd.read_file(gpkg_file, layer='network')
     df_hydro = gpd.read_file(gpkg_file, layer='hydrolocations')
     if (len(df_network)>0) and ('toid' in df_network.columns) and ('hl_uri' in df_network.columns) and (df_network['hl_uri'].str.contains(gageID).any()):
@@ -97,6 +97,7 @@ def create_walk_file(
             df_hydro.columns = ['id','hl_uri']
             df_nexus = df_nexus.merge(df_hydro, on="id")
 
+    # if hl_uri is not found, provide a specific message as to what is missing in gpkg
     if 'hl_uri' not in df_nexus.columns:
         if ('hl_uri' not in df_network.columns) and ('hl_uri' not in df_hydro.columns):
             logger.info(f'{gageID}: hl_uri not found in network or hydrolocations layers in {gpkg_file}')
