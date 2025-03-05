@@ -6,14 +6,18 @@ parameter set and validation best run using the best calibrated parameter set.
 """
 
 import argparse
+import logging
 import os
 from pathlib import Path
-import pandas as pd
+
 import yaml
 from ngen.cal.agent import Agent
 from ngen.cal.configuration import General
-from ngen.cal.validation_run import run_valid_ctrl_best 
-import logging
+from ngen.cal.validation_run import run_valid_ctrl_best
+
+from ngen.cal.git_util import print_git_info
+
+
 logger = logging.getLogger(__name__)
 
 def main(general: General, model_conf):
@@ -44,8 +48,9 @@ def main(general: General, model_conf):
     run_valid_ctrl_best(agent)
 
 if __name__ == "__main__":
+    print_git_info()
 
-    # Create command line parser 
+    # Create command line parser
     parser = argparse.ArgumentParser(description='Run Validation in NGEN architecture.')
     parser.add_argument('config_file', type=Path,
                         help='The configuration yaml file for catchments to be operated on')
