@@ -15,7 +15,7 @@ from ngen.cal.agent import Agent
 from ngen.cal.configuration import General
 from ngen.cal.validation_run import run_valid_ctrl_best
 
-from ngen.cal.git_util import print_git_info
+from ngen.cal.git_util import print_git_info_all
 
 
 logger = logging.getLogger(__name__)
@@ -48,7 +48,7 @@ def main(general: General, model_conf):
     run_valid_ctrl_best(agent)
 
 if __name__ == "__main__":
-    print_git_info()
+    print_git_info_all()
 
     # Create command line parser
     parser = argparse.ArgumentParser(description='Run Validation in NGEN architecture.')

@@ -1,11 +1,7 @@
 ARG IMAGE_TAG=latest
 FROM registry.sh.nextgenwaterprediction.com/ngwpc/nwm-ngen/ngen:${IMAGE_TAG}
-
-RUN set -eux; \
-    dnf install -y \
-        jq; \
-    dnf clean all
-
+# Uncomment when building ngen locallay
+# FROM ngen
 
 RUN --mount=type=secret,id=GITLAB_TOKEN \
     set -eux; \
@@ -52,7 +48,7 @@ RUN set -eux; \
 WORKDIR /ngen-app/ngen-cal
 
 # Extract Git information and write it to the JSON file specified by $GIT_INFO_PATH
-ARG GIT_INFO_PATH=/ngen-app/git_info.json
+ARG GIT_INFO_PATH=/ngen-app/ngen-cal_git_info.json
 
 RUN jq -n \
     --arg commit_hash "$(git rev-parse HEAD)" \

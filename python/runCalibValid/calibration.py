@@ -18,7 +18,7 @@ from ngen.cal.configuration import General
 from ngen.cal.search import dds, dds_set, pso_search, gwo_search
 from ngen.cal.strategy import Algorithm
 
-from ngen.cal.git_util import print_git_info
+from ngen.cal.git_util import print_git_info_all
 
 
 LOG = logging.getLogger(__name__)
@@ -159,7 +159,7 @@ def main(general: General, model_conf):
 
 
 if __name__ == "__main__":
-    print_git_info()
+    print_git_info_all()
 
     # Create the command line parser
     parser = argparse.ArgumentParser(description='Calibrate catchments in NGEN architecture.')

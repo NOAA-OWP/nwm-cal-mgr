@@ -18,7 +18,7 @@ from ngen.cal.agent import Agent
 from ngen.cal.configuration import General
 from ngen.cal.validation_run import run_valid_ctrl_best
 
-from ngen.cal.git_util import print_git_info
+from ngen.cal.git_util import print_git_info_all
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +91,7 @@ def main(general: General, model_conf, worker:str, iteration:int):
     logger.info("Validation completed")
 
 if __name__ == "__main__":
-    print_git_info()
+    print_git_info_all()
 
     # Create the command line parser
     parser = argparse.ArgumentParser(description='Create validation inputs based on calibration config file')
