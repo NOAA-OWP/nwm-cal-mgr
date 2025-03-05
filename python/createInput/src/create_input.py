@@ -141,7 +141,7 @@ def create_input(filename):
     # Extract hydrofabric files
     gpkg_file = conf3['hydrofab_file']
     if not os.path.exists(gpkg_file):
-        raise Exception(f'File does not exist: {gpkg_file}')
+        raise Exception(f'Geo package file does not exist: {gpkg_file}')
     catids = gpd.read_file(gpkg_file, layer='divides')['divide_id'].tolist()
     cat_file = os.path.join(input_dir, os.path.basename(gpkg_file)) 
     nexus_file = os.path.join(input_dir, os.path.basename(gpkg_file)) 
