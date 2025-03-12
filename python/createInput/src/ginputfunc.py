@@ -655,11 +655,6 @@ def create_ueb_input(
 
     # sitevars file
     for catID in catids:
-        tslp = dfa.loc[catID]['slope_mean']
-        azimuth = dfa.loc[catID]['aspect_c_mean']
-        lat = dfa.loc[catID]['Y']
-        lon = dfa.loc[catID]['X']
-
         site_file = os.path.join(ueb_input_dir, 'ueb_sitevars-' +catID + '.dat')
         if bmi_dir != '':
             src = glob.glob(os.path.join(bmi_dir, 'ueb_sitevars*' + catID +'*'))
@@ -677,6 +672,13 @@ def create_ueb_input(
                     logger.info(f'Creating symlink from {src[0]} to {site_file}')
 
         else: # create the sitevars file based on a template file
+
+            # retrieve slope, aspect, lat and lon from precomputed attributes file
+            tslp = dfa.loc[catID]['slope_mean']
+            azimuth = dfa.loc[catID]['aspect_c_mean']
+            lat = dfa.loc[catID]['Y']
+            lon = dfa.loc[catID]['X']
+
             temp_file = Path(param_dir_source, 'ueb_sitevars.dat').resolve(strict=True)
             with open(temp_file) as f:
                 lines = f.readlines()
