@@ -85,3 +85,4 @@ dist/
 
 # Other
 .idea
+/git_info.json
