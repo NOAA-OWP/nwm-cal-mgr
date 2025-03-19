@@ -5,22 +5,21 @@ This is the main script to read calibration configuration file and execute calib
 """
 
 import argparse
+import logging
 import os
+import sys
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
-
 from ngen.cal.agent import Agent
 from ngen.cal.configuration import General
 from ngen.cal.search import dds, dds_set, pso_search, gwo_search
 from ngen.cal.strategy import Algorithm
 
-import sys  
-import logging 
-from datetime import datetime, timezone
-import os
-import time
-import numpy as np
+from ngen.cal.git_util import print_git_info_all
+
 
 LOG = logging.getLogger(__name__)
 
@@ -86,7 +85,6 @@ def log_level_set():
     LOG.info("Inside log_level_set") 
     
 def main(general: General, model_conf):
-
     # Seed the random number generators if requested
     if( general.random_seed is not None):
         import random
@@ -161,6 +159,7 @@ def main(general: General, model_conf):
 
 
 if __name__ == "__main__":
+    print_git_info_all()
 
     # Create the command line parser
     parser = argparse.ArgumentParser(description='Calibrate catchments in NGEN architecture.')
