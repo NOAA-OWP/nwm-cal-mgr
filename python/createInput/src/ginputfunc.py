@@ -6,65 +6,68 @@ This module contains a variety of functions to create different input files.
 
 import copy
 import datetime
+import fnmatch
 import glob
 import json
+import logging
 import os
 import shutil
-import fnmatch
-from typing import List, Union, Dict, Optional
 from pathlib import Path
+from typing import List, Union, Dict
+
 import geopandas as gpd
 import pandas as pd
 import yaml
-import logging
+
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
 from tempfile import mkstemp
 from createInput import settings
 
+
 def replace_path(source_file_path, par_path, data_type_codes):
     fh, target_file_path = mkstemp()
     with open(target_file_path, 'w') as target_file:
-       with open(source_file_path, 'r') as source_file:
-         data = source_file.readlines() 
-         for i in range(2, len(data), 3):
-            if data[ i ][:1] in data_type_codes:
-                if data[ i + 1 ][:1] != '/':
-                    data[ i + 1 ] = par_path + '/' + data[ i + 1 ] 
-                      
-         target_file.writelines(data) 
+        with open(source_file_path, 'r') as source_file:
+            data = source_file.readlines()
+            for i in range(2, len(data), 3):
+                if data[i][:1] in data_type_codes:
+                    if data[i + 1][:1] != '/':
+                        data[i + 1] = par_path + '/' + data[i + 1]
+
+            target_file.writelines(data)
 
     os.remove(source_file_path)
     shutil.move(target_file_path, source_file_path)
 
 
 __all__ = [
-           'create_walk_file',
-           'create_cfe_input',
-           'create_noah_input',
-           'create_noah_input_template',
-           'create_sft_smp_input',
-           'change_smp_input',
-           'create_lasam_input',
-           'change_lasam_input',
-           'create_snow17_input',
-           'create_ueb_input',
-           'create_sac_input',
-           'change_sac_snow17_input',
-           'create_pet_input',
-           'change_topmodel_input',
-           'create_troute_config',
-           'create_realization_file',
-           'create_calib_config_file',
-          ]
+    'create_walk_file',
+    'create_cfe_input',
+    'create_noah_input',
+    'create_noah_input_template',
+    'create_sft_smp_input',
+    'change_smp_input',
+    'create_lasam_input',
+    'change_lasam_input',
+    'create_snow17_input',
+    'create_ueb_input',
+    'create_sac_input',
+    'change_sac_snow17_input',
+    'create_pet_input',
+    'change_topmodel_input',
+    'create_troute_config',
+    'create_realization_file',
+    'create_calib_config_file',
+]
+
 
 def create_walk_file(
-    gageID: str, 
-    gpkg_file: Union[str, Path], 
-    walk_file: Union[str, Path],
-)->None:
-
+        gageID: str,
+        gpkg_file: Union[str, Path],
+        walk_file: Union[str, Path],
+) -> None:
     """ Create crosswalk file
 
     Parameters
@@ -82,26 +85,28 @@ def create_walk_file(
     df_cat = gpd.read_file(gpkg_file, layer='divides')
     df_cat.set_index('divide_id', inplace=True)
     df_nexus = gpd.read_file(gpkg_file, layer='nexus')
-    
+
     # read hl_uri info from network or hydrolocations layers and make sure the gageID is contained in the hl_uri column
     # check the hydrolocations layer first, if conditions are not met, check the network layer
     df_network = gpd.read_file(gpkg_file, layer='network')
     df_hydro = gpd.read_file(gpkg_file, layer='hydrolocations')
-    if (len(df_network)>0) and ('toid' in df_network.columns) and ('hl_uri' in df_network.columns) and (df_network['hl_uri'].str.contains(gageID).any()):
-        df_network = df_network[['toid','hl_uri']].drop_duplicates()
-        df_network.columns = ['id','hl_uri']
+    if (len(df_network) > 0) and ('toid' in df_network.columns) and ('hl_uri' in df_network.columns) and (
+            df_network['hl_uri'].str.contains(gageID).any()):
+        df_network = df_network[['toid', 'hl_uri']].drop_duplicates()
+        df_network.columns = ['id', 'hl_uri']
         df_nexus = df_nexus.merge(df_network, on="id")
     else:
-        if (len(df_hydro)>0) and ('nex_id' in df_hydro.columns) and ('hl_uri' in df_hydro.columns) and (df_hydro['hl_uri'].str.contains(gageID).any()):
-            df_hydro = df_hydro[['nex_id','hl_uri']].drop_duplicates()
-            df_hydro.columns = ['id','hl_uri']
+        if (len(df_hydro) > 0) and ('nex_id' in df_hydro.columns) and ('hl_uri' in df_hydro.columns) and (
+                df_hydro['hl_uri'].str.contains(gageID).any()):
+            df_hydro = df_hydro[['nex_id', 'hl_uri']].drop_duplicates()
+            df_hydro.columns = ['id', 'hl_uri']
             df_nexus = df_nexus.merge(df_hydro, on="id")
 
     if 'hl_uri' not in df_nexus.columns:
         if ('hl_uri' not in df_network.columns) and ('hl_uri' not in df_hydro.columns):
-            logger.info(f'{gageID}: hl_uri not found in network or hydrolocations layers in {gpkg_file}')
+            raise Exception(f"Gage id {gageID}: 'hl_uri' column not found in network or hydrolocations layers in {gpkg_file}")
         else:
-            logger.info(f'{gageID}: gage ID not found in hl_uri column in network or hydrolocations layers in {gpkg_file}')
+            raise Exception(f"Gage id {gageID} not found in 'hl_uri' column in network or hydrolocations layers in {gpkg_file}")
 
     df_nexus.set_index('id', inplace=True)
     df_flowpaths = gpd.read_file(gpkg_file, layer='flowpaths')
@@ -113,48 +118,53 @@ def create_walk_file(
     for x in df_cat.index:
         nex_id = df_cat.loc[x, 'toid']
         catcw = {x: {"Gage_no": ""}}
-        if nex_id in df_nexus.index:
-            hu_list = df_nexus.loc[nex_id, 'hl_uri']
-            if (type(hu_list) is str) or (hu_list is None):
-                hu_list = [hu_list]
-            elif type(hu_list) is pd.Series:
-                hu_list = list(hu_list)
-            else:
-                raise Exception(f'Unsupported return value for hl_uri; it can only be None, or a string or a series')
 
-            for hu in hu_list:
-                if hu and hu.lower().startswith('gage'):  
-                    if len(hu.split(','))>1 and gageID in hu:   
-                        gage=gageID
+        if nex_id not in df_nexus.index:
+            raise Exception(f"Gage id {gageID}: nex_id '{nex_id}' not found in df_nexus index for file {gpkg_file}")
+
+        try:
+            hu_list = df_nexus.loc[nex_id, 'hl_uri']
+        except KeyError:
+            raise Exception(f"Gage id {gageID}: nex_id '{nex_id}' could not be accessed in df_nexus when retrieving hl_uri for file {gpkg_file}")
+
+        if isinstance(hu_list, str) or hu_list is None:
+            hu_list = [hu_list]
+        elif isinstance(hu_list, pd.Series):
+            hu_list = list(hu_list)
+        else:
+            raise Exception(f"Gage id {gageID}: Unsupported return value for hl_uri; must be None, str, or pd.Series (got {type(hu_list)}) for file {gpkg_file}")
+        for hu in hu_list:
+            if hu and hu.lower().startswith('gage'):
+                if len(hu.split(',')) > 1 and gageID in hu:
+                    gage = gageID
+                else:
+                    gage = hu.split('-')[1]
+                gageid.append(gage)
+                if gage == gageID:
+                    subdf = df_flowpaths.loc[[df_cat.loc[x, 'toid']]]
+                    if subdf.shape[0] == 1:
+                        catcw = {x: {"Gage_no": gage}}
+                        break
                     else:
-                        gage = hu.split('-')[1]
-                    gageid.append(gage) 
-                    if gage == gageID:
-                        subdf = df_flowpaths.loc[[df_cat.loc[x, 'toid']]]
-                        if subdf.shape[0] == 1: 
+                        # Select nearest one among multiple catchments draining to the gage
+                        if subdf['id'].iloc[-1].replace('wb', 'cat') == x:
                             catcw = {x: {"Gage_no": gage}}
                             break
-                        else:                                                        
-                            # Select nearest one among multiple catchments draining to the gage 
-                            if subdf['id'].iloc[-1].replace('wb','cat') == x:
-                                catcw = {x: {"Gage_no": gage}}
-                                break
 
         cw.update(catcw)
 
-    if len(set(gageid))>1:    
+    if len(set(gageid)) > 1:
         logger.info(f'More than 1 gage found in hydrofabric GeoPackage file {gpkg_file}')
     with open(walk_file, 'w') as outfile:
-        json.dump(cw, outfile, indent=4, separators=(", ", ": "), sort_keys=False)    
-        
+        json.dump(cw, outfile, indent=4, separators=(", ", ": "), sort_keys=False)
+
 
 def create_cfe_input(
-    catids: List[str],  
-    modules: List[str],
-    attr_file: Union[str, Path],
-    cfe_input_dir: Union[str, Path],
-)->None:
-
+        catids: List[str],
+        modules: List[str],
+        attr_file: Union[str, Path],
+        cfe_input_dir: Union[str, Path],
+) -> None:
     """ Create BMI initial configuration file for CFE with Schaake or Xianjiang infiltration and runoff scheme
 
     Parameters
@@ -181,8 +191,8 @@ def create_cfe_input(
     # Read hydrofabric attribute file
     dfa = pd.read_parquet(attr_file)
     dfa.set_index("divide_id", inplace=True)
- 
-     # surface partitioning scheme
+
+    # surface partitioning scheme
     scheme = 'Schaake'
     if ('cfex' in modules):
         scheme = 'Xinanjiang'
@@ -234,13 +244,12 @@ def create_cfe_input(
 
 
 def create_noah_input(
-    catids: List[str],
-    time_period: dict,
-    attr_file: Union[str, Path],
-    param_dir_source: Union[str, Path],
-    noah_input_dir: Union[str, Path],
-)->None:
-
+        catids: List[str],
+        time_period: dict,
+        attr_file: Union[str, Path],
+        param_dir_source: Union[str, Path],
+        noah_input_dir: Union[str, Path],
+) -> None:
     """ Create BMI configuration file for Noah-OWP-Modular
 
     Parameters
@@ -258,10 +267,10 @@ def create_noah_input(
 
     # Create symlink for parameter directory
     os.makedirs(noah_input_dir, exist_ok=True)
-    noah_par_tables = ['SOILPARM.TBL','MPTABLE.TBL','GENPARM.TBL']
+    noah_par_tables = ['SOILPARM.TBL', 'MPTABLE.TBL', 'GENPARM.TBL']
     for par in noah_par_tables:
-        src = os.path.join(param_dir_source,par)
-        dst = os.path.join(noah_input_dir,par)
+        src = os.path.join(param_dir_source, par)
+        dst = os.path.join(noah_input_dir, par)
         with open(src) as f:
             if not os.path.exists(dst):
                 os.symlink(src, dst)
@@ -271,7 +280,7 @@ def create_noah_input(
     dfa.set_index("divide_id", inplace=True)
 
     # Files for the calibration and validation run
-    for run_name in ['calib','valid']:
+    for run_name in ['calib', 'valid']:
         if time_period['run_time_period'][run_name][0] and time_period['run_time_period'][run_name][1]:
             # Date
             startdate = time_period['run_time_period'][run_name][0]
@@ -287,9 +296,9 @@ def create_noah_input(
                 lon = dfa.loc[catID]['X']
                 isltype = dfa.loc[catID]["ISLTYP"]
                 vegtype = dfa.loc[catID]["IVGTYP"]
-                sfctype = 2 if vegtype ==16 else 1 
+                sfctype = 2 if vegtype == 16 else 1
                 nom_lst = ['&timing',
-                           "  " + "dt".ljust(19) +  "= 3600.0" + "                       ! timestep [seconds]",
+                           "  " + "dt".ljust(19) + "= 3600.0" + "                       ! timestep [seconds]",
                            "  " + "startdate".ljust(19) + "= " + "'" + startdate + "'" + "               ! UTC time start of simulation (YYYYMMDDhhmm)",
                            "  " + "enddate".ljust(19) + "= " + "'" + enddate + "'" + "               ! UTC time end of simulation (YYYYMMDDhhmm)",
                            "  " + "forcing_filename".ljust(19) + "= '.'" + "                          ! file containing forcing data",
@@ -355,7 +364,7 @@ def create_noah_input(
                            "  " + "zwt".ljust(10) + "= -2.0                                   ! initial water table depth below surface [m]",
                            "/",
                            ]
-               
+
                 namelst = os.path.join(noah_input_dir, '{}'.format(catID) + '_' + run_name + '.input')
                 with open(namelst, 'w') as outfile:
                     outfile.writelines('\n'.join(nom_lst))
@@ -363,13 +372,12 @@ def create_noah_input(
 
 
 def create_noah_input_template(
-    catids: List[str],
-    time_period: dict,
-    param_dir_source: Union[str, Path],
-    input_dir: Union[str, Path],
-    template_bmi_dir: Union[str, Path],
-)->None:
-
+        catids: List[str],
+        time_period: dict,
+        param_dir_source: Union[str, Path],
+        input_dir: Union[str, Path],
+        template_bmi_dir: Union[str, Path],
+) -> None:
     """ Create BMI configuration files for Noah-OWP-Modular based on template BMI files provided by the user (or NEDS)
 
     Parameters
@@ -388,11 +396,11 @@ def create_noah_input_template(
 
     # Create symlink for parameter directory
     os.makedirs(input_dir, exist_ok=True)
-    noah_par_tables = ['SOILPARM.TBL','MPTABLE.TBL','GENPARM.TBL']
+    noah_par_tables = ['SOILPARM.TBL', 'MPTABLE.TBL', 'GENPARM.TBL']
     for par in noah_par_tables:
-        src = os.path.join(param_dir_source,par)
-        dst = os.path.join(input_dir,par)
-        
+        src = os.path.join(param_dir_source, par)
+        dst = os.path.join(input_dir, par)
+
         with open(src) as f:
             # create a symbolic link for each parameter file
             if os.path.exists(dst) or os.path.islink(dst):
@@ -402,7 +410,7 @@ def create_noah_input_template(
                 logger.info(f'Creating symlink from {src} to {dst}')
 
     # Files for the calibration and validation run
-    for run_name in ['calib','valid']:
+    for run_name in ['calib', 'valid']:
         if time_period['run_time_period'][run_name][0] and time_period['run_time_period'][run_name][1]:
 
             startdate = time_period['run_time_period'][run_name][0]
@@ -412,7 +420,7 @@ def create_noah_input_template(
 
             # loop through template file for each catchment
             for catID in catids:
-                file1 = glob.glob(os.path.join(template_bmi_dir,'*' + catID +'*.input'))
+                file1 = glob.glob(os.path.join(template_bmi_dir, '*' + catID + '*.input'))
                 if len(file1) == 0:
                     raise ValueError(f'No template BMI file found for {catID} in {template_bmi_dir}')
                 elif len(file1) > 1:
@@ -420,7 +428,7 @@ def create_noah_input_template(
                 with open(file1[0]) as f:
                     lines = f.readlines()
 
-                for i1,l1 in enumerate(lines):
+                for i1, l1 in enumerate(lines):
                     if 'startdate' in l1:
                         lines[i1] = "  " + "startdate".ljust(19) + "= " + "'" + startdate + "'" + "               ! UTC time start of simulation (YYYYMMDDhhmm)\n"
                     elif 'enddate' in l1:
@@ -436,15 +444,14 @@ def create_noah_input_template(
 
 
 def create_sft_smp_input(
-    catids: List[str],  
-    modules: List[str], 
-    attr_file: Union[str, Path],
-    cfe_dir: Union[str, Path],
-    forcing_dir: Union[str, Path], 
-    sft_dir: Union[str, Path], 
-    smp_dir: Union[str, Path], 
-)->None:
-
+        catids: List[str],
+        modules: List[str],
+        attr_file: Union[str, Path],
+        cfe_dir: Union[str, Path],
+        forcing_dir: Union[str, Path],
+        sft_dir: Union[str, Path],
+        smp_dir: Union[str, Path],
+) -> None:
     """ Create BMI configuration file for soil freeze and thaw module, and soil moisture profiles
 
     Parameters
@@ -479,33 +486,33 @@ def create_sft_smp_input(
     for catID in catids:
 
         # Read cfe BMI files
-        cfe_bmi_file = os.path.join(cfe_dir, fnmatch.filter(os.listdir(cfe_dir), '*'+catID+'*.txt')[0])
-        df = pd.read_table(cfe_bmi_file,  delimiter='=', names=["Params","Values"], index_col=0)
+        cfe_bmi_file = os.path.join(cfe_dir, fnmatch.filter(os.listdir(cfe_dir), '*' + catID + '*.txt')[0])
+        df = pd.read_table(cfe_bmi_file, delimiter='=', names=["Params", "Values"], index_col=0)
 
         # Obtain annual mean surface temperature as proxy for initial soil temperature
-        fdf = pd.read_table(os.path.join(forcing_dir, catID + '.csv'),  delimiter=',')
+        fdf = pd.read_table(os.path.join(forcing_dir, catID + '.csv'), delimiter=',')
         mtemp = round(fdf['T2D'].mean(), 2)
 
         # Create sft list
-        sft_lst = ['verbosity=none', 'soil_moisture_bmi=1', 'end_time=1.[d]', 'dt=1.0[h]', 
-                   'soil_params.smcmax=' + df.loc['soil_params.smcmax'].iloc[0], 
-                   'soil_params.b=' + df.loc['soil_params.b'].iloc[0], 
-                   'soil_params.satpsi=' + df.loc['soil_params.satpsi'].iloc[0], 
-                   'soil_params.quartz=' + str(dfa.loc[catID][[x for x in dfa.columns.to_list() if 'quartz' in x]].mean()) +'[]', 
-                   'ice_fraction_scheme=' + icefscheme, 
+        sft_lst = ['verbosity=none', 'soil_moisture_bmi=1', 'end_time=1.[d]', 'dt=1.0[h]',
+                   'soil_params.smcmax=' + df.loc['soil_params.smcmax'].iloc[0],
+                   'soil_params.b=' + df.loc['soil_params.b'].iloc[0],
+                   'soil_params.satpsi=' + df.loc['soil_params.satpsi'].iloc[0],
+                   'soil_params.quartz=' + str(dfa.loc[catID][[x for x in dfa.columns.to_list() if 'quartz' in x]].mean()) + '[]',
+                   'ice_fraction_scheme=' + icefscheme,
                    'soil_z=0.1,0.3,1.0,2.0[m]',
-                   'soil_temperature=' + ','.join([str(mtemp)]*4) + '[K]',
-                  ]
+                   'soil_temperature=' + ','.join([str(mtemp)] * 4) + '[K]',
+                   ]
         sft_bmi_file = os.path.join(sft_dir, catID + '_bmi_config_sft.txt')
         with open(sft_bmi_file, "w") as f:
             f.writelines('\n'.join(sft_lst))
 
         # Create smp list
-        smp_lst = ['verbosity=none', 
-               'soil_params.smcmax=' + df.loc['soil_params.smcmax'].iloc[0], 
-               'soil_params.b=' + df.loc['soil_params.b'].iloc[0], 
-               'soil_params.satpsi=' + df.loc['soil_params.satpsi'].iloc[0], 
-               'soil_z=0.1,0.3,1.0,2.0[m]']
+        smp_lst = ['verbosity=none',
+                   'soil_params.smcmax=' + df.loc['soil_params.smcmax'].iloc[0],
+                   'soil_params.b=' + df.loc['soil_params.b'].iloc[0],
+                   'soil_params.satpsi=' + df.loc['soil_params.satpsi'].iloc[0],
+                   'soil_z=0.1,0.3,1.0,2.0[m]']
         if 'cfes' in modules or 'cfex' in modules:
             smp_lst += ['soil_storage_model=conceptual', 'soil_storage_depth=2.0']
         elif 'lasam' in modules:
@@ -516,11 +523,10 @@ def create_sft_smp_input(
 
 
 def create_snow17_input(
-    catids: List[str],
-    attr_file: Union[str, Path],
-    snow17_input_dir: str
-)->None:
-
+        catids: List[str],
+        attr_file: Union[str, Path],
+        snow17_input_dir: str
+) -> None:
     """ Create BMI configuration file for Snow17
 
     Parameters
@@ -542,80 +548,80 @@ def create_snow17_input(
     dfa.set_index("divide_id", inplace=True)
 
     param_list = ['hru_id hru2 hru1',
-            'hru_area 2994.7 1271.3',
-            'latitude 47.78 47.78',
-            'elev 1612.50 2153.35',
-            'scf 2.15177 1.86124',
-            'mfmax 0.930472 0.754924',
-            'mfmin 0.137 0.160',
-            'uadj 0.003103 0.208042',
-            'si 1515.00 1515.00',
-            'pxtemp 0.713424 0.220934',
-            'nmf 0.150 0.150',
-            'tipm 0.200 0.050',
-            'mbase 0.000 0.000',
-            'plwhc 0.030 0.030',
-            'daygm 0.300 0.200',
-            'adc1 0.050 0.050',
-            'adc2 0.090 0.090',
-            'adc3 0.160 0.160',
-            'adc4 0.310 0.310',
-            'adc5 0.540 0.540',
-            'adc6 0.740 0.740',
-            'adc7 0.840 0.840',
-            'adc8 0.890 0.890',
-            'adc9 0.930 0.930',
-            'adc10 0.970 0.970',
-            'adc11 1.000 1.000']
+                  'hru_area 2994.7 1271.3',
+                  'latitude 47.78 47.78',
+                  'elev 1612.50 2153.35',
+                  'scf 2.15177 1.86124',
+                  'mfmax 0.930472 0.754924',
+                  'mfmin 0.137 0.160',
+                  'uadj 0.003103 0.208042',
+                  'si 1515.00 1515.00',
+                  'pxtemp 0.713424 0.220934',
+                  'nmf 0.150 0.150',
+                  'tipm 0.200 0.050',
+                  'mbase 0.000 0.000',
+                  'plwhc 0.030 0.030',
+                  'daygm 0.300 0.200',
+                  'adc1 0.050 0.050',
+                  'adc2 0.090 0.090',
+                  'adc3 0.160 0.160',
+                  'adc4 0.310 0.310',
+                  'adc5 0.540 0.540',
+                  'adc6 0.740 0.740',
+                  'adc7 0.840 0.840',
+                  'adc8 0.890 0.890',
+                  'adc9 0.930 0.930',
+                  'adc10 0.970 0.970',
+                  'adc11 1.000 1.000']
 
     for catID in catids:
-        input_file = os.path.join(snow17_input_dir, 'snow17-init-' +catID + '.namelist.input')
-        param_file = os.path.join(snow17_input_dir, 'snow17_params-' +catID + '.txt')
+        input_file = os.path.join(snow17_input_dir, 'snow17-init-' + catID + '.namelist.input')
+        param_file = os.path.join(snow17_input_dir, 'snow17_params-' + catID + '.txt')
 
         with open(param_file, "w") as f:
             f.writelines('\n'.join(param_list))
 
         input_list = ['&SNOW17_CONTROL',
-                '! === run control file for snow17bmi v. 1.x ===',
-                '',
-                '! -- basin config and path information',
-                'main_id             = "' + catID + '"     ! basin label or gage id',
-                'n_hrus              = 1            ! number of sub-areas in model',
-                'forcing_root        = "extern/snow17/test_cases/ex1/input/forcing/forcing.snow17bmi."',
-                'output_root         = "data/output/output.snow17bmi."',
-                'snow17_param_file   = "' + param_file + '"',
-                'output_hrus         = 1            ! output HRU results? (1=yes; 0=no)',
-                '',
-                '! -- run period information',
-                'start_datehr        = 2017120101   ! start date time, backward looking (check)',
-                'end_datehr          = 2017120123   ! end date time',
-                'model_timestep      = 3600        ! in seconds (86400 seconds = 1 day)',
-                '',
-                '! -- state start/write flags and files',
-                'warm_start_run      = 0  ! is this run started from a state file?  (no=0 yes=1)',
-                "write_states        = 0  ! write restart/state files for 'warm_start' runs (no=0 yes=1)",
-                '',
-                '! -- filenames only needed if warm_start_run = 1',
-                'snow_state_in_root  = "data/state/snow17_states."  ! input state filename root',
-                '',
-                '! -- filenames only needed if write_states = 1',
-                'snow_state_out_root = "data/state/snow17_states."  ! output states filename root',
-                '/',
-                ''
-                ]
+                      '! === run control file for snow17bmi v. 1.x ===',
+                      '',
+                      '! -- basin config and path information',
+                      'main_id             = "' + catID + '"     ! basin label or gage id',
+                      'n_hrus              = 1            ! number of sub-areas in model',
+                      'forcing_root        = "extern/snow17/test_cases/ex1/input/forcing/forcing.snow17bmi."',
+                      'output_root         = "data/output/output.snow17bmi."',
+                      'snow17_param_file   = "' + param_file + '"',
+                      'output_hrus         = 1            ! output HRU results? (1=yes; 0=no)',
+                      '',
+                      '! -- run period information',
+                      'start_datehr        = 2017120101   ! start date time, backward looking (check)',
+                      'end_datehr          = 2017120123   ! end date time',
+                      'model_timestep      = 3600        ! in seconds (86400 seconds = 1 day)',
+                      '',
+                      '! -- state start/write flags and files',
+                      'warm_start_run      = 0  ! is this run started from a state file?  (no=0 yes=1)',
+                      "write_states        = 0  ! write restart/state files for 'warm_start' runs (no=0 yes=1)",
+                      '',
+                      '! -- filenames only needed if warm_start_run = 1',
+                      'snow_state_in_root  = "data/state/snow17_states."  ! input state filename root',
+                      '',
+                      '! -- filenames only needed if write_states = 1',
+                      'snow_state_out_root = "data/state/snow17_states."  ! output states filename root',
+                      '/',
+                      ''
+                      ]
         with open(input_file, "w") as f:
             f.writelines('\n'.join(input_list))
 
-def create_ueb_input(
-    catids: List[str],
-    time_period: dict,
-    attr_file: Union[str, Path],
-    param_dir_source: Union[str, Path],
-    ueb_input_dir: str,
-    #sitevar_file_exists: bool,
-    bmi_dir: Union[str, Path]
-)->None:
 
+def create_ueb_input(
+        catids: List[str],
+        time_period: dict,
+        attr_file: Union[str, Path],
+        param_dir_source: Union[str, Path],
+        ueb_input_dir: str,
+        # sitevar_file_exists: bool,
+        bmi_dir: Union[str, Path]
+) -> None:
     """ Create BMI configuration file for ueb
 
     Parameters
@@ -635,19 +641,18 @@ def create_ueb_input(
     os.makedirs(ueb_input_dir, exist_ok=True)
 
     # Create symlink for constant parameter files
-    const_file_str = ['inputctr','outputctr','params']
+    const_file_str = ['inputctr', 'outputctr', 'params']
     const_files = {}
     for par in const_file_str:
-        src = Path(param_dir_source,'ueb_'+par+'.dat').absolute()
+        src = Path(param_dir_source, 'ueb_' + par + '.dat').absolute()
         if not os.path.exists(src):
             raise FileNotFoundError(src)
-        dst = os.path.join(ueb_input_dir,'ueb_'+par+'.dat')
+        dst = os.path.join(ueb_input_dir, 'ueb_' + par + '.dat')
         const_files.update({par: dst})
         with open(src) as f:
             if not os.path.exists(dst):
                 os.symlink(src, dst)
                 logger.info(f'Creating symlink from {src} to {dst}')
-
 
     # Read hydrofabric attribute file
     dfa = pd.read_parquet(attr_file)
@@ -655,23 +660,23 @@ def create_ueb_input(
 
     # sitevars file
     for catID in catids:
-        site_file = os.path.join(ueb_input_dir, 'ueb_sitevars-' +catID + '.dat')
+        site_file = os.path.join(ueb_input_dir, 'ueb_sitevars-' + catID + '.dat')
         if bmi_dir != '':
-            src = glob.glob(os.path.join(bmi_dir, 'ueb_sitevars*' + catID +'*'))
+            src = glob.glob(os.path.join(bmi_dir, 'ueb_sitevars*' + catID + '*'))
             if len(src) == 0:
                 raise ValueError(f'No sitevars file found for {catID} in {bmi_dir}')
-            elif len(src)> 1:
+            elif len(src) > 1:
                 raise ValueError(f'More than one sitevars file found for {catID} in {bmi_dir}')
-            with open(src[0]) as f:   
+            with open(src[0]) as f:
                 # create a symbolic link
                 if os.path.exists(site_file) or os.path.islink(site_file):
                     pass
-                    #logger.warning(f'File/link {dst} already exists')
-                else: 
+                    # logger.warning(f'File/link {dst} already exists')
+                else:
                     os.symlink(src[0], site_file)
                     logger.info(f'Creating symlink from {src[0]} to {site_file}')
 
-        else: # create the sitevars file based on a template file
+        else:  # create the sitevars file based on a template file
 
             # retrieve slope, aspect, lat and lon from precomputed attributes file
             tslp = dfa.loc[catID]['slope_mean']
@@ -688,10 +693,10 @@ def create_ueb_input(
             lines[96] = f'{lon}\n'
 
             with open(site_file, 'w') as outfile:
-                outfile.writelines(lines) 
+                outfile.writelines(lines)
 
-    # ueb-init files need to be created for both calibration and validation runs
-    for run_name in ['calib','valid']:
+                # ueb-init files need to be created for both calibration and validation runs
+    for run_name in ['calib', 'valid']:
         if time_period['run_time_period'][run_name][0] and time_period['run_time_period'][run_name][1]:
             # Date
             startdate = time_period['run_time_period'][run_name][0]
@@ -699,35 +704,34 @@ def create_ueb_input(
             startdate = startdate.strftime("%Y%m%d%H%M")
             enddate = datetime.datetime.strptime(time_period['run_time_period'][run_name][1], "%Y-%m-%d %H:%M:%S").strftime("%Y%m%d%H%M")
             for catID in catids:
-                input_file = os.path.join(ueb_input_dir, 'ueb-init-' +catID + '_' + run_name +'.dat')
-                site_file = os.path.join(ueb_input_dir, 'ueb_sitevars-' +catID + '.dat')
+                input_file = os.path.join(ueb_input_dir, 'ueb-init-' + catID + '_' + run_name + '.dat')
+                site_file = os.path.join(ueb_input_dir, 'ueb_sitevars-' + catID + '.dat')
                 input_list = [
-                          'UEBGrid Model Driver Test for TWDEF',
-                          const_files['params'],
-                          site_file,
-                          const_files['inputctr'],
-                          const_files['outputctr'],
-                          param_dir_source + '/aggout.nc ',
-                          param_dir_source + '/watershed_onecell.nc',
-                          'watershed y x',
-                          f'{startdate[:4]} {startdate[4:6]} {startdate[6:8]} {startdate[8:10]}.0',
-                          f'{enddate[:4]} {enddate[4:6]} {enddate[6:8]} {enddate[8:10]}.0',
-                          '1.0',
-                          '-7.0',
-                          '0',
-                          '1 15 16',
-                          '1 1'
+                    'UEBGrid Model Driver Test for TWDEF',
+                    const_files['params'],
+                    site_file,
+                    const_files['inputctr'],
+                    const_files['outputctr'],
+                    param_dir_source + '/aggout.nc ',
+                    param_dir_source + '/watershed_onecell.nc',
+                    'watershed y x',
+                    f'{startdate[:4]} {startdate[4:6]} {startdate[6:8]} {startdate[8:10]}.0',
+                    f'{enddate[:4]} {enddate[4:6]} {enddate[6:8]} {enddate[8:10]}.0',
+                    '1.0',
+                    '-7.0',
+                    '0',
+                    '1 15 16',
+                    '1 1'
                 ]
                 with open(input_file, "w") as f:
                     f.writelines('\n'.join(input_list))
 
 
 def create_sac_input(
-    catids: List[str],
-    attr_file: Union[str, Path],
-    sac_input_dir: str
-)->None:
-
+        catids: List[str],
+        attr_file: Union[str, Path],
+        sac_input_dir: str
+) -> None:
     """ Create BMI configuration file for Snow17
 
     Parameters
@@ -748,70 +752,69 @@ def create_sac_input(
     dfa.set_index("divide_id", inplace=True)
 
     param_list = ['hru_id hru1 hru2',
-            'hru_area 2994.7 1271.3',
-            'uztwm 29.7257 31.9842',
-            'uzfwm 22.8335 86.7465',
-            'lztwm 18.6968 105.763',
-            'lzfpm 419.418 956.052',
-            'lzfsm 215.932 212.664',
-            'adimp 0.0000 0.0000',
-            'uzk 0.8910 0.9266',
-            'lzpk 0.0032 0.0037',
-            'lzsk 0.2551 0.2633',
-            'zperc 281.8200 267.7290',
-            'rexp 5.2353 5.0608',
-            'pctim 0.0000 0.0000',
-            'pfree 0.3142 0.2880',
-            'riva 0.0100 0.0100',
-            'side 0.0000 0.0000',
-            'rserv 0.3000 0.3000']
+                  'hru_area 2994.7 1271.3',
+                  'uztwm 29.7257 31.9842',
+                  'uzfwm 22.8335 86.7465',
+                  'lztwm 18.6968 105.763',
+                  'lzfpm 419.418 956.052',
+                  'lzfsm 215.932 212.664',
+                  'adimp 0.0000 0.0000',
+                  'uzk 0.8910 0.9266',
+                  'lzpk 0.0032 0.0037',
+                  'lzsk 0.2551 0.2633',
+                  'zperc 281.8200 267.7290',
+                  'rexp 5.2353 5.0608',
+                  'pctim 0.0000 0.0000',
+                  'pfree 0.3142 0.2880',
+                  'riva 0.0100 0.0100',
+                  'side 0.0000 0.0000',
+                  'rserv 0.3000 0.3000']
 
     for catID in catids:
-        input_file = os.path.join(sac_input_dir, 'sac-init-' +catID + '.namelist.input')
-        param_file = os.path.join(sac_input_dir, 'sac_params-' +catID + '.txt')
+        input_file = os.path.join(sac_input_dir, 'sac-init-' + catID + '.namelist.input')
+        param_file = os.path.join(sac_input_dir, 'sac_params-' + catID + '.txt')
 
         with open(param_file, "w") as f:
             f.writelines('\n'.join(param_list))
 
         input_list = ['&SAC_CONTROL',
-                '! === run control file for sacbmi v. 1.x ===',
-                '',
-                '! -- basin config and path information',
-                'main_id             = "' + catID + '"     ! basin label or gage id',
-                'n_hrus              = 1            ! number of sub-areas in model',
-                'forcing_root        = "extern/sac-sma/sac-sma/test_cases/ex1/input/forcing/forcing.snow17bmi."',
-                'output_root         = ""',
-                'sac_param_file   = "' + param_file + '"',
-                'output_hrus         = 0            ! output HRU results? (1=yes; 0=no)',
-                '',
-                '! -- run period information',
-                'start_datehr        = 2015120112   ! start date time, backward looking (check)',
-                'end_datehr          = 2015123012   ! end date time',
-                'model_timestep      = 3600        ! in seconds (86400 seconds = 1 day)',
-                '',
-                '! -- state start/write flags and files',
-                'warm_start_run      = 0  ! is this run started from a state file?  (no=0 yes=1)',
-                "write_states        = 0  ! write restart/state files for 'warm_start' runs (no=0 yes=1)",
-                '',
-                '! -- filenames only needed if warm_start_run = 1',
-                'sac_state_in_root  = "../state/sac_states."  ! input state filename root',
-                '',
-                '! -- filenames only needed if write_states = 1',
-                'sac_state_out_root = "../state/sac_states."  ! output states filename root',
-                '/',
-                ''
-                ]
+                      '! === run control file for sacbmi v. 1.x ===',
+                      '',
+                      '! -- basin config and path information',
+                      'main_id             = "' + catID + '"     ! basin label or gage id',
+                      'n_hrus              = 1            ! number of sub-areas in model',
+                      'forcing_root        = "extern/sac-sma/sac-sma/test_cases/ex1/input/forcing/forcing.snow17bmi."',
+                      'output_root         = ""',
+                      'sac_param_file   = "' + param_file + '"',
+                      'output_hrus         = 0            ! output HRU results? (1=yes; 0=no)',
+                      '',
+                      '! -- run period information',
+                      'start_datehr        = 2015120112   ! start date time, backward looking (check)',
+                      'end_datehr          = 2015123012   ! end date time',
+                      'model_timestep      = 3600        ! in seconds (86400 seconds = 1 day)',
+                      '',
+                      '! -- state start/write flags and files',
+                      'warm_start_run      = 0  ! is this run started from a state file?  (no=0 yes=1)',
+                      "write_states        = 0  ! write restart/state files for 'warm_start' runs (no=0 yes=1)",
+                      '',
+                      '! -- filenames only needed if warm_start_run = 1',
+                      'sac_state_in_root  = "../state/sac_states."  ! input state filename root',
+                      '',
+                      '! -- filenames only needed if write_states = 1',
+                      'sac_state_out_root = "../state/sac_states."  ! output states filename root',
+                      '/',
+                      ''
+                      ]
         with open(input_file, "w") as f:
             f.writelines('\n'.join(input_list))
 
 
 def change_sac_snow17_input(
-    module: str,
-    catids: List[str], 
-    input_dir: Union[str, Path],
-    bmi_dir: Union[str, Path],
-)->None:
-
+        module: str,
+        catids: List[str],
+        input_dir: Union[str, Path],
+        bmi_dir: Union[str, Path],
+) -> None:
     """ copy existing config files for snow17/sac-sma and change path to sac_param_file in snow17/sac-sma namelist input file
 
     Parameters
@@ -826,11 +829,11 @@ def change_sac_snow17_input(
     None   
 
     """
-    if module not in ['sac','snow17']:
+    if module not in ['sac', 'snow17']:
         raise Exception(f'Model must be either "sac" or "snow17"')
-  
+
     # handle parameter file naming convention 
-    str0 = module+'_params_' if module=='sac' else module+'_params-'
+    str0 = module + '_params_' if module == 'sac' else module + '_params-'
 
     # parameter file entry in namelist file
     str1 = module + "_param_file"
@@ -840,21 +843,21 @@ def change_sac_snow17_input(
 
     # loop through all catchments
     for catID in catids:
-        
+
         # existing config files
         namelist_file0 = os.path.join(bmi_dir, module + '-init-{}'.format(catID) + '.namelist.input')
         param_file0 = os.path.join(bmi_dir, str0 + '{}'.format(catID) + '.txt')
 
         # new config files to be created
         namelist_file = os.path.join(input_dir, module + '-init-{}'.format(catID) + '.namelist.input')
-        param_file = os.path.join(input_dir, str0 + '{}'.format(catID) + '.txt')   
+        param_file = os.path.join(input_dir, str0 + '{}'.format(catID) + '.txt')
 
         # create symbolic link to the existing sac parameter file     
         if os.path.exists(param_file0):
             os.symlink(param_file0, param_file)
         else:
             raise Exception(f'Parameter file does not exist: {param_file0}')
-        
+
         # correct the path to sac parameter file in namelist input file
         if not os.path.exists(namelist_file0):
             raise Exception(f'Namelist file does not exist: {namelist_file0}')
@@ -875,11 +878,10 @@ def change_sac_snow17_input(
 
 
 def create_pet_input(
-    catids: List[str],
-    attr_file: Union[str, Path],
-    pet_input_dir: str
-)->None:
-
+        catids: List[str],
+        attr_file: Union[str, Path],
+        pet_input_dir: str
+) -> None:
     """ Create BMI configuration file for pet
 
     Parameters
@@ -925,15 +927,14 @@ def create_pet_input(
 
         with open(ini_file, "w") as f:
             f.writelines('\n'.join(ini_list))
-            
+
 
 def create_lasam_input(
-    catids: List[str],
-    input_dir: Union[str, Path], 
-    param_dir: Union[str, Path],
-)->None:
-
-    """ Create BMI configuration file for Lumped Arid and Semi-arid Model 
+        catids: List[str],
+        input_dir: Union[str, Path],
+        param_dir: Union[str, Path],
+) -> None:
+    """ Create BMI configuration file for Lumped Arid and Semi-arid Model
 
     Parameters
     ----------
@@ -951,34 +952,34 @@ def create_lasam_input(
 
     # make sure param_dir and parameter files exist
     if param_dir and os.path.exists(param_dir):
-        soil_param_file = os.path.join(param_dir,'vG_default_params.dat')
+        soil_param_file = os.path.join(param_dir, 'vG_default_params.dat')
         if not os.path.exists(soil_param_file):
             raise Exception(f'Soil params file does not exist: {soil_param_file}')
-        soil_class_file = os.path.join(param_dir,'lasam_soil_class.txt')
+        soil_class_file = os.path.join(param_dir, 'lasam_soil_class.txt')
         if not os.path.exists(soil_class_file):
             raise Exception(f'Soil class file does not exist: {soil_class_file}')
     else:
         raise Exception(f'lasam_parameter_dir does not exist: {param_dir}')
-    
+
     # Create lasam list
     lasam_lst = ['verbosity=none',
-                'soil_params_file=' + soil_param_file,
-               'layer_thickness=200.0[cm]',
-               'initial_psi=2000.0[cm]',
-               'timestep=300[sec]',
-               'endtime=1000[hr]',
-               'forcing_resolution=3600[sec]',
-               'ponded_depth_max=0[cm]',
-               'use_closed_form_G=false',
-               'layer_soil_type=',
-               'max_soil_types=25',
-               'wilting_point_psi=15495.0[cm]',
-               'giuh_ordinates=0.55,0.25,0.2',
-               'sft_coupled=true',
-               'soil_z=10,30,100.0,200.0[cm]',
-               'calib_params=true',
-               'field_capacity_psi=340.0[cm]',
-               ]
+                 'soil_params_file=' + soil_param_file,
+                 'layer_thickness=200.0[cm]',
+                 'initial_psi=2000.0[cm]',
+                 'timestep=300[sec]',
+                 'endtime=1000[hr]',
+                 'forcing_resolution=3600[sec]',
+                 'ponded_depth_max=0[cm]',
+                 'use_closed_form_G=false',
+                 'layer_soil_type=',
+                 'max_soil_types=25',
+                 'wilting_point_psi=15495.0[cm]',
+                 'giuh_ordinates=0.55,0.25,0.2',
+                 'sft_coupled=true',
+                 'soil_z=10,30,100.0,200.0[cm]',
+                 'calib_params=true',
+                 'field_capacity_psi=340.0[cm]',
+                 ]
 
     # Read soil class file
     df_soil = pd.read_csv(soil_class_file)
@@ -986,11 +987,11 @@ def create_lasam_input(
 
     # Create bmi config file
     for catID in catids:
-        #cfe_file_catID = glob.glob(os.path.join(cfe_bmi_dir, catID + '*.txt'))[0]
-        #df = pd.read_table(cfe_file_catID,  delimiter='=', names=["Params","Values"], index_col=0)
+        # cfe_file_catID = glob.glob(os.path.join(cfe_bmi_dir, catID + '*.txt'))[0]
+        # df = pd.read_table(cfe_file_catID,  delimiter='=', names=["Params","Values"], index_col=0)
         lasam_lst_catID = lasam_lst.copy()
         lasam_lst_catID[9] = lasam_lst_catID[9] + str(df_soil.loc[catID]['category'])
-        #lasam_lst_catID[12] = lasam_lst_catID[12] + df.loc['giuh_ordinates'][0]
+        # lasam_lst_catID[12] = lasam_lst_catID[12] + df.loc['giuh_ordinates'][0]
         lasam_bmi_file = os.path.join(input_dir, catID + '_bmi_config_lasam.txt')
 
         with open(lasam_bmi_file, "w") as f:
@@ -998,12 +999,11 @@ def create_lasam_input(
 
 
 def change_lasam_input(
-    catids: List[str], 
-    input_dir: Union[str, Path],
-    bmi_dir: Union[str, Path],
-    param_dir: Union[str, Path],
-)->None:
-
+        catids: List[str],
+        input_dir: Union[str, Path],
+        bmi_dir: Union[str, Path],
+        param_dir: Union[str, Path],
+) -> None:
     """ copy existing config files for lasam and change path to soil_params_file in lasam config file
 
     Parameters
@@ -1018,13 +1018,13 @@ def change_lasam_input(
     None   
 
     """
-  
+
     # create input directory for storing new config files              
     os.makedirs(input_dir, exist_ok=True)
 
     # make sure param_dir exists
     if param_dir and os.path.exists(param_dir):
-        param_file = os.path.join(param_dir,'vG_default_params.dat')
+        param_file = os.path.join(param_dir, 'vG_default_params.dat')
         if not os.path.exists(param_file):
             raise Exception(f'Soil_params_file does not exist: {param_file}')
     else:
@@ -1038,7 +1038,7 @@ def change_lasam_input(
 
         # new config file to be created
         config_file = os.path.join(input_dir, '{}_bmi_config_lasam'.format(catID) + '.txt')
-        
+
         # correct the path to soil_params_file in config file
         if not os.path.exists(config_file0):
             raise Exception(f'Namelist file does not exist: {config_file0}')
@@ -1056,14 +1056,14 @@ def change_lasam_input(
         with open(config_file, 'w') as outfile:
             outfile.writelines(lines1)
 
-def change_smp_input(
-    catids: List[str], 
-    input_dir: Union[str, Path],
-    bmi_dir: Union[str, Path],
-    sm_frac_depth: float=0.4,
-    sm_profile_depth: float=0.1,
-)-> float:
 
+def change_smp_input(
+        catids: List[str],
+        input_dir: Union[str, Path],
+        bmi_dir: Union[str, Path],
+        sm_frac_depth: float = 0.4,
+        sm_profile_depth: float = 0.1,
+) -> float:
     """ copy existing config files for smp and change soil moisture depths as needed
 
     Parameters
@@ -1091,7 +1091,7 @@ def change_smp_input(
 
         # new config file to be created
         config_file = os.path.join(input_dir, '{}_bmi_config_smp'.format(catID) + '.txt')
-        
+
         # read config file
         if not os.path.exists(config_file0):
             raise Exception(f'Config file for SMP does not exist: {config_file0}')
@@ -1102,10 +1102,10 @@ def change_smp_input(
         # adjust soil_moisture_fraction_depth if needed
         str1 = "soil_moisture_fraction_depth"
         idx = [i for i, s in enumerate(lines0) if str1 in s]
-        if len(idx)==0:
+        if len(idx) == 0:
             lines1 = lines1.append(f'{str1}={sm_frac_depth}[m]\n')
-        elif len(idx)==1:
-            lines1[idx[0]] = f'{str1}={sm_frac_depth}[m]\n'  
+        elif len(idx) == 1:
+            lines1[idx[0]] = f'{str1}={sm_frac_depth}[m]\n'
         else:
             raise Exception(f'More than one entry found for {str1} in config file: {config_file0}')
 
@@ -1115,7 +1115,7 @@ def change_smp_input(
             raise Exception(f'No entry or more than one entry found for "soil_z" in config file: {config_file0}')
         depths = lines1[idx[0]].split("=")[1].split("[")[0].split(',')
         depths = list(map(float, depths))
-        
+
         # make sure depths are in ascending order (since they are accumulative)
         is_ascending = all(earlier <= later for earlier, later in zip(depths, depths[1:]))
         if not is_ascending:
@@ -1126,9 +1126,9 @@ def change_smp_input(
         if unit1 == 'm':
             pass
         elif unit1 == "cm":
-            depths = [d/100 for d in depths]
+            depths = [d / 100 for d in depths]
         elif unit1 == "mm":
-            depths = [d/1000 for d in depths]
+            depths = [d / 1000 for d in depths]
         else:
             raise ValueError(f'Unit {unit1} is not supported for soil_z in {config_file0}; supported units are m, mm, and cm')
 
@@ -1140,40 +1140,40 @@ def change_smp_input(
                     depths[i1] = sm_frac_depth
                     break
             depths = depths[::-1]
-            if catID==catids[0]:
+            if catID == catids[0]:
                 logger.info(f'soil_z in {config_file0} is adjusted to include {str1} {sm_frac_depth}[m]')
 
         # adjust 1st element of soil_z for soil_moisture_profile output depth (soil_moisture_profile from SMP is an array and 
         # currently ngen can only output the first element of arrays)
         if sm_profile_depth != depths[0]:
             if sm_profile_depth > depths[1]:
-                if catID==catids[0]:
-                    logger.warning(f'sm_profile_depth ({sm_profile_depth}m) is greater than soil_z[1] in {config_file0}; output soil moisture at soil_z[0]({depths[0]}m) instead')
+                if catID == catids[0]:
+                    logger.warning(
+                        f'sm_profile_depth ({sm_profile_depth}m) is greater than soil_z[1] in {config_file0}; output soil moisture at soil_z[0]({depths[0]}m) instead')
             else:
                 depths[0] = sm_profile_depth
-                if catID==catids[0]:
-                    logger.info(f'soil_z[0] in { config_file0} reset to {sm_profile_depth} to output soil moisture value properly')
+                if catID == catids[0]:
+                    logger.info(f'soil_z[0] in {config_file0} reset to {sm_profile_depth} to output soil moisture value properly')
 
         list_depth = ",".join(list(map(str, depths)))
         lines1[idx[0]] = f'soil_z={list_depth}[m]\n'
 
         # Save to new config file
-        if os.path.exists(config_file) and catID==catids[0]:
+        if os.path.exists(config_file) and catID == catids[0]:
             logger.info(f'Config file {config_file} exists; overwrite it')
         with open(config_file, 'w') as outfile:
             outfile.writelines(lines1)
-    
+
     return depths[0]
 
 
 def change_topmodel_input(
-    catID: str, 
-    runfile: Union[str, Path], 
-    paramsfile: Union[str, Path], 
-    subcatfile: Union[str, Path], 
-    inputDir: Union[str, Path],
-)->None:
-
+        catID: str,
+        runfile: Union[str, Path],
+        paramsfile: Union[str, Path],
+        subcatfile: Union[str, Path],
+        inputDir: Union[str, Path],
+) -> None:
     """ change options in TOPMODEL input file
 
     Parameters
@@ -1200,7 +1200,7 @@ def change_topmodel_input(
 
     # read runfile
     with open(new_runfile, 'r') as infile:
-         list_lines = infile.readlines()
+        list_lines = infile.readlines()
     lst_lines = copy.deepcopy(list_lines)
 
     # Change directory in runfile
@@ -1209,8 +1209,8 @@ def change_topmodel_input(
     filePath = [os.path.join(os.path.dirname(inputDir), '{}'.format(catID) + '_forcing.csv'),
                 new_subcat, new_params, topmod_out, hyd_out]
 
-    for i in range(0,5):
-        lst_lines[i+2] = filePath[i] + '\n'
+    for i in range(0, 5):
+        lst_lines[i + 2] = filePath[i] + '\n'
 
     # Save file
     with open(new_runfile, 'w') as outfile:
@@ -1218,13 +1218,12 @@ def change_topmodel_input(
 
 
 def create_troute_config(
-    gpkg_file: Union[str, Path],
-    rt_cfg_file:  Union[str, Path],
-    start_date: str,
-    nts: int,
-    #reformat_dir: Union[str, Path],
-)->None:
-
+        gpkg_file: Union[str, Path],
+        rt_cfg_file: Union[str, Path],
+        start_date: str,
+        nts: int,
+        # reformat_dir: Union[str, Path],
+) -> None:
     """ Create routing configuration YAML file
 
     Parameters
@@ -1243,9 +1242,9 @@ def create_troute_config(
 
     # bmi_parameters 
     bmi_param = {"flowpath_columns": ["id", "toid", "lengthkm"],
-                 "attributes_columns": ['attributes_id', 
-                                        #'rl_gages',
-                                        #'rl_NHDWaterbodyComID',
+                 "attributes_columns": ['attributes_id',
+                                        # 'rl_gages',
+                                        # 'rl_NHDWaterbodyComID',
                                         'gage',
                                         'WaterbodyID',
                                         'MusK',
@@ -1257,7 +1256,7 @@ def create_troute_config(
                                         'nCC',
                                         'TopWdthCC',
                                         'TopWdth'],
-                 "waterbody_columns": ['hl_link', 
+                 "waterbody_columns": ['hl_link',
                                        'ifd',
                                        'LkArea',
                                        'LkMxE',
@@ -1268,21 +1267,21 @@ def create_troute_config(
                                        'WeirE',
                                        'WeirL'],
                  "network_columns": ['network_id', 'hydroseq', 'hl_uri'],
-                }
+                 }
 
     # log_parameters
     log_param = {"showtiming": True, "log_level": 'DEBUG'}
 
     # network_topology_parameters
-    columns = {"key": "id",  
+    columns = {"key": "id",
                "downstream": "toid",
                "dx": "lengthkm",
                "n": "n",
                "ncc": "nCC",
                "s0": "So",
                "bw": "BtmWdth",
-               #"waterbody": "rl_NHDWaterbodyComID",
-               #"gages": "rl_gages",
+               # "waterbody": "rl_NHDWaterbodyComID",
+               # "gages": "rl_gages",
                "waterbody": "WaterbodyID",
                "gages": "gage",
                "tw": "TopWdth",
@@ -1291,27 +1290,27 @@ def create_troute_config(
                "musx": "MusX",
                "cs": "ChSlp",
                "alt": "alt",
-              }
+               }
 
-    dupseg = ["717696", "1311881", "3133581", "1010832", "1023120", "1813525", 
+    dupseg = ["717696", "1311881", "3133581", "1010832", "1023120", "1813525",
               "1531545", "1304859", "1320604", "1233435", "11816", "1312051",
-              "2723765", "2613174", "846266", "1304891", "1233595", "1996602", 
+              "2723765", "2613174", "846266", "1304891", "1233595", "1996602",
               "2822462", "2384576", "1021504", "2360642", "1326659", "1826754",
-              "572364", "1336910", "1332558", "1023054", "3133527", "3053788",  
-              "3101661", "2043487", "3056866", "1296744", "1233515", "2045165", 
+              "572364", "1336910", "1332558", "1023054", "3133527", "3053788",
+              "3101661", "2043487", "3056866", "1296744", "1233515", "2045165",
               "1230577", "1010164", "1031669", "1291638", "1637751",
-             ]
+              ]
 
     nwtopo_param = {"supernetwork_parameters": {"network_type": "HYFeaturesNetwork",
-                                                "geo_file_path": gpkg_file, 
-                                                "columns": columns, 
+                                                "geo_file_path": gpkg_file,
+                                                "columns": columns,
                                                 "duplicate_wb_segments": dupseg},
                     "waterbody_parameters": {"break_network_at_waterbodies": True,
                                              "level_pool": {"level_pool_waterbody_parameter_file_path": gpkg_file}},
-                   }
+                    }
 
     # compute_parameters
-    res_da = {"reservoir_persistence_da":{"reservoir_persistence_usgs": False,
+    res_da = {"reservoir_persistence_da": {"reservoir_persistence_usgs": False,
                                            "reservoir_persistence_usace": False},
               "reservoir_rfc_da": {"reservoir_rfc_forecasts": False,
                                    "reservoir_rfc_forecasts_time_series_path": None,
@@ -1319,59 +1318,60 @@ def create_troute_config(
                                    "reservoir_rfc_forecasts_offset_hours": 28,
                                    "reservoir_rfc_forecast_persist_days": 11},
               "reservoir_parameter_file": None,
-             }
-    
+              }
+
     stream_da = {"streamflow_nudging": False,
                  "diffusive_streamflow_nudging": False,
                  "gage_segID_crosswalk_file": None,
-                }
+                 }
 
     comp_param = {"parallel_compute_method": "by-subnetwork-jit-clustered",
-                 "subnetwork_target_size": 10000,
-                 "cpu_pool": 16,
-                 "compute_kernel": "V02-structured",
-                 "assume_short_ts": True,
-                 "restart_parameters": {"start_datetime": start_date},
-                 "forcing_parameters": {"qts_subdivisions": 12,
-                                        "dt": 300,
-                                        "qlat_input_folder": ".",
-                                        "qlat_file_pattern_filter": "nex-*", 
-                                        "nts": nts, 
-                                        "max_loop_size": divmod(nts*300, 3600)[0]+1},
-                 "data_assimilation_parameters": {"usgs_timeslices_folder": None,
-                                                  "usace_timeslices_folder": None,
-                                                  "timeslice_lookback_hours": 48, 
-                                                  "qc_threshold": 1, 
-                                                  "streamflow_da": stream_da,
-                                                  "reservoir_da": res_da},  
-                 }
+                  "subnetwork_target_size": 10000,
+                  "cpu_pool": 16,
+                  "compute_kernel": "V02-structured",
+                  "assume_short_ts": True,
+                  "restart_parameters": {"start_datetime": start_date},
+                  "forcing_parameters": {"qts_subdivisions": 12,
+                                         "dt": 300,
+                                         "qlat_input_folder": ".",
+                                         "qlat_file_pattern_filter": "nex-*",
+                                         "nts": nts,
+                                         "max_loop_size": divmod(nts * 300, 3600)[0] + 1},
+                  "data_assimilation_parameters": {"usgs_timeslices_folder": None,
+                                                   "usace_timeslices_folder": None,
+                                                   "timeslice_lookback_hours": 48,
+                                                   "qc_threshold": 1,
+                                                   "streamflow_da": stream_da,
+                                                   "reservoir_da": res_da},
+                  }
 
     # output_parameters
     output_param = {'stream_output': {'stream_output_directory': ".",
-                                      'stream_output_time': divmod(nts*300, 3600)[0]+1,
+                                      'stream_output_time': divmod(nts * 300, 3600)[0] + 1,
                                       'stream_output_type': '.nc',
-                                      'stream_output_internal_frequency': 60, 
-                                       },
-                   }
+                                      'stream_output_internal_frequency': 60,
+                                      },
+                    }
 
     # Combine all parameters
-    config = {"bmi_parameters": bmi_param, 
+    config = {"bmi_parameters": bmi_param,
               "log_parameters": log_param,
               "network_topology_parameters": nwtopo_param,
               "compute_parameters": comp_param,
               "output_parameters": output_param,
-             }
+              }
 
     # Save configuration into yaml file
     with open(rt_cfg_file, 'w') as file:
         yaml.dump(config, file, sort_keys=False, default_flow_style=False, indent=4)
 
+
 def var_mapping(
-    modules: List[str],
-    pet_in: str,
-    pcp_in: str,
-    output_dict: dict,
-)-> Dict[str,str]:
+        modules: List[str],
+        pet_in: str,
+        pcp_in: str,
+        output_dict: dict,
+) -> Dict[str, str]:
     """ create variable name mapping based on modules
     
     Parameters
@@ -1389,38 +1389,38 @@ def var_mapping(
         sm_out: output variable names for soil mositure fraction and soil moisture profile
 
     """
-    var_maps = {'input':{}, 'output':{}}
+    var_maps = {'input': {}, 'output': {}}
 
     # only needed when CFE is not coupled to SFT/SMP
     if ('cfes' in modules or 'cfex' in modules) and ('sft' not in modules) and ('smp' not in modules):
         var_maps['input']["ice_fraction_schaake"] = "sloth_ice_fraction_schaake"
         var_maps['input']["ice_fraction_xinanjiang"] = "sloth_ice_fraction_xinanjiang"
         var_maps['input']["soil_moisture_profile"] = "sloth_smp"
-        
+
     # PET
     if 'noah' in modules and 'pet' not in modules:
         var_maps['input'][pet_in] = "EVAPOTRANS"
-        
+
     # snowmelt
     if 'snow17' in modules:
-        var_maps['input'][pcp_in] = 'raim' 
+        var_maps['input'][pcp_in] = 'raim'
         if output_dict['output_swe']:
             var_maps['output']['swe_out'] = 'sneqv'
             var_maps['output']['swe_out_header'] = 'SWE_mm'
         else:
             var_maps['output']['swe_out'] = ''
     elif 'ueb' in modules:
-        var_maps['input'][pcp_in] = "SWIT" 
-        if output_dict['output_swe']:  
+        var_maps['input'][pcp_in] = "SWIT"
+        if output_dict['output_swe']:
             var_maps['output']['swe_out'] = 'SWE'
             var_maps['output']['swe_out_header'] = 'SWE_m'
         else:
             var_maps['output']['swe_out'] = ''
-    elif 'noah' in modules: # check noah last since it can also be included to provided ET
-        var_maps['input'][pcp_in] = "QINSUR" 
+    elif 'noah' in modules:  # check noah last since it can also be included to provided ET
+        var_maps['input'][pcp_in] = "QINSUR"
         if output_dict['output_swe']:
-            var_maps['output']['swe_out'] = 'SNEQV'  
-            var_maps['output']['swe_out_header'] = 'SWE_mm' 
+            var_maps['output']['swe_out'] = 'SNEQV'
+            var_maps['output']['swe_out_header'] = 'SWE_mm'
         else:
             var_maps['output']['swe_out'] = ''
     else:
@@ -1428,31 +1428,32 @@ def var_mapping(
 
     # soil moisture fraction
     if 'smp' in modules and output_dict['output_sm']:
-        var_maps['output']['sm_out'] = ['soil_moisture_fraction','soil_moisture_profile']
+        var_maps['output']['sm_out'] = ['soil_moisture_fraction', 'soil_moisture_profile']
         var_maps['output']['sm_out_header'] = ['sm_frac_' + str(output_dict['sm_frac_depth']) + 'm',
-                                               'sm_profile_' + str(output_dict['sm_profile_depth']) + 'm']   
+                                               'sm_profile_' + str(output_dict['sm_profile_depth']) + 'm']
     else:
         var_maps['output']['sm_out'] = ''
 
-    return var_maps     
+    return var_maps
+
 
 def get_model_type_name(
-    module: str            
+        module: str
 ) -> str:
-    return settings.modules_all.loc[settings.modules_all['module']==module,'name_config'].iloc[0]
+    return settings.modules_all.loc[settings.modules_all['module'] == module, 'name_config'].iloc[0]
+
 
 def create_realization_file(
-    workdir: Union[str, Path], 
-    lib_file: dict, 
-    bmi_dir: dict, 
-    forcing_dir: Union[str, Path], 
-    realization_file: Union[str, Path],
-    modules: List[str], 
-    time_period: dict, 
-    rt_dict: dict,
-    output_dict: dict,
-)-> None:
-
+        workdir: Union[str, Path],
+        lib_file: dict,
+        bmi_dir: dict,
+        forcing_dir: Union[str, Path],
+        realization_file: Union[str, Path],
+        modules: List[str],
+        time_period: dict,
+        rt_dict: dict,
+        output_dict: dict,
+) -> None:
     """ Create realization file for the specified model and module
 
     Parameters
@@ -1474,11 +1475,11 @@ def create_realization_file(
     """
 
     # Create symlinks for libraries
-    lib_mod = {} 
-    for key, value in lib_file.items(): 
+    lib_mod = {}
+    for key, value in lib_file.items():
         lib_mod_link = os.path.join(workdir, 'Input/' + os.path.basename(value))
         lib_mod.update({key: lib_mod_link})
-        if not os.path.exists(lib_mod_link): 
+        if not os.path.exists(lib_mod_link):
             os.symlink(value, lib_mod_link)
 
     model_configs = {}
@@ -1486,38 +1487,37 @@ def create_realization_file(
     smp_cfg_path_str = None
     if 'smp' in modules:
         smp_cfg_path_str = os.path.join(bmi_dir['smp'], '{{id}}_bmi_config_smp.txt')
-        
 
     # noah 
     if 'noah' in modules:
-        model_configs['noah'] = {"name": "bmi_fortran", 
-                     "params": {"name": "bmi_fortran", 
-                                "model_type_name": get_model_type_name('noah'), 
-                                "main_output_variable": "QINSUR",
-                                "library_file": lib_mod['noah'],
-                                "init_config": os.path.join(bmi_dir['noah'], '{{id}}_calib.input'),
-                                "allow_exceed_end_time": True, "fixed_time_step": False, "uses_forcing_file": False,
-                                "variables_names_map": {
-                                    "PRCPNONC": "atmosphere_water__liquid_equivalent_precipitation_rate",
-                                    "Q2": "atmosphere_air_water~vapor__relative_saturation",
-                                    "SFCTMP": "land_surface_air__temperature",
-                                    "UU": "land_surface_wind__x_component_of_velocity",
-                                    "VV": "land_surface_wind__y_component_of_velocity",
-                                    "LWDN": "land_surface_radiation~incoming~longwave__energy_flux",
-                                    "SOLDN": "land_surface_radiation~incoming~shortwave__energy_flux",
-                                    "SFCPRS": "land_surface_air__pressure"}}}
+        model_configs['noah'] = {"name": "bmi_fortran",
+                                 "params": {"name": "bmi_fortran",
+                                            "model_type_name": get_model_type_name('noah'),
+                                            "main_output_variable": "QINSUR",
+                                            "library_file": lib_mod['noah'],
+                                            "init_config": os.path.join(bmi_dir['noah'], '{{id}}_calib.input'),
+                                            "allow_exceed_end_time": True, "fixed_time_step": False, "uses_forcing_file": False,
+                                            "variables_names_map": {
+                                                "PRCPNONC": "atmosphere_water__liquid_equivalent_precipitation_rate",
+                                                "Q2": "atmosphere_air_water~vapor__relative_saturation",
+                                                "SFCTMP": "land_surface_air__temperature",
+                                                "UU": "land_surface_wind__x_component_of_velocity",
+                                                "VV": "land_surface_wind__y_component_of_velocity",
+                                                "LWDN": "land_surface_radiation~incoming~longwave__energy_flux",
+                                                "SOLDN": "land_surface_radiation~incoming~shortwave__energy_flux",
+                                                "SFCPRS": "land_surface_air__pressure"}}}
 
     # cfe or cfex
     if 'cfes' in modules or 'cfex' in modules:
         m1 = 'cfes' if 'cfes' in modules else 'cfex'
         model_configs[m1] = {"name": "bmi_c",
-                                "params": {"name": "bmi_c", 
-                                    "model_type_name": get_model_type_name(m1), 
-                                    "main_output_variable": "Q_OUT",
-                                    "library_file": lib_mod[m1],
-                                    "init_config": os.path.join(bmi_dir[m1], '{{id}}_bmi_config_cfe.txt'), 
-                                    "allow_exceed_end_time": True, "fixed_time_step": False, "uses_forcing_file": False,
-                                    "registration_function": "register_bmi_cfe"}}
+                             "params": {"name": "bmi_c",
+                                        "model_type_name": get_model_type_name(m1),
+                                        "main_output_variable": "Q_OUT",
+                                        "library_file": lib_mod[m1],
+                                        "init_config": os.path.join(bmi_dir[m1], '{{id}}_bmi_config_cfe.txt'),
+                                        "allow_exceed_end_time": True, "fixed_time_step": False, "uses_forcing_file": False,
+                                        "registration_function": "register_bmi_cfe"}}
 
         # variable name mapping section
         pet_in = "water_potential_evaporation_flux"
@@ -1525,18 +1525,18 @@ def create_realization_file(
         var_maps = var_mapping(modules, pet_in, pcp_in, output_dict)
 
         # module output variable for input to t-route
-        main_output_variable = "Q_OUT" 
+        main_output_variable = "Q_OUT"
 
-    # topmodel
+        # topmodel
     if 'topmodel' in modules:
         model_configs['topmodel'] = {"name": "bmi_c",
-                                    "params": {"name": "bmi_c", 
-                                        "model_type_name": get_model_type_name('topmodel'), 
-                                        "main_output_variable": "Qout",
-                                        "library_file": lib_mod['topmodel'],
-                                        "init_config": os.path.join(bmi_dir['topmodel'], '{{id}}_topmodel.run'),
-                                        "allow_exceed_end_time": True, "fixed_time_step": False, "uses_forcing_file": False,
-                                        "registration_function": "register_bmi_topmodel"}}
+                                     "params": {"name": "bmi_c",
+                                                "model_type_name": get_model_type_name('topmodel'),
+                                                "main_output_variable": "Qout",
+                                                "library_file": lib_mod['topmodel'],
+                                                "init_config": os.path.join(bmi_dir['topmodel'], '{{id}}_topmodel.run'),
+                                                "allow_exceed_end_time": True, "fixed_time_step": False, "uses_forcing_file": False,
+                                                "registration_function": "register_bmi_topmodel"}}
         # variable name mapping section
         pet_in = "water_potential_evaporation_flux"
         pcp_in = "atmosphere_water__liquid_equivalent_precipitation_rate"
@@ -1568,22 +1568,22 @@ def create_realization_file(
     # snow17
     if 'snow17' in modules:
         model_configs['snow17'] = {"name": "bmi_fortran",
-                                "params": {
-                                    "model_type_name": get_model_type_name('snow17'),
-                                    "library_file": lib_mod['snow17'],
-                                    "init_config": os.path.join(bmi_dir['snow17'], 'snow17-init-{{id}}.namelist.input'),
-                                    "allow_exceed_end_time": True, "fixed_time_step": False, "uses_forcing_file": False,
-                                    "main_output_variable": "raim",
-                                    "variables_names_map": {
-                                        "precip": "atmosphere_water__liquid_equivalent_precipitation_rate",
-                                        "tair": "land_surface_air__temperature"
-                                    }}}
+                                   "params": {
+                                       "model_type_name": get_model_type_name('snow17'),
+                                       "library_file": lib_mod['snow17'],
+                                       "init_config": os.path.join(bmi_dir['snow17'], 'snow17-init-{{id}}.namelist.input'),
+                                       "allow_exceed_end_time": True, "fixed_time_step": False, "uses_forcing_file": False,
+                                       "main_output_variable": "raim",
+                                       "variables_names_map": {
+                                           "precip": "atmosphere_water__liquid_equivalent_precipitation_rate",
+                                           "tair": "land_surface_air__temperature"
+                                       }}}
 
-    #ueb
+    # ueb
     if 'ueb' in modules:
         model_configs['ueb'] = {"name": "bmi_c++",
                                 "params": {
-                                    "name": "bmi_c++", 
+                                    "name": "bmi_c++",
                                     "model_type_name": get_model_type_name('ueb'),
                                     "library_file": lib_mod['ueb'],
                                     "init_config": os.path.join(bmi_dir['ueb'], 'ueb-init-{{id}}_calib.dat'),
@@ -1599,7 +1599,7 @@ def create_realization_file(
                                         "Qsi": "land_surface_radiation~incoming~shortwave__energy_flux",
                                         "AP": "land_surface_air__pressure"}}}
 
-    #pet 
+    # pet
     if 'pet' in modules:
         model_configs['pet'] = {"name": "bmi_c",
                                 "params": {
@@ -1614,87 +1614,87 @@ def create_realization_file(
     # sloth
     if 'sloth' in modules:
         model_configs['sloth'] = {"name": "bmi_c++",
-                                "params": {"name": "bmi_c++", 
-                                    "model_type_name": get_model_type_name('sloth'), 
-                                    "main_output_variable": "z", 
-                                    "library_file": lib_mod['sloth'], 
-                                    "init_config": '/dev/null',
-                                    "allow_exceed_end_time": True, 
-                                    "fixed_time_step": False, 
-                                    "uses_forcing_file": False}}
+                                  "params": {"name": "bmi_c++",
+                                             "model_type_name": get_model_type_name('sloth'),
+                                             "main_output_variable": "z",
+                                             "library_file": lib_mod['sloth'],
+                                             "init_config": '/dev/null',
+                                             "allow_exceed_end_time": True,
+                                             "fixed_time_step": False,
+                                             "uses_forcing_file": False}}
 
-        if 'cfes' in modules or 'cfex' in modules :
+        if 'cfes' in modules or 'cfex' in modules:
             if 'sft' not in modules:
                 model_params = {
                     "sloth_ice_fraction_schaake(1,double,m,node)": 0.0,
                     "sloth_ice_fraction_xinanjiang(1,double,1,node)": 0.0,
-			        "sloth_smp(1,double,1,node)": 0.0}
+                    "sloth_smp(1,double,1,node)": 0.0}
             else:
                 model_params = {
                     "soil_moisture_wetting_fronts(1,double,1,node)": 0.0,
-		            "soil_thickness_layered(1,double,1,node)": 0.0,
-		            "soil_depth_wetting_fronts(1,double,1,node)": 0.0,
-				    "num_wetting_fronts(1,int,1,node)": 1.0,
-			        "Qb_topmodel(1,double,1,node)": 0.0,
-				    "Qv_topmodel(1,double,1,node)": 0.0,
-				    "global_deficit(1,double,1,node)": 0.0}
+                    "soil_thickness_layered(1,double,1,node)": 0.0,
+                    "soil_depth_wetting_fronts(1,double,1,node)": 0.0,
+                    "num_wetting_fronts(1,int,1,node)": 1.0,
+                    "Qb_topmodel(1,double,1,node)": 0.0,
+                    "Qv_topmodel(1,double,1,node)": 0.0,
+                    "global_deficit(1,double,1,node)": 0.0}
         elif 'lasam' in modules:
             if 'sft' not in modules:
-                model_params = {"soil_temperature_profile(1,double,K,node)" : 275.15}
+                model_params = {"soil_temperature_profile(1,double,K,node)": 275.15}
             else:
                 model_params = {
-                    "sloth_soil_storage(1,double,m,node)" : 1.0E-10,
-                    "sloth_soil_storage_change(1,double,m,node)" : 0.0,
+                    "sloth_soil_storage(1,double,m,node)": 1.0E-10,
+                    "sloth_soil_storage_change(1,double,m,node)": 0.0,
                     "Qb_topmodel(1,double,1,node)": 0.0,
                     "Qv_topmodel(1,double,1,node)": 0.0,
                     "global_deficit(1,double,1,node)": 0.0,
                     "potential_evapotranspiration_rate(1,double,1,node)": 0.0}
 
-        model_configs['sloth']['params'] ['model_params'] = model_params
+        model_configs['sloth']['params']['model_params'] = model_params
 
     # sft
     if 'sft' in modules:
         model_configs['sft'] = {"name": "bmi_c++",
                                 "params": {"name": "bmi_c++",
-                                    "model_type_name": get_model_type_name('sft'), 
-                                    "main_output_variable": "num_cells",
-                                    "library_file": lib_mod['sft'],
-                                    "init_config": os.path.join(bmi_dir['sft'], '{{id}}_bmi_config_sft.txt'),
-                                    "allow_exceed_end_time": True, 
-                                    "uses_forcing_file": False,
-                                    "variables_names_map": {"ground_temperature" : "TGS"}}}
+                                           "model_type_name": get_model_type_name('sft'),
+                                           "main_output_variable": "num_cells",
+                                           "library_file": lib_mod['sft'],
+                                           "init_config": os.path.join(bmi_dir['sft'], '{{id}}_bmi_config_sft.txt'),
+                                           "allow_exceed_end_time": True,
+                                           "uses_forcing_file": False,
+                                           "variables_names_map": {"ground_temperature": "TGS"}}}
 
     # smp
     if 'smp' in modules:
         model_configs['smp'] = {"name": "bmi_c++",
-                                "params": {"name": "bmi_c++", 
-                                    "model_type_name": get_model_type_name('smp'),
-                                    "main_output_variable": "soil_water_table",
-                                    "library_file": lib_mod['smp'],
-                                    "init_config": os.path.join(bmi_dir['smp'], '{{id}}_bmi_config_smp.txt'),
-                                    "allow_exceed_end_time": True,
-                                    "uses_forcing_file": False,
-                                    "variables_names_map": {
-                                        "soil_storage": "SOIL_STORAGE",
-				                        "soil_storage_change": "SOIL_STORAGE_CHANGE"}}}
+                                "params": {"name": "bmi_c++",
+                                           "model_type_name": get_model_type_name('smp'),
+                                           "main_output_variable": "soil_water_table",
+                                           "library_file": lib_mod['smp'],
+                                           "init_config": os.path.join(bmi_dir['smp'], '{{id}}_bmi_config_smp.txt'),
+                                           "allow_exceed_end_time": True,
+                                           "uses_forcing_file": False,
+                                           "variables_names_map": {
+                                               "soil_storage": "SOIL_STORAGE",
+                                               "soil_storage_change": "SOIL_STORAGE_CHANGE"}}}
         if 'lasam' in modules:
             model_configs['smp']['params']["variables_names_map"] = {
-                                   "soil_storage" : "sloth_soil_storage",
-                                   "soil_storage_change" : "sloth_soil_storage_change",
-                                   "soil_moisture_wetting_fronts" : "soil_moisture_wetting_fronts",
-                                   "soil_depth_wetting_fronts" : "soil_depth_wetting_fronts",
-                                   "num_wetting_fronts" : "soil_num_wetting_fronts"}
+                "soil_storage": "sloth_soil_storage",
+                "soil_storage_change": "sloth_soil_storage_change",
+                "soil_moisture_wetting_fronts": "soil_moisture_wetting_fronts",
+                "soil_depth_wetting_fronts": "soil_depth_wetting_fronts",
+                "num_wetting_fronts": "soil_num_wetting_fronts"}
 
     # lasam
     if 'lasam' in modules:
         model_configs['lasam'] = {"name": "bmi_c++",
-                                "params": {"name": "bmi_c++",
-                                    "model_type_name": get_model_type_name('lasam'),
-                                    "main_output_variable": "precipitation_rate",
-                                    "library_file": lib_mod['lasam'],
-                                    "init_config": os.path.join(bmi_dir['lasam'], '{{id}}_bmi_config_lasam.txt'),
-                                    "allow_exceed_end_time": True,
-                                    "uses_forcing_file": False}}
+                                  "params": {"name": "bmi_c++",
+                                             "model_type_name": get_model_type_name('lasam'),
+                                             "main_output_variable": "precipitation_rate",
+                                             "library_file": lib_mod['lasam'],
+                                             "init_config": os.path.join(bmi_dir['lasam'], '{{id}}_bmi_config_lasam.txt'),
+                                             "allow_exceed_end_time": True,
+                                             "uses_forcing_file": False}}
 
         # variable name mapping section
         pet_in = "potential_evapotranspiration_rate"
@@ -1704,37 +1704,36 @@ def create_realization_file(
         # module output variable for input to t-route
         main_output_variable = "total_discharge"
 
-
     # Combine configurations
-    model_type_name = '_'.join([m1 for m1 in modules if m1 not in ['sloth','troute']])    
-    gbmain = {"name": "bmi_multi", 
+    model_type_name = '_'.join([m1 for m1 in modules if m1 not in ['sloth', 'troute']])
+    gbmain = {"name": "bmi_multi",
               "params": {"name": "bmi_multi", "model_type_name": model_type_name, "init_config": "",
-                         "allow_exceed_end_time": False, "fixed_time_step": False, 
+                         "allow_exceed_end_time": False, "fixed_time_step": False,
                          "uses_forcing_file": False,
                          "main_output_variable": main_output_variable}}
 
     # Output section
-    output_config = {'output_variables':[], 'output_header_fields':[]}
+    output_config = {'output_variables': [], 'output_header_fields': []}
     for key, value in output_dict.items():
-        if key=='output_swe' and var_maps['output']['swe_out'] != '':
+        if key == 'output_swe' and var_maps['output']['swe_out'] != '':
             if value:
                 output_config['output_variables'] = output_config['output_variables'] + [var_maps['output']['swe_out']]
                 output_config['output_header_fields'] = output_config['output_header_fields'] + [var_maps['output']['swe_out_header']]
 
-        elif key=='output_sm' and var_maps['output']['sm_out'] != '':
+        elif key == 'output_sm' and var_maps['output']['sm_out'] != '':
             if value:
                 output_config['output_variables'] = output_config['output_variables'] + var_maps['output']['sm_out']
-                output_config['output_header_fields'] = output_config['output_header_fields'] + var_maps['output']['sm_out_header']                
+                output_config['output_header_fields'] = output_config['output_header_fields'] + var_maps['output']['sm_out_header']
     if output_config['output_variables'] != []:
         gbmain['params']['output_variables'] = output_config['output_variables']
     if output_config['output_header_fields'] != []:
         gbmain['params']['output_header_fields'] = output_config['output_header_fields']
 
     # determine the RR module in the current formulation
-    rr_mod1 = [m1 for m1 in modules if 'Rainfall_runoff' in settings.modules_all.loc[settings.modules_all['module']==m1, 'process'].values[0]]
+    rr_mod1 = [m1 for m1 in modules if 'Rainfall_runoff' in settings.modules_all.loc[settings.modules_all['module'] == m1, 'process'].values[0]]
     if len(rr_mod1) == 0:
         raise Exception(f'No rainfall-runoff module is selected')
-    elif len(rr_mod1) >1:
+    elif len(rr_mod1) > 1:
         raise Exception(f'More than one rainfall-runoff module is selected: {rr_mod1}')
     rr_mod1 = rr_mod1[0]
 
@@ -1761,14 +1760,13 @@ def create_realization_file(
 
 
 def create_calib_config_file(
-    par_file: Union[str, Path], 
-    modules: List[str],
-    workdir: Union[str, Path], 
-    general_dict: dict,
-    model_dict: dict, 
-    config_yaml_file: Union[str, Path], 
-)->None: 
-
+        par_file: Union[str, Path],
+        modules: List[str],
+        workdir: Union[str, Path],
+        general_dict: dict,
+        model_dict: dict,
+        config_yaml_file: Union[str, Path],
+) -> None:
     """ Create configuration YAML file for calibration run
 
     Parameters
@@ -1790,7 +1788,7 @@ def create_calib_config_file(
     # If par_file (which contains calibration parameters and its initial, min and max values) exists,
     # read from that file directly; otherwise gather this information from predefined calib_params files for 
     # individual modules in the directory given by par_file
-    calib_modules_config = list(settings.modules_all.loc[settings.modules_all['calibratable'],'name_config'])
+    calib_modules_config = list(settings.modules_all.loc[settings.modules_all['calibratable'], 'name_config'])
     if os.path.isfile(par_file):
         df_params = pd.read_fwf(par_file).copy()
         df_params = df_params.loc[df_params['model'].isin(calib_modules_config)]
@@ -1798,14 +1796,14 @@ def create_calib_config_file(
         if os.path.isdir(par_file):
             df_params = pd.DataFrame()
             for m1 in modules:
-                m_ui = settings.modules_all.loc[settings.modules_all['module']==m1,'name_ui'].iloc[0]
-                m_config = settings.modules_all.loc[settings.modules_all['module']==m1,'name_config'].iloc[0]
+                m_ui = settings.modules_all.loc[settings.modules_all['module'] == m1, 'name_ui'].iloc[0]
+                m_config = settings.modules_all.loc[settings.modules_all['module'] == m1, 'name_config'].iloc[0]
                 if m_config in calib_modules_config:
                     f1 = os.path.join(par_file, 'calib_params_' + m_ui + '.csv')
                     if not os.path.exists(f1):
                         logger.warning(f'Folder {par_file} does not contain calibration parameter file for {m_ui}')
                         continue
-                    df_tmp = pd.read_csv(f1,sep=None,comment='#',engine='python')
+                    df_tmp = pd.read_csv(f1, sep=None, comment='#', engine='python')
                     df_tmp['model'] = m_config
                     df_params = pd.concat([df_params, df_tmp], ignore_index=True)
         else:
@@ -1813,16 +1811,16 @@ def create_calib_config_file(
 
     if len(df_params) == 0:
         raise Exception(f'No calibratable parameters found for the list of modules: {modules}')
-    
+
     df_params.set_index('param', inplace=True)
     calib_params = df_params.groupby('model').groups
 
     params_range_dict = {}
     for k, v in calib_params.items():
         params_range = []
-        for m in v:   
-            params_range.append({'name': m, 'min': float(df_params.query('model==@k').loc[m]['min']), 
-                                 'max': float(df_params.query('model==@k').loc[m]['max']), 
+        for m in v:
+            params_range.append({'name': m, 'min': float(df_params.query('model==@k').loc[m]['min']),
+                                 'max': float(df_params.query('model==@k').loc[m]['max']),
                                  'init': float(df_params.query('model==@k').loc[m]['init'])})
         params_range_dict.update({k: params_range})
 
@@ -1837,7 +1835,7 @@ def create_calib_config_file(
 
     model_dict['binary'] = ngen_file_link
     basin_yaml['model'] = model_dict
-    basin_yaml['model']['params'] = params_range_dict 
+    basin_yaml['model']['params'] = params_range_dict
 
     # Save configuration into yaml file
     with open(config_yaml_file, 'w') as file:
