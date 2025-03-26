@@ -119,37 +119,36 @@ def create_walk_file(
         nex_id = df_cat.loc[x, 'toid']
         catcw = {x: {"Gage_no": ""}}
 
-        if nex_id not in df_nexus.index:
-            raise Exception(f"Gage id {gageID}: nex_id '{nex_id}' not found in df_nexus index for file {gpkg_file}")
 
-        try:
-            hu_list = df_nexus.loc[nex_id, 'hl_uri']
-        except KeyError:
-            raise Exception(f"Gage id {gageID}: nex_id '{nex_id}' could not be accessed in df_nexus when retrieving hl_uri for file {gpkg_file}")
+        if nex_id in df_nexus.index:
+            try:
+                hu_list = df_nexus.loc[nex_id, 'hl_uri']
+            except KeyError:
+                raise Exception(f"Gage id {gageID}: nex_id '{nex_id}' could not be accessed in df_nexus when retrieving hl_uri for file {gpkg_file}")
 
-        if isinstance(hu_list, str) or hu_list is None:
-            hu_list = [hu_list]
-        elif isinstance(hu_list, pd.Series):
-            hu_list = list(hu_list)
-        else:
-            raise Exception(f"Gage id {gageID}: Unsupported return value for hl_uri; must be None, str, or pd.Series (got {type(hu_list)}) for file {gpkg_file}")
-        for hu in hu_list:
-            if hu and hu.lower().startswith('gage'):
-                if len(hu.split(',')) > 1 and gageID in hu:
-                    gage = gageID
-                else:
-                    gage = hu.split('-')[1]
-                gageid.append(gage)
-                if gage == gageID:
-                    subdf = df_flowpaths.loc[[df_cat.loc[x, 'toid']]]
-                    if subdf.shape[0] == 1:
-                        catcw = {x: {"Gage_no": gage}}
-                        break
+            if isinstance(hu_list, str) or hu_list is None:
+                hu_list = [hu_list]
+            elif isinstance(hu_list, pd.Series):
+                hu_list = list(hu_list)
+            else:
+                raise Exception(f"Gage id {gageID}: Unsupported return value for hl_uri; must be None, str, or pd.Series (got {type(hu_list)}) for file {gpkg_file}")
+            for hu in hu_list:
+                if hu and hu.lower().startswith('gage'):
+                    if len(hu.split(',')) > 1 and gageID in hu:
+                        gage = gageID
                     else:
-                        # Select nearest one among multiple catchments draining to the gage
-                        if subdf['id'].iloc[-1].replace('wb', 'cat') == x:
+                        gage = hu.split('-')[1]
+                    gageid.append(gage)
+                    if gage == gageID:
+                        subdf = df_flowpaths.loc[[df_cat.loc[x, 'toid']]]
+                        if subdf.shape[0] == 1:
                             catcw = {x: {"Gage_no": gage}}
                             break
+                        else:
+                            # Select nearest one among multiple catchments draining to the gage
+                            if subdf['id'].iloc[-1].replace('wb', 'cat') == x:
+                                catcw = {x: {"Gage_no": gage}}
+                                break
 
         cw.update(catcw)
 
