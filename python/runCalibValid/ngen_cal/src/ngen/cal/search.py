@@ -168,8 +168,8 @@ def _evaluate(i: int, calibration_object: 'Evaluatable', agent: 'Agent', first_i
     # Save global best cost, and plot
     if agent.algorithm !='dds':
         cost_iter_file = calibration_object.write_cost_iter_file(i, agent.workdir)
-        if len(glob.glob('*.log'))==1:
-            plot_cost_func(calibration_object, agent, cost_iter_file, agent.algorithm, calib_iter=True)    
+        #if len(glob.glob('*.log'))==1:   #comment out plot_cost_func here since it is also called right below
+        #    plot_cost_func(calibration_object, agent, cost_iter_file, agent.algorithm, calib_iter=True)    
 
     # Plot metrics, parameters and output
     if len(glob.glob('*.log'))==1 and i%calibration_object.save_plot_iter_freq==0:

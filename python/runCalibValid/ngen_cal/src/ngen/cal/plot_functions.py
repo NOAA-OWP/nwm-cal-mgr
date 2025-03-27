@@ -735,6 +735,7 @@ def plot_cost_hist(
     logger.info('---Plotting Convergence Curve for Global and Local Best Values---')
 
     # Read file
+    print(f'cost_file = {cost_file}') # check which file it is trying to open
     df = pd.read_csv(cost_file)
     df.pop('iteration')
 
