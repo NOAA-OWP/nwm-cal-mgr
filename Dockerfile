@@ -19,11 +19,15 @@ RUN set -eux; \
     chmod +x /ngen-app/bin/run-ngen-cal.sh
 
 RUN set -eux; \
-	\
-    pip3 install -r ngen-cal/requirements.txt ; \
 # Lock numpy and netcdf4 versions so t-route doesn't break
     pip3 install "numpy==1.26.4" "netcdf4<=1.6.3" ; \
     pip3 install "hydrotools.events==1.1.5" "hydrotools.nwis-client==3.3.1" ; \
+    pip3 cache purge
+
+COPY requirements.txt .
+RUN set -eux; \
+    pip3 install -r ngen-cal/requirements.txt ; \
+    rm ngen-cal/requirements.txt ;\
     pip3 cache purge
 
 WORKDIR /ngen-app/
