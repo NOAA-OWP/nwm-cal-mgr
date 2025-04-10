@@ -180,6 +180,7 @@ class NgenBase(ModelExec):
             fdata_copy = fdata.copy()[['Time','RAINRATE']]
             fdata_copy['Time'] = pd.DatetimeIndex(fdata_copy['Time'])
             fdata_copy.set_index('Time', inplace=True)
+            fdata_copy = fdata_copy.sort_index()
             fdata_copy = fdata_copy.loc[start_date:end_date]
             flst.append(fdata_copy)
 
