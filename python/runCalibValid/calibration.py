@@ -113,7 +113,22 @@ def main(general: General, model_conf):
     # set environment variables for ngen+modules log level settings
     import numpy as np
 
-    log_level_array = np.array([['ngen_ll', 'ERROR'], ['sft_ll', 'INFO'], ['smp_ll', 'INFO'], ['cfe_ll', 'INFO'], ['ueb_ll', 'INFO'], ['t-route_ll', 'DEBUG'], ['snow-17_ll', 'INFO'], ['noahowp_ll', 'INFO'], ['sacsma_ll', 'INFO'], ['lasam_ll', 'INFO'], ['schism_ll', 'INFO'], ['sfincs_ll', 'INFO'], ['topoflow_ll', 'INFO'], ['gc2d_ll', 'INFO']])  # 2D array
+    log_level_array = np.array([
+        ['NGEN_LOGLEVEL', 'INFO'], 
+        ['SFT_LOGLEVEL', 'INFO'], 
+        ['SMP_LOGLEVEL', 'INFO'],
+        ['CFE_LOGLEVEL', 'INFO'],
+        ['UEB_BMI_LOGLEVEL', 'INFO'], 
+        ['TROUTE_LOGLEVEL', 'DEBUG'], 
+        ['SNOW17_LOGLEVEL', 'INFO'], 
+        ['NOAHOWP_LOGLEVEL', 'INFO'], 
+        ['SACSMA_LOGLEVEL', 'INFO'], 
+        ['LASAM_LOGLEVEL', 'INFO'], 
+        ['SCHISM_LOGLEVEL', 'INFO'], 
+        ['SFINCS_LOGLEVEL', 'INFO'], 
+        ['TOPOFLOW_LOGLEVEL', 'INFO'], 
+        ['TOPMODEL_LOGLEVEL', 'INFO']
+        ])  # 2D array
     logging.info("Setting environment variables for log level settings of ngen and it's sub-modules")
     for i in range(len(log_level_array)):
         logging.info(f"\t{log_level_array[i,0]} = {log_level_array[i,1]}")
