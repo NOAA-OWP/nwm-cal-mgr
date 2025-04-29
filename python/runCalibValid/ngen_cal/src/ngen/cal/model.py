@@ -21,7 +21,7 @@ except ImportError:
     from typing_extensions import Literal
 
 import pandas as pd
-from pydantic import BaseModel, DirectoryPath, conint, PyObject, validator, Field
+from pydantic import BaseModel, DirectoryPath, conint, PyObject, validator, Field, FilePath
 import yaml
 
 from .strategy import Objective
@@ -613,6 +613,27 @@ class EvaluationOptions(BaseModel):
 
         return start_iteration
 
+
+
+class SimpleModelExec(BaseModel, Configurable):
+    type: Literal['none']
+    binary: str
+    args: Optional[str] = None
+
+    realization: FilePath
+    catchments: FilePath
+    nexus: FilePath
+
+    def get_binary(self) -> str:
+        return self.binary
+
+    def get_args(self) -> str:
+        if self.args:
+            return self.args
+        return f'{self.catchments.resolve()} "all" {self.nexus.resolve()} "all" {self.realization.resolve()}'
+
+    def update_config(self, *args, **kwargs):
+        return None
 
 class ModelExec(BaseModel, Configurable):
     """

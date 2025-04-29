@@ -15,8 +15,9 @@ import pandas as pd
 
 from .strategy import Algorithm
 from ngen.cal.meta import JobMeta
-from .configuration import Model
+from .configuration import Model, SimpleModel
 from .utils import pushd
+from .ngen import Ngen
 
 import logging
 logger = logging.getLogger(__name__)
@@ -77,14 +78,17 @@ class Agent(BaseAgent):
     """This is class for agent."""
     def __init__(self, model_conf: dict, workdir: 'Path', general: 'General', log: bool=False, restart: bool=False, agent_counter=0):
         """Construct attributes for the Agent class."""
+        if hasattr(general, 'singleexec_output') and general.singleexec_output:
+            workdir = general.singleexec_output
         self._workdir = workdir
         self._job = None
         self._run_name = general.name 
-        self._params = general.strategy.parameters
+        self._params = general.strategy.parameters if general.strategy.parameters is not None else {}
         self._algorithm = general.strategy.algorithm.value
         self._yaml_file = general.yaml_file
         self._calib_path = general.calib_path
         self._valid_path = general.valid_path
+        self._calibratable = general.calibratable
         self._general = general
         if restart and 'calib' in self._run_name:
             # find prior ngen workdirs
@@ -114,6 +118,12 @@ class Agent(BaseAgent):
             os.makedirs(self._plot_iter_path, exist_ok=True)
 
         if log and 'valid' in self._run_name:
+            # Use single execution path if defined
+            if hasattr(general, 'singleexec_output') and general.singleexec_output:
+                self._job = JobMeta(model_conf['type'], general.singleexec_output, log=log)
+            else:
+                self._job = JobMeta(model_conf['type'], workdir, log=log)
+
             self._valid_path_output = os.path.join(self._job.workdir, 'Output_Valid') 
             self._valid_path_plot = os.path.join(self._workdir, 'Plot_Valid')
             if self._run_name not in ['valid_control','valid_best']:
@@ -126,11 +136,17 @@ class Agent(BaseAgent):
 
         model_conf['workdir'] = self.job.workdir
         try:
-            self._model = Model(model=model_conf)
+            # print(model_conf)
+            if self._calibratable:
+                self._model = Model(model=model_conf)
+            else:
+                self._model = SimpleModel(model=model_conf)
         except ValidationError as e:
             print(f'validation error: {e.json()}')
             raise
-        self._model.model.resolve_paths()
+        #self._model.model.resolve_paths()
+        if isinstance(self._model.model, Ngen):
+            self._model.model.resolve_paths()
 
     @property
     def parameters(self) -> 'Mapping[str, Any]':

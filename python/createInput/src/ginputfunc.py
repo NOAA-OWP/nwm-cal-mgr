@@ -25,6 +25,16 @@ logging.basicConfig(level=logging.INFO)
 from tempfile import mkstemp
 from createInput import settings
 
+class QuotedDumper(yaml.SafeDumper):
+    pass
+
+class UnquotedDumper(yaml.SafeDumper):
+    pass
+
+def quoted_str_presenter(dumper, data):
+    return dumper.represent_scalar('tag:yaml.org,2002:str', data, style="'")
+
+QuotedDumper.add_representer(str, quoted_str_presenter)
 
 def replace_path(source_file_path, par_path, data_type_codes):
     fh, target_file_path = mkstemp()
@@ -51,6 +61,7 @@ __all__ = [
     'change_smp_input',
     'create_lasam_input',
     'change_lasam_input',
+    'create_lstm_input',
     'create_snow17_input',
     'create_ueb_input',
     'create_sac_input',
@@ -808,6 +819,163 @@ def create_sac_input(
             f.writelines('\n'.join(input_list))
 
 
+def create_lstm_config(
+    lstm_input_dir: str
+) -> None:
+
+    output_file = os.path.join(lstm_input_dir, 'config.yml')
+    data_dir = os.path.join(lstm_input_dir, 'data')
+    run_dir = lstm_input_dir #os.path.join(lstm_input_dir, 'run')
+    img_log_dir = os.path.join(lstm_input_dir, 'img_log')
+    validation_basin_file = ""
+
+    train_basin_file = f"{data_dir}/list_515_camels_basins_aorc.txt"
+    test_basin_file = train_basin_file
+    train_dir = f"{run_dir}/train_data"
+
+    config = {
+        'allow_subsequent_nan_losses': 1000,
+        'batch_size': 256,
+        'clip_gradient_norm': 1,
+        'clip_targets_to_zero': ['QObs(mm/h)'],
+        'commit_hash': 'a2e9bb2',
+        'data_dir': data_dir,
+        'dataset': 'hourly_camels_us',
+        'device': 'cuda:0',
+        'dynamic_inputs': ['APCP_surface', 'TMP_2maboveground'],
+        'epochs': 9,
+        'experiment_name': 'nh_AORC_hourly_slope_elev_precip_temp_seq999_seed101',
+        'forcings': ['aorc_hourly'],
+        'head': 'regression',
+        'hidden_size': 126,
+        'img_log_dir': img_log_dir,
+        'initial_forget_bias': 3,
+        'learning_rate': {
+            0: 0.001,
+            2: 0.0008,
+            4: 0.0005
+        },
+        'log_interval': 5,
+        'log_n_figures': 1,
+        'log_tensorboard': False,
+        'loss': 'NSE',
+        'metrics': ['NSE', 'KGE'],
+        'model': 'cudalstm',
+        'num_workers': 16,
+        'number_of_basins': 515,
+        'optimizer': 'Adam',
+        'output_activation': 'linear',
+        'output_dropout': 0.4,
+        'package_version': '1.10.0',
+        'predict_last_n': 1,
+        'run_dir': run_dir,
+        'save_weights_every': 1,
+        'seed': 101,
+        'seq_length': 999,
+        'static_attributes': ['elev_mean', 'slope_mean'],
+        'target_variables': ['QObs(mm/h)'],
+        'test_basin_file': test_basin_file,
+        'test_end_date': '30/09/2023',
+        'test_start_date': '01/10/1985',
+        'train_basin_file': train_basin_file,
+        'train_dir': train_dir,
+        'train_end_date': '30/09/2023',
+        'train_start_date': '01/10/2015',
+        'validate_every': 1,
+        'validate_n_random_basins': 100,
+        'validation_basin_file': validation_basin_file,
+        'validation_end_date': '30/09/2004',
+        'validation_start_date': '01/10/2003'
+    }
+
+    with open(output_file, "w") as f:
+        yaml.dump(config, f, sort_keys=False, default_flow_style=False, Dumper=QuotedDumper)
+
+def create_symlinks(src_file_list, src_dir, dst_dir):
+
+    missing_input_files = list()
+
+    for data_file in src_file_list:
+        ffile = os.path.join(src_dir, data_file)
+        # Make sure we have the file
+        if not os.path.exists(ffile):
+            logger.info(f'Input file {ffile} does not exist')
+            missing_input_files.append(ffile)
+        else:
+            target = os.path.join(dst_dir, os.path.basename(ffile))
+            if not os.path.exists(target):
+                #print(f'Creating symlink from {ffile} to {target}')
+                os.symlink(ffile, target)
+
+    if missing_input_files:
+        raise Exception(f'Missing input files - {missing_input_files}')
+
+def create_lstm_input(
+        catids: List[str],
+        attr_file: Union[str, Path],
+        lstm_input_dir: str,
+        lstm_data_dir: str,
+        lstm_run_dir:str
+) -> None:
+    """ Create BMI configuration file for LSTM
+
+    Parameters
+    ----------
+    catids : catchment IDs in the basin
+    lstm_input_dir : directory for the lstm bmi configuration file
+
+    Returns
+    ----------
+    None
+
+    """
+    os.makedirs(lstm_input_dir, exist_ok=True)
+
+    # Read hydrofabric attribute file
+    dfa = pd.read_parquet(attr_file)
+    dfa.set_index("divide_id", inplace=True)
+
+    # create the config file
+    run_dir = lstm_input_dir #os.path.join(lstm_input_dir, 'run')
+    lstm_train_data_dir = os.path.join(lstm_run_dir, 'train_data')
+    train_data_dir = os.path.join(run_dir, 'train_data')
+    config_file = os.path.join(lstm_input_dir, 'config.yml')
+    #if not os.path.exists(train_data_dir):
+    if not os.path.isdir(lstm_train_data_dir):
+        raise ValueError(f"Source path '{lstm_train_data_dir}' must be an existing directory.")
+
+    if os.path.islink(train_data_dir) or os.path.exists(train_data_dir):
+        os.unlink(train_data_dir)
+
+    os.symlink(lstm_train_data_dir, train_data_dir, target_is_directory=True)
+    create_lstm_config(lstm_input_dir)
+
+    data_files = ['initial_states.csv', 'input_scaling.csv', 'lstm_mean_std.csv', 'sugar_creek_trained.pt']
+    create_symlinks(data_files, lstm_data_dir, lstm_input_dir)
+
+    data_files = ['model_epoch009.pt', 'optimizer_state_epoch009.pt']
+    create_symlinks(data_files, lstm_run_dir, lstm_input_dir)
+
+    for catID in catids:
+        input_file = os.path.join(lstm_input_dir, catID + '.yml')
+
+        config = {
+            "train_cfg_file": os.path.join(lstm_input_dir, 'config.yml'),
+            'time_step': '1 hour',
+            'initial_state': 'zero',
+            'basin_name': catID,
+            'basin_id': catID,
+            'area_sqkm': 10.09406319443798,
+            'lat': 46.528817831207256,
+            'lon': -69.2994875283471,
+            'verbose': 1,
+            'elev_mean': 316.713505221,
+            'slope_mean': 5.07506774
+        }
+
+        with open(input_file, "w") as f:
+            yaml.dump(config, f, default_flow_style=False, Dumper=QuotedDumper)
+
 def change_sac_snow17_input(
         module: str,
         catids: List[str],
@@ -1239,6 +1407,7 @@ def create_troute_config(
 
     """
 
+    print("create_troute_config : {}, {}, {}, {}".format(gpkg_file, rt_cfg_file, start_date, nts))
     # bmi_parameters 
     bmi_param = {"flowpath_columns": ["id", "toid", "lengthkm"],
                  "attributes_columns": ['attributes_id',
@@ -1472,7 +1641,6 @@ def create_realization_file(
     None
 
     """
-
     # Create symlinks for libraries
     lib_mod = {}
     for key, value in lib_file.items():
@@ -1703,6 +1871,52 @@ def create_realization_file(
         # module output variable for input to t-route
         main_output_variable = "total_discharge"
 
+    if 'lstm' in modules:
+        '''
+        {
+          "name": "bmi_python",
+          "params": {
+          "python_type": "lstm.bmi_lstm.bmi_LSTM",
+              "model_type_name": "bmi_LSTM",
+              "init_config": "./data/lstm/yml_files/HUC01/cat-11475.yml",
+              "main_output_variable": "land_surface_water__runoff_volume_flux",
+              "uses_forcing_file": false,
+              "variables_names_map" : {
+                  "streamflow_cms": "land_surface_water__runoff_volume_flux"},
+              "pytorch_model_path": "./data/lstm/sugar_creek_trained.pt",
+              "normalization_path": "./data/lstm/input_scaling.csv",
+              "initial_state_path": "./data/lstm/initial_states.csv",
+              "useGPU": false
+         }
+        } 
+        '''  
+        model_configs['lstm'] = {"name": "bmi_python",
+                                  "params": {
+                                             "python_type": "lstm.bmi_lstm.bmi_LSTM",
+                                             "model_type_name": get_model_type_name('lstm'),
+                                             "main_output_variable": "land_surface_water__runoff_volume_flux",
+                                             "init_config": os.path.join(bmi_dir['lstm'], '{{id}}.yml'),
+                                             "allow_exceed_end_time": True,
+                                             "uses_forcing_file": False}}
+
+        # variable name mapping section
+        variables_names_map = dict()
+        variables_names_map["streamflow_cms"] = "land_surface_water__runoff_volume_flux",
+        variables_names_map["pytorch_model_path"] = os.path.join(bmi_dir['lstm'], "sugar_creek_trained.pt"),
+        variables_names_map["normalization_path"] = os.path.join(bmi_dir['lstm'],"input_scaling.csv"),
+        variables_names_map["initial_state_path"] = os.path.join(bmi_dir['lstm'], "initial_states.csv"),
+        variables_names_map["useGPU"] = False
+        
+
+        var_maps = dict()
+        var_maps['input'] = variables_names_map
+        var_maps['output'] = dict()
+        var_maps['output']['swe_out'] = ''
+        var_maps['output']['sm_out'] = ''
+
+        # module output variable for input to t-route
+        main_output_variable = "land_surface_water__runoff_volume_flux"
+
     # Combine configurations
     model_type_name = '_'.join([m1 for m1 in modules if m1 not in ['sloth', 'troute']])
     gbmain = {"name": "bmi_multi",
@@ -1713,6 +1927,7 @@ def create_realization_file(
 
     # Output section
     output_config = {'output_variables': [], 'output_header_fields': []}
+
     for key, value in output_dict.items():
         if key == 'output_swe' and var_maps['output']['swe_out'] != '':
             if value:
@@ -1735,7 +1950,7 @@ def create_realization_file(
     elif len(rr_mod1) > 1:
         raise Exception(f'More than one rainfall-runoff module is selected: {rr_mod1}')
     rr_mod1 = rr_mod1[0]
-
+    
     # modules section    
     model_configs[rr_mod1]["params"]["variables_names_map"] = var_maps['input']
     gbmain["params"]["modules"] = [model_configs[m1] for m1 in modules if m1 != 'troute']
@@ -1787,6 +2002,7 @@ def create_calib_config_file(
     # If par_file (which contains calibration parameters and its initial, min and max values) exists,
     # read from that file directly; otherwise gather this information from predefined calib_params files for 
     # individual modules in the directory given by par_file
+
     calib_modules_config = list(settings.modules_all.loc[settings.modules_all['calibratable'], 'name_config'])
     if os.path.isfile(par_file):
         df_params = pd.read_fwf(par_file).copy()
@@ -1808,24 +2024,27 @@ def create_calib_config_file(
         else:
             raise Exception(f'{par_file} is not a valid file or folder with calibration parameter files for the chosen modules')
 
-    if len(df_params) == 0:
-        raise Exception(f'No calibratable parameters found for the list of modules: {modules}')
-
-    df_params.set_index('param', inplace=True)
-    calib_params = df_params.groupby('model').groups
 
     params_range_dict = {}
-    for k, v in calib_params.items():
-        params_range = []
-        for m in v:
-            params_range.append({'name': m, 'min': float(df_params.query('model==@k').loc[m]['min']),
-                                 'max': float(df_params.query('model==@k').loc[m]['max']),
-                                 'init': float(df_params.query('model==@k').loc[m]['init'])})
-        params_range_dict.update({k: params_range})
-
-    # Create configuration 
+    # Create configuration
     basin_yaml = {'general': general_dict}
-    basin_yaml.update(params_range_dict)
+
+    if 'lstm' not in modules:
+        if len(df_params) == 0:
+            raise Exception(f'No calibratable parameters found for the list of modules: {modules}')
+
+        df_params.set_index('param', inplace=True)
+        calib_params = df_params.groupby('model').groups
+
+        for k, v in calib_params.items():
+            params_range = []
+            for m in v:
+                params_range.append({'name': m, 'min': float(df_params.query('model==@k').loc[m]['min']),
+                                     'max': float(df_params.query('model==@k').loc[m]['max']),
+                                     'init': float(df_params.query('model==@k').loc[m]['init'])})
+            params_range_dict.update({k: params_range})
+
+        basin_yaml.update(params_range_dict)
 
     # Create symlink for ngen executable
     ngen_file_link = os.path.join(workdir, 'Input/' + os.path.basename(model_dict['binary'])[0:4])
@@ -1834,9 +2053,10 @@ def create_calib_config_file(
 
     model_dict['binary'] = ngen_file_link
     basin_yaml['model'] = model_dict
-    basin_yaml['model']['params'] = params_range_dict
+    if 'lstm' not in modules:
+        basin_yaml['model']['params'] = params_range_dict
 
     # Save configuration into yaml file
     with open(config_yaml_file, 'w') as file:
-        yaml.dump(basin_yaml, file, sort_keys=False, default_flow_style=False, indent=2)
+        yaml.dump(basin_yaml, file, sort_keys=False, default_flow_style=False, indent=2, Dumper=UnquotedDumper)
     logger.info(f'Calibration config file is created at: {config_yaml_file}')

@@ -463,7 +463,8 @@ class NgenUniform(NgenBase):
     """
     # TODO Error if not routing block in ngen_realization
     strategy: Literal[NgenStrategy.uniform]
-    params: Mapping[str, Parameters] #required in this case...
+    # params: Mapping[str, Parameters] #required in this case...
+    params: Optional[Mapping[str, Parameters]] = None
 
     def __init__(self, **kwargs):
         ##Let pydantic work its magic

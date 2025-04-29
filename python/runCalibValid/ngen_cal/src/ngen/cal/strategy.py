@@ -5,7 +5,7 @@ This module includes several classes to hold algorithm, objective functions and 
 """
 
 from enum import Enum
-from pydantic import BaseModel, PyObject, validator
+from pydantic import BaseModel, PyObject, validator, Field
 from typing import Optional, Mapping, Any
 try: #to get literal in python 3.7, it was added to typing in 3.8
     from typing import Literal
@@ -70,7 +70,8 @@ class Estimation(BaseModel):
     type: Literal['estimation']
 
     algorithm: Algorithm
-    parameters: Optional[Mapping[str, Any]] = {}
+    # parameters: Optional[Mapping[str, Any]] = {}
+    parameters: Optional[Mapping[str, Any]] = Field(default=None)
 
 class Sensitivity(BaseModel):
     """Sensitivity strategy for defining a sensitivity analysis"""

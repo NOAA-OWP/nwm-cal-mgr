@@ -17,7 +17,7 @@ except ImportError:
 
 from pydantic import BaseModel, Field, DirectoryPath
 
-from .model import PosInt
+from .model import PosInt, SimpleModelExec
 from .ngen import Ngen
 from .strategy import Estimation, Sensitivity
 
@@ -42,6 +42,7 @@ class General(BaseModel):
     log: Optional[bool] = False
     parameter_log_file: Optional[Path]
     objective_log_file: Optional[Path]
+    calibratable: Optional[bool] = True
     random_seed: Optional[int]
     calibration_run_id: Optional[int]
     ngen_cerf: Optional[bool]
@@ -49,6 +50,10 @@ class General(BaseModel):
     # Private
     _calib_path: Path
     _valid_path: Path
+
+    # Optional singleExec
+    singleexec_path: Optional[Path] = None
+    _singleexec_output: Optional[Path] = None
 
     class Config:
         """Override configuration for pydantic BaseModel."""
@@ -60,11 +65,18 @@ class General(BaseModel):
         super().__init__(**kwargs)
         self._calib_path = os.path.join(str(self.workdir) + '/Output', 'Calibration_Run')
         self._valid_path = os.path.join(str(self.workdir) + '/Output', 'Validation_Run')
+        if self.singleexec_path:
+            self._singleexec_output = Path(self.singleexec_path)
+            os.makedirs(self._singleexec_output, exist_ok=True)
         try:
             os.makedirs(self._calib_path, exist_ok=True)
             os.makedirs(self._valid_path, exist_ok=True)
         except OSError as error:
             print(error)
+
+    @property
+    def singleexec_output(self) -> Path:
+        return self._singleexec_output
 
     @property
     def calib_path(self) -> 'Path':
@@ -85,3 +97,10 @@ class NoModel(BaseModel):
 class Model(BaseModel):
     """Composition data class for defining a model configuration."""
     model: Union[Ngen, NoModel] = Field(discriminator='type')
+
+class SimpleModel(BaseModel):
+    """Model configuration that supports both calibratable and non-calibratable runs."""
+    model: Union[Ngen, SimpleModelExec] = Field(discriminator='type')
+
+# Fix ForwardRef issues in Union types
+SimpleModel.update_forward_refs()
