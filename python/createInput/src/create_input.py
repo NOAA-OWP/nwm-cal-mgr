@@ -41,6 +41,20 @@ def create_input(filename):
     conf1 = configs['General']
     conf2 = configs['Calibration']
     conf3 = configs['DataFile']
+    #get the parallel section
+    parallelSec = configs['Parallel'] if config.has_section("Parallel") else None  
+
+    #check the Parallel section values
+    if parallelSec: 
+        if not 'nprocs' in parallelSec:
+            raise ValueError("Parallel section has no nprocs!") 
+        if not 'parallel_ngen_exe' in parallelSec:
+            raise ValueError("Parallel section has no parallel_ngen_exe!")
+        if not 'partition_generator_exe' in parallelSec:
+            raise ValueError("Parallel section has no partition_generator_exe!")
+
+    #Use parallel ngen only when the number of processors is greater than 1
+    parallelSec = configs[ 'Parallel' ] if config.has_section("Parallel") and int( parallelSec[ 'nprocs'  ] ) > 1 else None
 
     # Time period 
     time_period={"run_time_period": {"calib": [conf2['calib_start_period'], conf2['calib_end_period']], 
@@ -330,6 +344,14 @@ def create_input(filename):
 
     gfun.create_realization_file(work_dir, lib_file, bmi_dir, forcing_path, realization_file, modules, time_period, rt_dict, output_dict)
 
+    #make the partition file
+    part_file = gfun.create_partition_file( parallelSec[ 'partition_generator_exe' ],
+                                    gpkg_file,
+                                    parallelSec[ 'nprocs'  ],
+                                    work_dir,
+                                    basin )     \
+                if parallelSec else None
+                                    
     # Create calibration configuration file 
     calib_config_file = os.path.join(work_dir + '/Input', '{}'.format(basin) + '_config_calib.yaml')
     model_dict = {'type': 'ngen', 'binary': conf3['ngen_exe_file'], 'realization': realization_file, 'catchments': cat_file, 'nexus': nexus_file,
@@ -349,8 +371,14 @@ def create_input(filename):
                             'basinID': conf1['basin'], 
                             'threshold': float(conf2['streamflow_threshold']), 
                             'site_name': 'USGS ' + conf1['basin'] + ": " + conf2['station_name'],
-                            'user': conf2['user_email']}} 
+                            'user': conf2['user_email']},
+            } 
     
+    #update the model dict to enable parallel processing
+    model_dict.update({'partitions': part_file}) if parallelSec else None
+    model_dict.update({'parallel': int(parallelSec['nprocs'])}) if parallelSec else None
+    model_dict.update({'binary': parallelSec['parallel_ngen_exe']}) if parallelSec else None
+
     if 'nwmretro_file' in conf3.keys():
         if conf3['nwmretro_file'] != '':
             model_dict['nwmflow'] = conf3['nwmretro_file']

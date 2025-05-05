@@ -10,7 +10,7 @@ import fnmatch
 import glob
 import json
 import logging
-import os
+import os, subprocess
 import shutil
 from pathlib import Path
 from typing import List, Union, Dict
@@ -60,6 +60,7 @@ __all__ = [
     'create_troute_config',
     'create_realization_file',
     'create_calib_config_file',
+    'create_partition_file',
 ]
 
 
@@ -1829,8 +1830,9 @@ def create_calib_config_file(
 
     # Create symlink for ngen executable
     ngen_file_link = os.path.join(workdir, 'Input/' + os.path.basename(model_dict['binary'])[0:4])
-    if not os.path.exists(ngen_file_link):
-        os.symlink(model_dict['binary'], ngen_file_link)
+    if os.path.exists(ngen_file_link):
+        os.remove(ngen_file_link)
+    os.symlink(model_dict['binary'], ngen_file_link)
 
     model_dict['binary'] = ngen_file_link
     basin_yaml['model'] = model_dict
@@ -1840,3 +1842,16 @@ def create_calib_config_file(
     with open(config_yaml_file, 'w') as file:
         yaml.dump(basin_yaml, file, sort_keys=False, default_flow_style=False, indent=2)
     logger.info(f'Calibration config file is created at: {config_yaml_file}')
+
+def create_partition_file(
+        partition_generator: str,
+        hydrofab_file: str,
+        nprocs: int,
+        work_dir: str,
+        basin: str ) -> Union[str, Path]:
+     partition_file = os.path.join( work_dir + '/Input', '{}'.format(basin) + '_partition_config.json' )
+
+     subprocess.check_call( f"{partition_generator} {hydrofab_file:} {hydrofab_file:} "
+                            f"{partition_file} {nprocs} '' ''", 
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True )
+     return partition_file
