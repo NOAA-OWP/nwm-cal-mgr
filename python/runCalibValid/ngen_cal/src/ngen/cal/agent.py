@@ -15,7 +15,7 @@ import pandas as pd
 
 from .strategy import Algorithm
 from ngen.cal.meta import JobMeta
-from .configuration import Model
+from .configuration import Model, NoCalibModel
 from .utils import pushd
 
 import logging
@@ -75,6 +75,75 @@ class BaseAgent(ABC):
 
 class Agent(BaseAgent):
     """This is class for agent."""
+
+    def __init2__(self, model_conf: dict, workdir: 'Path', general: 'General', log: bool=False, restart: bool=False, agent_counter=0):
+        if hasattr(general, 'singleexec_output') and general.singleexec_output:
+            workdir = general.singleexec_output
+        self._workdir = workdir
+        self._job = None
+        self._run_name = general.name 
+        self._params = general.strategy.parameters if general.strategy.parameters is not None else {}
+        self._algorithm = general.strategy.algorithm.value
+        self._yaml_file = general.yaml_file
+        self._calib_path = general.calib_path
+        self._valid_path = general.valid_path
+        self._general = general
+
+        # Create job directory (re-use if restarting)
+        if restart and 'calib' in self._run_name:
+            workdirs = list(Path(workdir).rglob(model_conf['type']+"_*_worker"))
+            if len(workdirs) > 1 and self._algorithm == "pso":
+                logger.warning("More than one existing {} workdir, cannot restart".format(model_conf['type']))
+            else:
+                self._job = JobMeta(model_conf['type'], workdir, workdirs[agent_counter], log=log)
+
+        if self._job is None:
+            self._job = JobMeta(model_conf['type'], workdir, log=log)
+
+        # Set up calibration-related directories
+        if 'calib' in self._run_name:
+            self._calib_path_output = os.path.join(self._job.workdir, 'Output_Calib')
+            self._output_iter_path = os.path.join(self._job.workdir, 'Output_Iteration')
+            self._plot_iter_path = os.path.join(self._job.workdir, 'Plot_Iteration')
+            os.makedirs(self._calib_path_output, exist_ok=True)
+            os.makedirs(self._output_iter_path, exist_ok=True)
+            os.makedirs(self._plot_iter_path, exist_ok=True)
+
+        # Set up validation-related directories
+        if log and 'valid' in self._run_name:
+            if hasattr(general, 'singleexec_output') and general.singleexec_output:
+                self._job = JobMeta(model_conf['type'], general.singleexec_output, log=log)
+            else:
+                self._job = JobMeta(model_conf['type'], workdir, log=log)
+
+            self._valid_path_output = os.path.join(self._job.workdir, 'Output_Valid') 
+            self._valid_path_plot = os.path.join(self._workdir, 'Plot_Valid')
+            if self._run_name not in ['valid_control', 'valid_best']:
+                self._valid_path_plot = os.path.join(self._workdir, 'Plot_Valid' + self._run_name.replace('valid_', '_'))
+            os.makedirs(self._valid_path_output, exist_ok=True)
+            os.makedirs(self._valid_path_plot, exist_ok=True)
+            self._calib_path_output = None
+            self._output_iter_path = None 
+            self._plot_iter_path = None 
+
+        # Store workdir in model config
+        model_conf['workdir'] = self.job.workdir
+
+        # Instantiate model based on type
+        try:
+            if model_conf['type'].lower() in ['none', 'nocalib', 'single', 'static']:
+                self._model = NoCalibModel(model=model_conf)
+            else:
+                self._model = Model(model=model_conf)
+        except ValidationError as e:
+            print(f'validation error: {e.json()}')
+            raise
+
+        # Resolve ngen binary/realization path if ngen model
+        if isinstance(self._model.model, Ngen):
+            self._model.model.resolve_paths()
+
+
     def __init__(self, model_conf: dict, workdir: 'Path', general: 'General', log: bool=False, restart: bool=False, agent_counter=0):
         """Construct attributes for the Agent class."""
         self._workdir = workdir
@@ -86,6 +155,8 @@ class Agent(BaseAgent):
         self._calib_path = general.calib_path
         self._valid_path = general.valid_path
         self._general = general
+        self.run_single_iteration = False
+
         if restart and 'calib' in self._run_name:
             # find prior ngen workdirs
             # FIXME if a user starts with an independent calibration strategy
@@ -130,7 +201,12 @@ class Agent(BaseAgent):
         except ValidationError as e:
             print(f'validation error: {e.json()}')
             raise
+        if not self.adjustables:
+            logger.info("No calibratable parameters — activating single-run mode.")
+            self.run_single_iteration = True
+
         self._model.model.resolve_paths()
+        self.nwmflow_file = ''
 
     @property
     def parameters(self) -> 'Mapping[str, Any]':

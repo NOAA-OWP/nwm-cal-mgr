@@ -120,6 +120,11 @@ def _evaluate(i: int, calibration_object: 'Evaluatable', agent: 'Agent', first_i
     """
     # Calculate objective function and metrics
     metrics = _calc_metrics(calibration_object.output, calibration_object.observed, calibration_object.evaluation_range, calibration_object.threshold)
+    #  Handle single-run execution output writing for NoCalibModel
+    if isinstance(calibration_object, NoCalibModel):
+        calibration_object.write_iteration_outputs(agent, metrics, metrics["objFunVal"])
+        return metrics
+
     metric_objective_function = metrics[calibration_object.objective.value.upper()] 
     obj_group1 = ['kge','nse','nnse','nselog','corr','csi','pod']
     obj_group2 = ['rmse','mae','rsr','far','pkbias','pkte','evbias']
@@ -235,8 +240,20 @@ def dds(start_iteration: int, iterations: int,  calibration_object: 'Evaluatable
     agent : Agent object
 
     """
+
+    print(f"agent.run_single_iteration : {agent.run_single_iteration}")
     if iterations < 2:
-        raise(ValueError("iterations must be >= 2"))
+        '''
+        if agent.run_single_iteration:
+            logger.info("Skipping DDS loop — single-run mode with no calibratable parameters.")
+            _execute(agent, start_iter)
+            _evaluate(start_iter, agent.model, agent, first_iter_for_agent=True, info=True)
+            return
+        else:
+        '''
+
+        raise ValueError("iterations must be >= 2 for DDS with calibratable parameters.")
+
     if start_iteration > iterations:
         raise(ValueError("start_iteration must be <= iterations"))
 
@@ -267,7 +284,78 @@ def dds(start_iteration: int, iterations: int,  calibration_object: 'Evaluatable
             _evaluate(i, calibration_object, agent, first_iter_for_agent=False)
         calibration_object.check_point(agent.job.workdir)
 
-def dds_set(start_iteration: int, iterations: int, agent: 'Agent')->None:
+
+def dds_set(start_iteration: int, iterations: int, agent: 'Agent') -> None:
+    """
+    Run DDS algorithm or a single-run model (if no calibratable parameters)
+
+    Parameters
+    ----------
+    start_iteration : int
+        Index to start the iteration from
+    iterations : int
+        Total number of iterations to run
+    agent : Agent
+        Agent instance encapsulating the model, configuration, and workspace
+    """
+    if agent.run_single_iteration:
+        logger.info("Skipping DDS loop — single-run mode with no calibratable parameters.")
+
+        import shutil
+        import subprocess
+        from pathlib import Path
+
+        # Copy realization file to job workdir
+        realization_src = Path(agent.realization_file)
+        realization_dst = Path(agent.job.workdir) / realization_src.name
+        if not realization_dst.exists():
+            logger.debug(f"Copying realization file {realization_src} -> {realization_dst}")
+            shutil.copy(realization_src, realization_dst)
+
+        # Update internal realization path
+        agent.model.realization = realization_dst
+
+        # Build and run ngen command
+        cmd = agent.cmd
+        logger.info(f"Executing single-run model: {cmd}")
+        try:
+            subprocess.check_call(cmd, shell=True, cwd=agent.job.workdir)
+        except subprocess.CalledProcessError as e:
+            logger.error(f"NGen execution failed with return code {e.returncode}")
+            raise
+
+        # Evaluate output and write iteration files
+        logger.info("Evaluating single-run output and generating logs/plots.")
+        output = agent.model.output
+        observed = agent.model.observed
+        metrics = _calc_metrics(output, observed, agent.model.evaluation_range, agent.model.threshold)
+        score = metrics.get(agent.model.eval_params.objective, None)
+
+        if score is None:
+            raise ValueError(f"Objective function metric '{agent.model.eval_params.objective}' not found in metrics")
+
+        agent.model.write_iteration_outputs(agent, metrics, score)
+
+        # Mark completion and generate plot
+        agent.model.write_run_complete_file(agent.run_name, agent.job.workdir)
+        complete_msg(agent.model.basinID, agent.run_name, agent.job.workdir, agent.model.user)
+
+        return
+
+    # === NORMAL DDS FLOW STARTS HERE ===
+    from ngen.cal.strategy import get_param_set
+
+    logger.info(f"Starting Iteration: {start_iteration}")
+    for i in range(start_iteration, iterations):
+        logger.info(f"Calibration iteration {i} of {iterations}")
+        params = get_param_set(i, agent)
+
+        score, metrics = _evaluate(i, agent.model, agent, first_iter_for_agent=(i == start_iteration), info=True)
+        agent.model.write_iteration_outputs(agent, metrics, score)
+        agent.job.write_last_iteration(i)
+
+
+def dds_set_unused(start_iteration: int, iterations: int, agent: 'Agent')->None:
     """Perform parameter optimization using DDS algorithm.
 
     parameters
@@ -280,8 +368,17 @@ def dds_set(start_iteration: int, iterations: int, agent: 'Agent')->None:
     # TODO I think the can ultimately be refactored and merged with dds, there only a couple very
     # minor differenes in this implementation, and I think those can be abstrated away
     # by carefully crafting sets and adjustables before this function is ever reached.
+    from .validation_run import run_valid_ctrl_best
     if iterations < 2:
-        raise(ValueError("iterations must be >= 2"))
+        if agent.run_single_iteration:
+            logger.info("Skipping DDS loop — single-run mode with no calibratable parameters.")
+            run_valid_ctrl_best(agent)
+            #_execute(agent, start_iteration)
+            #_evaluate(start_iteration, agent.model, agent, first_iter_for_agent=True, info=True)
+            return
+        else:
+            raise ValueError("iterations must be >= 2 for DDS with calibratable parameters.")
+
     if start_iteration > iterations:
         raise(ValueError("start_iteration must be <= iterations"))
 
