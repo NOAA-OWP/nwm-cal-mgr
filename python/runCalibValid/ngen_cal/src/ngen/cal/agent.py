@@ -90,15 +90,17 @@ class Agent(BaseAgent):
         self._general = general
 
         # Create job directory (re-use if restarting)
+        worker_prefix = 'ngen' if model_conf['type'] == 'nocalib' else model_conf['type']
+
         if restart and 'calib' in self._run_name:
-            workdirs = list(Path(workdir).rglob(model_conf['type']+"_*_worker"))
+            workdirs = list(Path(workdir).rglob(worker_prefix+"_*_worker"))
             if len(workdirs) > 1 and self._algorithm == "pso":
                 logger.warning("More than one existing {} workdir, cannot restart".format(model_conf['type']))
             else:
-                self._job = JobMeta(model_conf['type'], workdir, workdirs[agent_counter], log=log)
+                self._job = JobMeta(worker_prefix, workdir, workdirs[agent_counter], log=log)
 
         if self._job is None:
-            self._job = JobMeta(model_conf['type'], workdir, log=log)
+            self._job = JobMeta(worker_prefix, workdir, log=log)
 
         # Set up calibration-related directories
         if 'calib' in self._run_name:
@@ -157,6 +159,8 @@ class Agent(BaseAgent):
         self._general = general
         self.run_single_iteration = False
 
+        worker_prefix = 'ngen' if model_conf['type'] == 'nocalib' else model_conf['type']
+
         if restart and 'calib' in self._run_name:
             # find prior ngen workdirs
             # FIXME if a user starts with an independent calibration strategy
@@ -167,14 +171,14 @@ class Agent(BaseAgent):
             # 0 correctly since not all basin params can be loaded.
             # There are probably some similar issues with explicit and independent, since they have
             # similar data semantics
-            workdirs = list(Path(workdir).rglob(model_conf['type']+"_*_worker"))
+            workdirs = list(Path(workdir).rglob(worker_prefix+"_*_worker"))
             if( len(workdirs) > 1 and self._algorithm=="pso") :
                 logger.warning("More than one existing {} workdir, cannot restart")
             else:
-                self._job = JobMeta(model_conf['type'], workdir, workdirs[agent_counter], log=log)
+                self._job = JobMeta(worker_prefix, workdir, workdirs[agent_counter], log=log)
 
         if(self._job is None):
-            self._job = JobMeta(model_conf['type'], workdir, log=log)
+            self._job = JobMeta(worker_prefix, workdir, log=log)
 
         if 'calib' in self._run_name:
             self._calib_path_output = os.path.join(self._job.workdir, 'Output_Calib')
