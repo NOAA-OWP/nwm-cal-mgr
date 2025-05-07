@@ -9,8 +9,6 @@ import argparse
 import logging
 import os
 from pathlib import Path
-import subprocess
-import shutil
 
 import yaml
 from ngen.cal.agent import Agent
@@ -18,7 +16,7 @@ from ngen.cal.configuration import General
 from ngen.cal.validation_run import run_valid_ctrl_best
 
 from ngen.cal.git_util import print_git_info_all
-from ngen.cal.model import SimpleModelExec
+
 
 logger = logging.getLogger(__name__)
 
@@ -45,72 +43,10 @@ def main(general: General, model_conf):
             logger.info('No NWM retrospective streamflow simulation is available for this location')
         else:
             agent.nwmflow_file = model_conf['nwmflow'] 
-
-    if isinstance(agent.model, SimpleModelExec):
-        logging.info("Running single validation (non-calibratable)")
-        
-        # Copy realization file to worker dir
-        realization_src = Path(agent.model.realization)
-        realization_dst = Path(agent.job.workdir) / realization_src.name
-        logging.debug(f"Copying realization file {realization_src} -> {realization_dst}")
-        shutil.copy(realization_src, realization_dst)
-        agent.model.realization = realization_dst  # Update the internal path
-
-        # Run ngen
-        os.chdir(agent.job.workdir)
-        logging.info(f"[DEBUG] Current working directory: {os.getcwd()}")
-        logging.info(f"[DEBUG] Ngen execution command: {agent.cmd}")
-        os.system(agent.cmd)        
-        print(f"Output created at {agent.job.workdir}")
-
+    
     # Execute validation control and best simulation
-    else:
-        logging.info("Running validation with calibratable model (control & best)")
-        run_valid_ctrl_best(agent)
-    '''    
-    else:
-        logger.info('Running single validation (non-calibratable)')
+    run_valid_ctrl_best(agent)
 
-        realization_src = Path(agent.model.realization)
-        realization_dst = Path(agent.job.workdir) / realization_src.name
-
-        if not realization_dst.exists():
-            print(f"[DEBUG] Copying realization file {realization_src} -> {realization_dst}")
-            shutil.copy(realization_src, realization_dst)
-
-        # Update the agent's model realization path
-        if hasattr(agent.model, "__root__"):
-            agent.model.__root__.realization = realization_dst
-        else:
-            agent.model.realization = realization_dst
-
-        # Rebuild the execution command with the updated realization path
-        agent._model.model.args = '{} "all" {} "all" {}'.format(
-            agent.model.catchments.resolve(),
-            agent.model.nexus.resolve(),
-            realization_dst.resolve()
-        )
-        # Now change into worker directory
-        os.chdir(agent.job.workdir)
-
-        print(f"[DEBUG] Current working directory: {os.getcwd()}")
-        print(f"[DEBUG] Ngen execution command: {agent.cmd}")
-        os.system(agent.cmd)
-
-        # Split command into list form for subprocess
-        command_list = agent.cmd.split()
-
-        # Run ngen and capture output live
-        with subprocess.Popen(command_list, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True) as proc:
-            for line in proc.stdout:
-                print(line, end='')  # Live print output
-            proc.wait()
-            if proc.returncode != 0:
-                print(f"[ERROR] ngen failed with exit code {proc.returncode}")
-            else:
-                print("[SUCCESS] ngen executed successfully!")
-                print(f"[DEBUG] Output generated in: {os.getcwd()}")
-        '''
 if __name__ == "__main__":
     print_git_info_all()
 
@@ -126,11 +62,8 @@ if __name__ == "__main__":
 
     general = General(**conf['general'])
 
-    model_conf = conf.get('model', {})
-    if 'params' not in model_conf:
-        model_conf['params'] = None
-
     # Change directory to workdir
     os.chdir(general.workdir)
 
     main(general, conf['model'])
+
