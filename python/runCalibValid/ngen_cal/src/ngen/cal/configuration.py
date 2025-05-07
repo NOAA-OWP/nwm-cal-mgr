@@ -15,7 +15,7 @@ try: #to get literal in python 3.7, it was added to typing in 3.8
 except ImportError:
     from typing_extensions import Literal
 
-from pydantic import BaseModel, Field, DirectoryPath
+from pydantic import BaseModel, Field, DirectoryPath, PrivateAttr
 
 from .model import PosInt
 from .model import ModelExec
@@ -140,7 +140,6 @@ class NoCalibModel2(BaseModel):
     def postprocess_single_run_output(self, output_dir: Path, basin_id: str, output_iter_path: Path):
         """Copy ngen outputs and create iteration-style CSV for compatibility."""
         logger = logging.getLogger("NGEN_CAL")
-
         # Create iteration output directory if needed
         iter_dir = Path(output_iter_path)
         iter_dir.mkdir(parents=True, exist_ok=True)
@@ -183,7 +182,58 @@ class NoCalibModel(ModelExec):
     catchments: Path
     nexus: Path
     obsflow: Path
-    _output_iter_file: Optional[Path] = None
+    #_output_iter_file: Optional[Path] = None
+    _output_iter_file: Optional[Path] = PrivateAttr(default=None)
+
+    def postprocess_single_run_output(self, output_dir: Path, basin_id: str, output_iter_path: Path) -> None:
+        logger = logging.getLogger("NGEN_CAL")
+        output_dir = Path(output_dir)
+        output_iter_path = Path(output_iter_path)
+
+        # Copy raw output to Output_Calib directory
+        output_calib_dir = output_dir / "Output_Calib"
+        output_calib_dir.mkdir(exist_ok=True)
+        for f in output_dir.glob("cat-*.csv"):
+            shutil.copy(f, output_calib_dir)
+        for f in output_dir.glob("nex-*_output.csv"):
+            shutil.copy(f, output_calib_dir)
+
+        # Look for the nexus output
+        nex_file = next(output_dir.glob(f"nex-{basin_id}*_output.csv"), None)
+        if nex_file is None:
+            # Try a fallback to any nex file (warning already given upstream)
+            for f in output_dir.glob("nex-*_output.csv"):
+                nex_file = f
+                print(f"Using fallback output file: {nex_file.name}")
+                break
+
+        if nex_file is None:
+            raise FileNotFoundError(f"No output file matching nex-{basin_id}*.csv found in {output_dir}")
+
+        # Read output, rename columns to match standard
+        df = pd.read_csv(nex_file, index_col=0, parse_dates=True)
+        df = df.rename(columns={df.columns[0]: "sim_flow"})
+
+        # Save reformatted output to Output_Iteration
+        output_iter_path.mkdir(exist_ok=True)
+        out_file = output_iter_path / f"{basin_id}_output_iteration_0000.csv"
+        df.to_csv(out_file)
+
+        # Set internal path for downstream use
+        self._output_iter_file = out_file
+
+        print(f"[NoCalibModel] Wrote: {out_file}")
+        print(f"[NoCalibModel] Copied raw outputs to {output_calib_dir}")
+
+    @property
+    def output(self) -> pd.DataFrame:
+        if self._output_iter_file is None:
+            raise FileNotFoundError("No output file path set in _output_iter_file.")
+        if not self._output_iter_file.exists():
+            raise FileNotFoundError(f"No simulation output file found at: {self._output_iter_file}")
+        return pd.read_csv(self._output_iter_file, index_col=0, parse_dates=True)
+
+
 
     def get_args(self) -> str:
         return f"{self.catchments} all {self.nexus} all {self.realization}"
@@ -202,7 +252,7 @@ class NoCalibModel(ModelExec):
         return []
 
     @property
-    def output(self) -> pd.DataFrame:
+    def output_old(self) -> pd.DataFrame:
         """Dynamically locate the simulation output CSV."""
         basin_id = self.eval_params.basinID
         pattern = f"{basin_id}_output_iteration_*.csv"
@@ -218,42 +268,6 @@ class NoCalibModel(ModelExec):
         else:
             raise FileNotFoundError(f"No simulation output file found for pattern: {pattern}")
 
-    def postprocess_single_run_output(self, output_dir: Path, basin_id: str, output_iter_path: Path):
-        """Copy ngen outputs and create iteration-style CSV for compatibility."""
-        logger = logging.getLogger("NGEN_CAL")
-
-        # Create iteration output directory if needed
-        iter_dir = Path(output_iter_path)
-        iter_dir.mkdir(parents=True, exist_ok=True)
-
-        # Search for nex-<id> file
-        nex_file = None
-        for file in Path(output_dir).glob(f"nex-{basin_id}*.csv"):
-            nex_file = file
-            break
-
-        if nex_file is None:
-            fallback = list(Path(output_dir).glob("nex-*_output.csv"))
-            if fallback:
-                nex_file = fallback[0]
-                logger.warning(f"Using fallback output file: {nex_file.name}")
-            else:
-                raise FileNotFoundError(f"No output file matching nex-{basin_id}*.csv found in {output_dir}")
-
-        # Write iteration-style output
-        iter_output_file = iter_dir / f"{basin_id}_output_iteration_0000.csv"
-        df = pd.read_csv(nex_file, index_col=0, parse_dates=True)
-        df.to_csv(iter_output_file)
-        logger.info(f"[NoCalibModel] Wrote: {iter_output_file}")
-
-        # Copy all relevant files into Output_Calib
-        calib_dir = Path(output_dir) / "Output_Calib"
-        calib_dir.mkdir(exist_ok=True)
-
-        for f in Path(output_dir).glob("*.csv"):
-            shutil.copy(f, calib_dir)
-
-        logger.info(f"[NoCalibModel] Copied raw outputs to {calib_dir}")
 
     def postprocess_single_run_output3(self, output_dir: Path, basin_id: str, output_iter_path: Path) -> None:
         """
