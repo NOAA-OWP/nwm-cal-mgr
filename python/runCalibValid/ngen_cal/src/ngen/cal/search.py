@@ -324,6 +324,13 @@ def dds_set(start_iteration: int, iterations: int, agent: 'Agent') -> None:
             logger.error(f"NGen execution failed with return code {e.returncode}")
             raise
 
+        try:
+            agent.model.postprocess_single_run_output(agent.job.workdir, agent.model.eval_params.basinID, agent.output_iter_path)
+            logger.info("Post-processing of single-run output completed.")
+        except Exception as e:
+            logger.error(f"Failed to postprocess single-run output: {e}")
+            raise e
+
         # Evaluate output and write iteration files
         logger.info("Evaluating single-run output and generating logs/plots.")
         output = agent.model.output
