@@ -325,7 +325,7 @@ def dds_set(start_iteration: int, iterations: int, agent: 'Agent') -> None:
             raise
 
         try:
-            agent.model.postprocess_single_run_output(agent.job.workdir, agent.model.eval_params.basinID, agent.output_iter_path)
+            agent.model.postprocess_single_run_output2(agent.job.workdir, agent.model.eval_params.basinID, agent.output_iter_path)
             logger.info("Post-processing of single-run output completed.")
         except Exception as e:
             logger.error(f"Failed to postprocess single-run output: {e}")
