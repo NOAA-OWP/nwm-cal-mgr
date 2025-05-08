@@ -94,85 +94,16 @@ class Model(BaseModel):
     model: Union[Ngen, NoModel, NoCalibModel] = Field(discriminator='type')
 
 
+
+from pathlib import Path
+import pandas as pd
 import shutil
+import glob
+import warnings
+import logging
 
-class NoCalibModel2(BaseModel):
-    """Model wrapper for single-run (non-calibratable) models."""
-    binary: str
-    realization: str
-    catchments: str
-    nexus: str
-    crosswalk: str
-    obsflow: str
-    eval_params: EvaluationParams
-    nwmflow: Optional[str] = None
-    type: Literal['nocalib'] = 'nocalib'
-
-    @property
-    def get_binary(self):
-        return self.binary
-
-    @property
-    def get_args(self):
-        return f'{self.catchments} all {self.nexus} all {self.realization}'
-
-    @property
-    def basinID(self):
-        return self.eval_params.basinID
-
-    @property
-    def output(self) -> pd.DataFrame:
-        """Dynamically locate the simulation output CSV."""
-        basin_id = self.eval_params.basinID
-        pattern = f"{basin_id}_output_iteration_*.csv"
-
-        search_path = Path(self.realization).parent
-        matches = list(search_path.rglob(pattern))
-
-        if matches:
-            try:
-                return pd.read_csv(matches[0], index_col=0, parse_dates=True)
-            except Exception as e:
-                raise RuntimeError(f"Failed to load output file {matches[0]}: {e}")
-        else:
-            raise FileNotFoundError(f"No simulation output file found for pattern: {pattern}")
-
-    def postprocess_single_run_output(self, output_dir: Path, basin_id: str, output_iter_path: Path):
-        """Copy ngen outputs and create iteration-style CSV for compatibility."""
-        logger = logging.getLogger("NGEN_CAL")
-        # Create iteration output directory if needed
-        iter_dir = Path(output_iter_path)
-        iter_dir.mkdir(parents=True, exist_ok=True)
-
-        # Search for nex-<id> file
-        nex_file = None
-        for file in Path(output_dir).glob(f"nex-{basin_id}*.csv"):
-            nex_file = file
-            break
-
-        if nex_file is None:
-            fallback = list(Path(output_dir).glob("nex-*_output.csv"))
-            if fallback:
-                nex_file = fallback[0]
-                logger.warning(f"Using fallback output file: {nex_file.name}")
-            else:
-                raise FileNotFoundError(f"No output file matching nex-{basin_id}*.csv found in {output_dir}")
-
-        # Write iteration-style output
-        iter_output_file = iter_dir / f"{basin_id}_output_iteration_0000.csv"
-        df = pd.read_csv(nex_file, index_col=0, parse_dates=True)
-        df.to_csv(iter_output_file)
-        logger.info(f"[NoCalibModel] Wrote: {iter_output_file}")
-
-        # Copy all relevant files into Output_Calib
-        calib_dir = Path(output_dir) / "Output_Calib"
-        calib_dir.mkdir(exist_ok=True)
-
-        for f in Path(output_dir).glob("*.csv"):
-            shutil.copy(f, calib_dir)
-
-        logger.info(f"[NoCalibModel] Copied raw outputs to {calib_dir}")
-
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
 class NoCalibModel(ModelExec):
     type: Literal["nocalib"] = "nocalib"
@@ -182,59 +113,163 @@ class NoCalibModel(ModelExec):
     catchments: Path
     nexus: Path
     obsflow: Path
-    #_output_iter_file: Optional[Path] = None
+
     _output_iter_file: Optional[Path] = PrivateAttr(default=None)
 
-    def postprocess_single_run_output(self, output_dir: Path, basin_id: str, output_iter_path: Path) -> None:
-        logger = logging.getLogger("NGEN_CAL")
+
+    def get_args(self) -> str:
+        return f"{self.catchments} all {self.nexus} all {self.realization}"
+
+    def update_config(self, i: int, params: pd.DataFrame, id=None, path: Path = Path(".")):
+        # No-op for single-run models
+        pass
+
+    def resolve_paths(self):
+        self.realization = self.realization.resolve()
+        self.catchments = self.catchments.resolve()
+        self.nexus = self.nexus.resolve()
+        self.obsflow = self.obsflow.resolve()
+
+    @property
+    def adjustables(self):
+        return []
+
+    @property
+    def observed(self) -> pd.DataFrame:
+        return pd.read_csv(self.obsflow, index_col=0, parse_dates=True)
+
+    @property
+    def evaluation_range(self):
+        return self.eval_params._eval_range
+
+    @property
+    def threshold(self):
+        return self.eval_params.threshold
+
+    @property
+    def realization_file(self) -> Path:
+        return self.realization
+
+    def postprocess_single_run_output(self, output_dir: Path, basin_id: str, output_iter_path: Path):
+        """
+        Postprocess ngen single-run output to look like calibration output:
+        - Copies raw ngen files to Output_Calib/
+        - Creates <basinID>_output_iteration_0000.csv in Output_Iteration/
+        """
+        import shutil
+        import warnings
+        import pandas as pd
+
         output_dir = Path(output_dir)
+        output_calib = output_dir / "Output_Calib"
         output_iter_path = Path(output_iter_path)
 
-        # Copy raw output to Output_Calib directory
-        output_calib_dir = output_dir / "Output_Calib"
-        output_calib_dir.mkdir(exist_ok=True)
-        for f in output_dir.glob("cat-*.csv"):
-            shutil.copy(f, output_calib_dir)
-        for f in output_dir.glob("nex-*_output.csv"):
-            shutil.copy(f, output_calib_dir)
-
-        # Look for the nexus output
-        nex_file = next(output_dir.glob(f"nex-{basin_id}*_output.csv"), None)
-        if nex_file is None:
-            # Try a fallback to any nex file (warning already given upstream)
-            for f in output_dir.glob("nex-*_output.csv"):
-                nex_file = f
-                print(f"Using fallback output file: {nex_file.name}")
-                break
-
-        if nex_file is None:
-            raise FileNotFoundError(f"No output file matching nex-{basin_id}*.csv found in {output_dir}")
-
-        # Read output, rename columns to match standard
-        df = pd.read_csv(nex_file, index_col=0, parse_dates=True)
-        df = df.rename(columns={df.columns[0]: "sim_flow"})
-
-        # Save reformatted output to Output_Iteration
+        output_calib.mkdir(exist_ok=True)
         output_iter_path.mkdir(exist_ok=True)
+
+        # Copy cat-* and nex-* files to Output_Calib
+        for f in output_dir.glob("cat-*.csv"):
+            shutil.copy(f, output_calib)
+        for f in output_dir.glob("nex-*.csv"):
+            shutil.copy(f, output_calib)
+
+        # Find the appropriate nex-* file
+        matches = list(output_dir.glob(f"nex-{basin_id}_output.csv"))
+        if not matches:
+            fallback = list(output_dir.glob("nex-*_output.csv"))
+            if not fallback:
+                raise FileNotFoundError(f"No output file matching nex-{basin_id}*.csv found in {output_dir}")
+            matches = fallback
+            warnings.warn(f"Using fallback output file: {matches[0].name}", RuntimeWarning)
+
+        nex_file = matches[0]
+        df = pd.read_csv(nex_file, index_col=0, parse_dates=True)
+
+        # Fix column name for compatibility with evaluation logic
+        if "streamflow (m3/s)" in df.columns and "sim_flow" not in df.columns:
+            df.rename(columns={"streamflow (m3/s)": "sim_flow"}, inplace=True)
+
         out_file = output_iter_path / f"{basin_id}_output_iteration_0000.csv"
         df.to_csv(out_file)
 
-        # Set internal path for downstream use
         self._output_iter_file = out_file
 
-        print(f"[NoCalibModel] Wrote: {out_file}")
-        print(f"[NoCalibModel] Copied raw outputs to {output_calib_dir}")
+        logger.info(f"[NoCalibModel] Wrote: {out_file}")
+        logger.info(f"[NoCalibModel] Copied raw outputs to {output_calib}")
 
     @property
     def output(self) -> pd.DataFrame:
-        if self._output_iter_file is None:
-            raise FileNotFoundError("No output file path set in _output_iter_file.")
-        if not self._output_iter_file.exists():
+        if not self._output_iter_file or not self._output_iter_file.exists():
             raise FileNotFoundError(f"No simulation output file found at: {self._output_iter_file}")
+        import pandas as pd
         return pd.read_csv(self._output_iter_file, index_col=0, parse_dates=True)
 
+    def postprocess_single_run_output(self, output_dir: Path, basin_id: str, output_iter_path: Path):
+        # Ensure output directories exist
+        output_dir = Path(output_dir)
+        output_iter_path = Path(output_iter_path)
+        output_iter_path.mkdir(parents=True, exist_ok=True)
+        (output_dir / "Output_Calib").mkdir(parents=True, exist_ok=True)
+
+        # Find the best match for nex output file
+        matches = list(output_dir.glob(f"nex-{basin_id}*_output.csv"))
+        if not matches:
+            # fallback logic
+            for f in output_dir.glob("nex-*_output.csv"):
+                matches.append(f)
+                warnings.warn(f"Using fallback output file: {f.name}", RuntimeWarning)
+                break
+
+        if not matches:
+            raise FileNotFoundError(f"No output file matching nex-{basin_id}*.csv found in {output_dir}")
+
+        nex_file = matches[0]
+
+        # Read the raw file without headers
+        df_raw = pd.read_csv(nex_file, header=None, names=["Time", "sim_flow"], parse_dates=["Time"])
+        df_raw.set_index("Time", inplace=True)
+
+        # Write to Output_Iteration file
+        output_file = output_iter_path / f"{basin_id}_output_iteration_0000.csv"
+        df_raw.to_csv(output_file)
+        logger.info(f"[NoCalibModel] Wrote: {output_file}")
+
+        # Copy all raw output to Output_Calib
+        for f in output_dir.glob("*.csv"):
+            shutil.copy(f, output_dir / "Output_Calib" / f.name)
+        logger.info(f"[NoCalibModel] Copied raw outputs to {output_dir / 'Output_Calib'}")
+
+        # Save reference to the output file (for .output property)
+        self._output_iter_file = output_file
 
 
+    def write_iteration_outputs(self, agent, metrics: dict, obj_score: float):
+        i = 0
+        basinID = self.eval_params.basinID
+        if not basinID:
+            raise ValueError("basinID must be defined for EvaluationOptions in single-run mode.")
+
+        # Write iteration outputs
+        df = self.output
+        df.to_csv(str(agent.output_iter_path / f"{basinID}_output_iteration_{i:04d}.csv"))
+        df.to_csv(str(agent.output_iter_path / f"{basinID}_output_best_iteration.csv"))
+        df.to_csv(str(agent.output_iter_path / f"{basinID}_output_last_iteration.csv"))
+
+        self.eval_params.write_metric_iter_file(i, obj_score, metrics)
+        self.eval_params.write_objective_log_file(i, obj_score)
+
+        dummy_param_df = pd.DataFrame([{
+            "model": "nocalib",
+            "param": "none",
+            str(i): 0.0
+        }])
+        self.eval_params.write_param_iter_file(i, dummy_param_df)
+        self.eval_params.write_param_all_file(i, dummy_param_df)
+        self.eval_params.write_last_iteration(i)
+        self.eval_params.write_cost_iter_file(i, agent.calib_path)
+        self.eval_params.write_run_complete_file("calib", agent.calib_path)
+
+    '''
     def get_args(self) -> str:
         return f"{self.catchments} all {self.nexus} all {self.realization}"
 
@@ -391,5 +426,5 @@ class NoCalibModel(ModelExec):
     def realization_file(self) -> Path:
         """Alias for realization file (for compatibility with validation logic)"""
         return self.realization
-
+    '''
 Model.update_forward_refs()

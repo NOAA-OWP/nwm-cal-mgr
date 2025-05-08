@@ -288,6 +288,78 @@ def dds(start_iteration: int, iterations: int,  calibration_object: 'Evaluatable
 def dds_set(start_iteration: int, iterations: int, agent: 'Agent') -> None:
     """
     Run DDS algorithm or a single-run model (if no calibratable parameters)
+    """
+    if agent.run_single_iteration:
+        logger.info("Skipping DDS loop — single-run mode with no calibratable parameters.")
+
+        import shutil
+        import subprocess
+        from pathlib import Path
+
+        # Copy realization file to job workdir
+        realization_src = Path(agent.realization_file)
+        realization_dst = Path(agent.job.workdir) / realization_src.name
+        if not realization_dst.exists():
+            logger.debug(f"Copying realization file {realization_src} -> {realization_dst}")
+            shutil.copy(realization_src, realization_dst)
+
+        # Update internal realization path
+        agent.model.realization = realization_dst
+
+        # Build and run ngen command
+        cmd = agent.cmd
+        logger.info(f"Executing single-run model: {cmd}")
+        try:
+            subprocess.check_call(cmd, shell=True, cwd=agent.job.workdir)
+        except subprocess.CalledProcessError as e:
+            logger.error(f"NGen execution failed with return code {e.returncode}")
+            raise
+
+        try:
+            # Postprocess output (creates Output_Iteration, Output_Calib, etc.)
+            output_iter_path = Path(agent.output_iter_path)
+            agent.model.postprocess_single_run_output(agent.job.workdir, agent.model.eval_params.basinID, output_iter_path)
+
+            # ✅ FIX: Register output CSV path for output property access
+            output_csv_path = output_iter_path / f"{agent.model.eval_params.basinID}_output_iteration_0000.csv"
+            agent.model._output_iter_file = output_csv_path
+
+            logger.info("Post-processing of single-run output completed.")
+
+        except Exception as e:
+            logger.error(f"Failed to postprocess single-run output: {e}")
+            raise
+
+        # Evaluate output and generate logs/plots
+        logger.info("Evaluating single-run output and generating logs/plots.")
+        output = agent.model.output
+        observed = agent.model.observed
+        metrics = _calc_metrics(output, observed, agent.model.evaluation_range, agent.model.threshold)
+
+        score = metrics.get(agent.model.eval_params.objective, None)
+        if score is None:
+            raise ValueError(f"Objective function metric '{agent.model.eval_params.objective}' not found in metrics")
+
+        agent.model.write_iteration_outputs(agent, metrics, score)
+        agent.model.write_run_complete_file(agent.run_name, agent.job.workdir)
+        complete_msg(agent.model.basinID, agent.run_name, agent.job.workdir, agent.model.user)
+        return
+
+    # === NORMAL DDS FLOW STARTS HERE ===
+    from ngen.cal.strategy import get_param_set
+
+    logger.info(f"Starting Iteration: {start_iteration}")
+    for i in range(start_iteration, iterations):
+        logger.info(f"Calibration iteration {i} of {iterations}")
+        params = get_param_set(i, agent)
+        score, metrics = _evaluate(i, agent.model, agent, first_iter_for_agent=(i == start_iteration), info=True)
+        agent.model.write_iteration_outputs(agent, metrics, score)
+        agent.job.write_last_iteration(i)
+
+
+def dds_set_old(start_iteration: int, iterations: int, agent: 'Agent') -> None:
+    """
+    Run DDS algorithm or a single-run model (if no calibratable parameters)
 
     Parameters
     ----------
