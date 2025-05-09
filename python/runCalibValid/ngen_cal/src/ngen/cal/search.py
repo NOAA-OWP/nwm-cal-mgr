@@ -287,6 +287,59 @@ def dds(start_iteration: int, iterations: int,  calibration_object: 'Evaluatable
         calibration_object.check_point(agent.job.workdir)
 
 
+def dds_set_last(start_iter: int, max_iter: int, agent: "Agent"):
+    """
+    Perform DDS parameter search.
+
+    Parameters
+    ----------
+    start_iter : int
+        Starting iteration (used for restarts).
+    max_iter : int
+        Maximum number of iterations.
+    agent : Agent
+        Calibration agent.
+    """
+    logger = logging.getLogger("NGEN_CAL")
+    logger.info(f"Starting Iteration: {start_iter}")
+
+    if agent.run_single_iteration:
+        logger.info("Detected NoCalibModel (single-run), skipping parameter set generation.")
+        return
+
+    logger.info("Starting calibration loop")
+    for iteration in range(start_iter, max_iter):
+        logger.info(f"Calibration iteration {iteration} of {max_iter}")
+
+        # Get parameter values to test in this iteration
+        param_set = {
+            p.name: p.value
+            for p in agent.model.parameters
+        }
+
+        # Update model with new parameter values
+        agent.model.update(param_set)
+
+        # Run simulation
+        agent.run(iteration)
+
+        # Evaluate results
+        output = agent.model.output
+        observed = agent.model.get_obsflow()
+
+        metrics = _calc_metrics(
+            output, observed,
+            agent.model.evaluation_range,
+            agent.model.threshold
+        )
+
+        obj_key = agent.model.eval_params.objective.upper()
+        if obj_key not in metrics:
+            raise ValueError(f"Objective function metric '{obj_key}' not found in metrics")
+
+        # Update best parameters if objective improved
+        agent.update(metrics[obj_key], param_set, iteration)
+
 def dds_set(start_iteration: int, iterations: int, agent: 'Agent') -> None:
     """
     Run DDS algorithm or a single-run model (if no calibratable parameters)
@@ -350,13 +403,15 @@ def dds_set(start_iteration: int, iterations: int, agent: 'Agent') -> None:
         complete_msg(agent.model.basinID, agent.run_name, agent.job.workdir, agent.model.user)
         return
 
-    # === NORMAL DDS FLOW STARTS HERE ===
-    from ngen.cal.strategy import get_param_set
 
     logger.info(f"Starting Iteration: {start_iteration}")
     for i in range(start_iteration, iterations):
         logger.info(f"Calibration iteration {i} of {iterations}")
-        params = get_param_set(i, agent)
+        if hasattr(agent.model, "parameters"):
+            param_set = {p.name: p.value for p in agent.model.parameters}
+        else:
+            param_set = {k: v for k, v in agent.model.eval_params.param_info.items()}
+
         score, metrics = _evaluate(i, agent.model, agent, first_iter_for_agent=(i == start_iteration), info=True)
         agent.model.write_iteration_outputs(agent, metrics, score)
         agent.job.write_last_iteration(i)
@@ -430,17 +485,63 @@ def dds_set_old(start_iteration: int, iterations: int, agent: 'Agent') -> None:
         return
 
     # === NORMAL DDS FLOW STARTS HERE ===
-    from ngen.cal.strategy import get_param_set
 
+    '''
     logger.info(f"Starting Iteration: {start_iteration}")
     for i in range(start_iteration, iterations):
         logger.info(f"Calibration iteration {i} of {iterations}")
-        params = get_param_set(i, agent)
-
+        param_set = {p.name: p.value for p in agent.model.parameters}
         score, metrics = _evaluate(i, agent.model, agent, first_iter_for_agent=(i == start_iteration), info=True)
         agent.model.write_iteration_outputs(agent, metrics, score)
         agent.job.write_last_iteration(i)
 
+    '''
+    if iterations < 2:
+        raise(ValueError("iterations must be >= 2"))
+    if start_iteration > iterations:
+        raise(ValueError("start_iteration must be <= iterations"))
+
+    neighborhood_size = agent.parameters.get('neighborhood', 0.2)
+    calibration_sets = agent.model.adjustables
+    init = start_iteration - 1 if start_iteration > 0 else start_iteration
+
+    for calibration_set in calibration_sets:
+        for calibration_object in calibration_set.adjustables:
+            calibration_object.df['sigma'] = neighborhood_size*(calibration_object.df['max'] - calibration_object.df['min'])
+            #TODO optimize by passing the set and iterating in update, then only have to write once to file
+            calibration_object.df_fill(init)
+            agent.update_config(init, calibration_object.adf[[str(init), 'param', 'model']], calibration_object.id)
+
+        # Produce baseline simulation output using the default parameter set
+        if start_iteration == 0:
+            if calibration_set.output is None:
+                logger.info("Running {} to produce initial simulation".format(agent.cmd))
+                _execute(agent, start_iteration)
+            with pushd(agent.job.workdir):
+                _evaluate(0, calibration_set, agent, first_iter_for_agent=True, info=True)
+            calibration_set.check_point(agent.job.workdir)
+            start_iteration += 1
+
+        for i in range(start_iteration, iterations+1):
+            # Calculate probability of inclusion
+            inclusion_probability = 1 - log(i)/log(iterations)
+            for calibration_object in calibration_set.adjustables:
+                dds_update(i, inclusion_probability, calibration_object, agent)
+
+            # Execute model run
+            logger.info("Running {} for iteration {}".format(agent.cmd, i))
+            _execute(agent, i)
+            with pushd(agent.job.workdir):
+                _evaluate(i, calibration_set, agent, first_iter_for_agent=False)
+            calibration_set.check_point(agent.job.workdir)
+
+        # Create configuration files for validation run
+        calibration_object.create_valid_realization_file(agent, calibration_object.adf,'valid_control')
+        calibration_object.create_valid_realization_file(agent, calibration_object.adf,'valid_best')
+
+        # Indicate completion
+        calibration_object.write_run_complete_file(agent.run_name, agent.workdir)
+        complete_msg(calibration_object.basinID, agent.run_name, agent.workdir, calibration_object.user)
 
 def dds_set_unused(start_iteration: int, iterations: int, agent: 'Agent')->None:
     """Perform parameter optimization using DDS algorithm.

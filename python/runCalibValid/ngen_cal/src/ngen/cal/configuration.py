@@ -509,9 +509,9 @@ class NoCalibModel(ModelExec):
 
         # Write iteration outputs
         df = self.output
-        df.to_csv(str(agent.output_iter_path / f"{basinID}_output_iteration_{i:04d}.csv"))
-        df.to_csv(str(agent.output_iter_path / f"{basinID}_output_best_iteration.csv"))
-        df.to_csv(str(agent.output_iter_path / f"{basinID}_output_last_iteration.csv"))
+        df.to_csv(str(Path(agent.output_iter_path) / f"{basinID}_output_iteration_{i:04d}.csv"))
+        df.to_csv(str(Path(agent.output_iter_path) / f"{basinID}_output_best_iteration.csv"))
+        df.to_csv(str(Path(agent.output_iter_path) / f"{basinID}_output_last_iteration.csv"))
 
         self.eval_params.write_metric_iter_file(i, obj_score, metrics)
         self.eval_params.write_objective_log_file(i, obj_score)
