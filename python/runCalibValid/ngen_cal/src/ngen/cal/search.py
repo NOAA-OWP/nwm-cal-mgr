@@ -86,6 +86,8 @@ def _calc_metrics(
     if df.empty:
         logger.warning("Cannot compute objective function, do time indicies align?")
     if eval_range:
+        print(f'eval_range : {eval_range}')
+        print(df.head())
         df = df.loc[eval_range[0]:eval_range[1]]
  
     df.reset_index(inplace=True)
@@ -335,10 +337,13 @@ def dds_set(start_iteration: int, iterations: int, agent: 'Agent') -> None:
         output = agent.model.output
         observed = agent.model.observed
         metrics = _calc_metrics(output, observed, agent.model.evaluation_range, agent.model.threshold)
-
+        print(f'metrics : {metrics}')
+        print(f'agent.model.eval_params.objective : {agent.model.eval_params.objective}')
         score = metrics.get(agent.model.eval_params.objective, None)
         if score is None:
-            raise ValueError(f"Objective function metric '{agent.model.eval_params.objective}' not found in metrics")
+            score = metrics.get(agent.model.eval_params.objective.upper(), None)
+            if score is None:
+                raise ValueError(f"Objective function metric '{agent.model.eval_params.objective}' not found in metrics")
 
         agent.model.write_iteration_outputs(agent, metrics, score)
         agent.model.write_run_complete_file(agent.run_name, agent.job.workdir)

@@ -21,6 +21,7 @@ from .model import PosInt
 from .model import ModelExec
 from .ngen import Ngen
 from .strategy import Estimation, Sensitivity
+from .search import _calc_metrics as calculate_all_metrics
 import pandas as pd
 import glob
 import os
@@ -114,8 +115,180 @@ class NoCalibModel(ModelExec):
     nexus: Path
     obsflow: Path
 
-    _output_iter_file: Optional[Path] = PrivateAttr(default=None)
+    objective_score: Optional[float] = None 
+    _output_iter_file: Path = PrivateAttr(default=None)
+    #metrics: Optional[dict] = None  # Ensure metrics can be assigned
+    evaluation_range: Optional[List[datetime]] = None
 
+    metrics: Optional[Dict[str, float]] = None
+
+    def postprocess_single_run_output(self, output_dir: Path, basin_id: str, output_iter_path: Path):
+        import pandas as pd
+        import shutil
+        import warnings
+        import logging
+        from .metric_functions import calculate_all_metrics
+
+        logger = logging.getLogger("NGEN_CAL")
+
+        # Look for the nexus output
+        matches = list(output_dir.glob(f"nex-{basin_id}*_output.csv"))
+        if not matches:
+            # Try a fallback to any nex file
+            matches = list(output_dir.glob("nex-*_output.csv"))
+            if not matches:
+                raise FileNotFoundError(f"No output file matching nex-{basin_id}*.csv found in {output_dir}")
+            warnings.warn(f"Using fallback output file: {matches[0].name}", RuntimeWarning)
+
+        nex_file = matches[0]
+        # Assign headers because these files have none
+        df_raw = pd.read_csv(nex_file, header=None, names=["Time", "sim_flow"], parse_dates=["Time"])
+        df_raw.set_index("Time", inplace=True)
+
+        output_iter_path.mkdir(parents=True, exist_ok=True)
+        output_file = output_iter_path / f"{basin_id}_output_iteration_0000.csv"
+        df_raw.to_csv(output_file)
+        logger.info(f"[NoCalibModel] Wrote: {output_file}")
+
+        self._output_iter_file = output_file
+
+        # Also copy to Output_Calib for plotting
+        calib_output_dir = output_dir / "Output_Calib"
+        calib_output_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy(output_file, calib_output_dir / output_file.name)
+        logger.info(f"[NoCalibModel] Copied raw outputs to {calib_output_dir}")
+
+        # Load observed
+        obs = self.get_obsflow()
+        print(f'obs : {obs}')
+
+        # Align by evaluation_range
+        eval_range = self.evaluation_range
+        if eval_range is not None:
+            obs = obs.loc[eval_range[0]:eval_range[1]]
+            df_raw = df_raw.loc[eval_range[0]:eval_range[1]]
+
+        df = pd.concat([df_raw["sim_flow"], obs], axis=1)
+        df.columns = ["sim_flow", "obs_flow"]
+        df.dropna(inplace=True)
+
+        print(f'df_raw:\n{df_raw}')
+        print(f'df:\n{df}')
+        print(f'df["obs_flow"]:\n{df["obs_flow"]}')
+        print(f'df["sim_flow"]:\n{df["sim_flow"]}')
+
+        logger.warning("Cannot compute objective function, do time indicies align?")
+        logger.info(f"eval_range : {eval_range}")
+        logger.info(f"Final merged DataFrame shape: {df.shape}")
+
+        # Compute metrics
+        if not df.empty:
+            self.metrics = calculate_all_metrics(
+                df["obs_flow"], df["sim_flow"], self.threshold
+            )
+        else:
+            self.metrics = {}
+
+        logger.info(f"self.metrics : {self.metrics}")
+        logger.info(f"self.eval_params.objective : {self.eval_params.objective}")
+
+        # Match objective function case
+        obj_key = self.eval_params.objective.upper()
+        if obj_key not in self.metrics:
+            logger.error(f"[NoCalibModel] Objective function metric '{obj_key}' not found. Available metrics: {list(self.metrics.keys())}")
+            raise ValueError(f"Objective function metric '{obj_key}' not found in metrics")
+
+    def postprocess_single_run_output_p3(self, workdir, basin_id, output_iter_path):
+        """
+        Postprocess output for single-run execution and calculate evaluation metrics.
+        """
+        import shutil
+        from datetime import datetime
+        from .search import calculate_all_metrics
+
+        output_dir = Path(workdir)
+        output_iter_path.mkdir(parents=True, exist_ok=True)
+
+        # Locate a nexus CSV output file
+        matches = list(output_dir.glob(f"nex-{basin_id}*_output.csv"))
+        if not matches:
+            matches = list(output_dir.glob("nex-*_output.csv"))
+            if not matches:
+                raise FileNotFoundError(f"No output file matching nex-{basin_id}*.csv found in {output_dir}")
+            nex_file = matches[0]
+            warnings.warn(f"Using fallback output file: {nex_file.name}", RuntimeWarning)
+        else:
+            nex_file = matches[0]
+
+        # Read and assign headers if missing
+        df_raw = pd.read_csv(nex_file, header=None, names=["Time", "sim_flow"], parse_dates=["Time"])
+        df_raw.set_index("Time", inplace=True)
+
+        # Write the standardized output CSV
+        output_file = output_iter_path / f"{basin_id}_output_iteration_0000.csv"
+        df_raw.to_csv(output_file)
+        self._output_iter_file = output_file
+        logger.info(f"[NoCalibModel] Wrote: {output_file}")
+
+        # Copy raw outputs to Output_Calib
+        output_calib_path = output_dir / "Output_Calib"
+        output_calib_path.mkdir(exist_ok=True)
+        for f in output_dir.glob("*.csv"):
+            shutil.copy(f, output_calib_path)
+        logger.info(f"[NoCalibModel] Copied raw outputs to {output_calib_path}")
+
+        # Load observed flow
+        obs = self.get_obsflow()
+
+        # Determine evaluation range (match validation_run.py logic)
+        eval_range = self.evaluation_range
+        if not isinstance(eval_range, (list, tuple)) or len(eval_range) != 2:
+            eval_range = [df_raw.index[0], df_raw.index[-1]]
+            logger.warning(f"[NoCalibModel] Invalid evaluation_range; defaulting to full range: {eval_range}")
+
+        # Align time slices
+        obs_sliced = obs.loc[eval_range[0]:eval_range[1]]
+        sim_sliced = df_raw.loc[eval_range[0]:eval_range[1]]
+
+        # Merge on datetime index
+        df = pd.merge(obs_sliced, sim_sliced, left_index=True, right_index=True, how='inner')
+        df.columns = ['obs_flow', 'sim_flow']
+
+        # If no overlap, log and fill with NaNs
+        if df.empty:
+            logger.warning("Cannot compute objective function, do time indicies align?")
+            self.metrics = {k.lower(): float('nan') for k in [
+                'KGE', 'NSE', 'RMSE', 'MAE', 'CORR', 'RSR', 'PBIAS'
+            ]}
+        else:
+            self.metrics = {
+                k.lower(): v for k, v in calculate_all_metrics(
+                    df["obs_flow"], df["sim_flow"], self.threshold
+                ).items()
+            }
+
+        print(f'self.metrics : {self.metrics}')
+        print(f'self.eval_params.objective : {self.eval_params.objective}')
+
+        # Ensure objective metric exists
+        obj_key = self.eval_params.objective.lower()
+        if obj_key not in self.metrics:
+            logger.error(
+                f"[NoCalibModel] Objective function metric '{obj_key}' not found. "
+                f"Available metrics: {list(self.metrics.keys())}"
+            )
+            raise ValueError(f"Objective function metric '{obj_key}' not found in metrics")
+
+        logger.info("[NoCalibModel] Post-processing of single-run output completed.")
+
+    #logger = logging.getLogger("NGEN_CAL")
+
+    def get_obsflow(self) -> pd.DataFrame:
+        print(f'self.obsflow : {self.obsflow}')
+        df = pd.read_csv(self.obsflow, index_col=0, parse_dates=True)
+        if 'Time' in df.columns:
+            df.set_index("Time", inplace=True)
+        return df
 
     def get_args(self) -> str:
         return f"{self.catchments} all {self.nexus} all {self.realization}"
@@ -150,52 +323,176 @@ class NoCalibModel(ModelExec):
     def realization_file(self) -> Path:
         return self.realization
 
-    def postprocess_single_run_output(self, output_dir: Path, basin_id: str, output_iter_path: Path):
+    def postprocess_single_run_output_p(self, workdir, basin_id, output_iter_path):
         """
-        Postprocess ngen single-run output to look like calibration output:
-        - Copies raw ngen files to Output_Calib/
-        - Creates <basinID>_output_iteration_0000.csv in Output_Iteration/
+        Postprocesses output for a single-run non-calibratable model:
+        - Copies all CSV outputs to Output_Calib
+        - Writes a nex-{basin_id} style file with headers to Output_Iteration
+        - Computes metrics and stores them
         """
-        import shutil
-        import warnings
-        import pandas as pd
+        output_dir = Path(workdir)
+        iter_dir = Path(output_iter_path)
+        iter_dir.mkdir(parents=True, exist_ok=True)
 
-        output_dir = Path(output_dir)
-        output_calib = output_dir / "Output_Calib"
-        output_iter_path = Path(output_iter_path)
+        # --- Step 1: Locate nex-* file ---
+        nex_file = next(output_dir.glob(f"nex-{basin_id}*_output.csv"), None)
+        if not nex_file:
+            fallback = list(output_dir.glob("nex-*_output.csv"))
+            if not fallback:
+                raise FileNotFoundError(f"No output file matching nex-{basin_id}*.csv found in {output_dir}")
+            nex_file = fallback[0]
+            warnings.warn(f"Using fallback output file: {nex_file.name}", RuntimeWarning)
 
-        output_calib.mkdir(exist_ok=True)
-        output_iter_path.mkdir(exist_ok=True)
+        # --- Step 2: Read and format output ---
+        df_raw = pd.read_csv(nex_file, header=None, names=["Time", "sim_flow"], parse_dates=["Time"])
+        df_raw.set_index("Time", inplace=True)
 
-        # Copy cat-* and nex-* files to Output_Calib
+        # --- Step 3: Write output_iteration CSV ---
+        output_file = iter_dir / f"{basin_id}_output_iteration_0000.csv"
+        df_raw.to_csv(output_file)
+        logger.info(f"[NoCalibModel] Wrote: {output_file}")
+
+        # --- Step 4: Copy CSV outputs to Output_Calib ---
+        calib_dir = output_dir / "Output_Calib"
+        calib_dir.mkdir(exist_ok=True)
+        for f in output_dir.glob("*.csv"):
+            shutil.copy2(f, calib_dir)
+        logger.info(f"[NoCalibModel] Copied raw outputs to {calib_dir}")
+
+        # --- Step 5: Load observed flow ---
+        obs = self.get_obsflow()
+
+        # --- Step 6: Determine valid evaluation range ---
+        eval_range = self.evaluation_range
+        if not isinstance(eval_range, (list, tuple)) or len(eval_range) != 2:
+            eval_range = [df_raw.index[0], df_raw.index[-1]]
+            logger.warning(f"[NoCalibModel] Invalid evaluation_range; defaulting to full time range: {eval_range}")
+
+        # --- Step 7: Slice and compute metrics ---
+        df_sliced = df_raw.loc[eval_range[0]:eval_range[1]]
+        simflow = df_sliced["sim_flow"]
+
+        metrics_upper = calculate_all_metrics(obs, simflow, eval_range, self.threshold)
+        self.metrics = {k.lower(): v for k, v in metrics_upper.items()}
+        print(f'self.metrics : {self.metrics}')
+        print(f'self.eval_params.objective : {self.eval_params.objective}')
+
+        if self.eval_params.objective not in self.metrics:
+            logger.error(
+                f"[NoCalibModel] Objective function metric '{self.eval_params.objective}' not found. "
+                f"Available metrics: {list(self.metrics.keys())}"
+            )
+            raise ValueError(f"Objective function metric '{self.eval_params.objective}' not found in metrics")
+
+        self._output_iter_file = output_file
+        logger.info("[NoCalibModel] Post-processing of single-run output completed.")
+
+
+    def postprocess_single_run_output_past2(self, workdir: Path, basin_id: str, output_iter_path: Path):
+        output_dir = Path(workdir)
+        output_iter_path.mkdir(parents=True, exist_ok=True)
+
+        # Find NGen nexus output file
+        matches = list(output_dir.glob(f"nex-{basin_id}*_output.csv"))
+        if not matches:
+            fallback = list(output_dir.glob("nex-*_output.csv"))
+            if fallback:
+                nex_file = fallback[0]
+                warnings.warn(f"Using fallback output file: {nex_file.name}", RuntimeWarning)
+            else:
+                raise FileNotFoundError(f"No output file matching nex-{basin_id}*.csv found in {output_dir}")
+        else:
+            nex_file = matches[0]
+
+        # Load NGen output assuming no header, and assign column names
+        df_raw = pd.read_csv(nex_file, header=None, names=["Time", "sim_flow"], parse_dates=["Time"])
+        df_raw.set_index("Time", inplace=True)
+
+        # Save formatted CSV for plotting and evaluation
+        output_file = output_iter_path / f"{basin_id}_output_iteration_0000.csv"
+        df_raw.to_csv(output_file)
+        self._output_iter_file = output_file
+        logger.info(f"[NoCalibModel] Wrote: {output_file}")
+
+        # Copy all outputs to Output_Calib directory
+        out_calib = output_dir / "Output_Calib"
+        out_calib.mkdir(exist_ok=True)
         for f in output_dir.glob("cat-*.csv"):
-            shutil.copy(f, output_calib)
+            shutil.copy2(f, out_calib)
         for f in output_dir.glob("nex-*.csv"):
-            shutil.copy(f, output_calib)
+            shutil.copy2(f, out_calib)
+        logger.info(f"[NoCalibModel] Copied raw outputs to {out_calib}")
 
-        # Find the appropriate nex-* file
-        matches = list(output_dir.glob(f"nex-{basin_id}_output.csv"))
+        # Load observed flow
+        obs = self.get_obsflow()
+
+        # Evaluate metrics
+        self.metrics = _calc_metrics(
+            simulated_hydrograph=df_raw["sim_flow"],
+            observed_hydrograph=obs,
+            eval_range=self.evaluation_range,
+            threshold=self.threshold,
+        )
+
+        if not self.metrics or self.eval_params.objective not in self.metrics:
+            logger.error(
+                f"[NoCalibModel] Objective function metric '{self.eval_params.objective}' not found. "
+                f"Available metrics: {list(self.metrics.keys()) if self.metrics else 'None'}"
+            )
+            raise ValueError(
+                f"Objective function metric '{self.eval_params.objective}' not found in metrics"
+            )
+
+    def postprocess_single_run_output_past(self, workdir: Path, basin_id: str, output_iter_path: Path):
+        import shutil
+        import pandas as pd
+        from datetime import datetime
+
+        # Ensure output dirs exist
+        output_iter_path.mkdir(parents=True, exist_ok=True)
+        output_calib_path = workdir / "Output_Calib"
+        output_calib_path.mkdir(parents=True, exist_ok=True)
+
+        # Look for nex-* file
+        output_dir = Path(workdir)
+        matches = list(output_dir.glob(f"nex-{basin_id}*_output.csv"))
         if not matches:
             fallback = list(output_dir.glob("nex-*_output.csv"))
             if not fallback:
                 raise FileNotFoundError(f"No output file matching nex-{basin_id}*.csv found in {output_dir}")
-            matches = fallback
-            warnings.warn(f"Using fallback output file: {matches[0].name}", RuntimeWarning)
+            nex_file = fallback[0]
+            warnings.warn(f"Using fallback output file: {nex_file.name}", RuntimeWarning)
+        else:
+            nex_file = matches[0]
 
-        nex_file = matches[0]
-        df = pd.read_csv(nex_file, index_col=0, parse_dates=True)
+        # Read nex-* file with no header, apply correct columns
+        df_raw = pd.read_csv(nex_file, header=None, names=["Time", "sim_flow"], parse_dates=["Time"])
+        df_raw.set_index("Time", inplace=True)
 
-        # Fix column name for compatibility with evaluation logic
-        if "streamflow (m3/s)" in df.columns and "sim_flow" not in df.columns:
-            df.rename(columns={"streamflow (m3/s)": "sim_flow"}, inplace=True)
+        # Save standardized iteration output
+        output_file = output_iter_path / f"{basin_id}_output_iteration_0000.csv"
+        df_raw.to_csv(output_file)
+        self._output_iter_file = output_file
 
-        out_file = output_iter_path / f"{basin_id}_output_iteration_0000.csv"
-        df.to_csv(out_file)
+        logger.info(f"[NoCalibModel] Wrote: {output_file}")
 
-        self._output_iter_file = out_file
+        # Copy all outputs to Output_Calib
+        for f in output_dir.glob("*.csv"):
+            shutil.copy(f, output_calib_path)
 
-        logger.info(f"[NoCalibModel] Wrote: {out_file}")
-        logger.info(f"[NoCalibModel] Copied raw outputs to {output_calib}")
+        logger.info(f"[NoCalibModel] Copied raw outputs to {output_calib_path}")
+
+        # Load observed data
+        obs = self.get_obsflow()
+
+        # Compute metrics using shared evaluation method
+        self.metrics = _calc_metrics(
+            simulated_hydrograph=df_raw["sim_flow"],
+            observed_hydrograph=obs,
+            eval_range=self.evaluation_range,
+            threshold=self.threshold,
+        )
+
 
     @property
     def output(self) -> pd.DataFrame:
@@ -203,45 +500,6 @@ class NoCalibModel(ModelExec):
             raise FileNotFoundError(f"No simulation output file found at: {self._output_iter_file}")
         import pandas as pd
         return pd.read_csv(self._output_iter_file, index_col=0, parse_dates=True)
-
-    def postprocess_single_run_output(self, output_dir: Path, basin_id: str, output_iter_path: Path):
-        # Ensure output directories exist
-        output_dir = Path(output_dir)
-        output_iter_path = Path(output_iter_path)
-        output_iter_path.mkdir(parents=True, exist_ok=True)
-        (output_dir / "Output_Calib").mkdir(parents=True, exist_ok=True)
-
-        # Find the best match for nex output file
-        matches = list(output_dir.glob(f"nex-{basin_id}*_output.csv"))
-        if not matches:
-            # fallback logic
-            for f in output_dir.glob("nex-*_output.csv"):
-                matches.append(f)
-                warnings.warn(f"Using fallback output file: {f.name}", RuntimeWarning)
-                break
-
-        if not matches:
-            raise FileNotFoundError(f"No output file matching nex-{basin_id}*.csv found in {output_dir}")
-
-        nex_file = matches[0]
-
-        # Read the raw file without headers
-        df_raw = pd.read_csv(nex_file, header=None, names=["Time", "sim_flow"], parse_dates=["Time"])
-        df_raw.set_index("Time", inplace=True)
-
-        # Write to Output_Iteration file
-        output_file = output_iter_path / f"{basin_id}_output_iteration_0000.csv"
-        df_raw.to_csv(output_file)
-        logger.info(f"[NoCalibModel] Wrote: {output_file}")
-
-        # Copy all raw output to Output_Calib
-        for f in output_dir.glob("*.csv"):
-            shutil.copy(f, output_dir / "Output_Calib" / f.name)
-        logger.info(f"[NoCalibModel] Copied raw outputs to {output_dir / 'Output_Calib'}")
-
-        # Save reference to the output file (for .output property)
-        self._output_iter_file = output_file
-
 
     def write_iteration_outputs(self, agent, metrics: dict, obj_score: float):
         i = 0
