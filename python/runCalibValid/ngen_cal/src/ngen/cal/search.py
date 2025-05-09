@@ -400,7 +400,9 @@ def dds_set(start_iteration: int, iterations: int, agent: 'Agent') -> None:
 
         agent.model.write_iteration_outputs(agent, metrics, score)
         agent.model.write_run_complete_file(agent.run_name, agent.job.workdir)
-        complete_msg(agent.model.basinID, agent.run_name, agent.job.workdir, agent.model.user)
+        # complete_msg(agent.model.basinID, agent.run_name, agent.job.workdir, agent.model.user)
+        path_str = str(agent.job.workdir) if isinstance(agent.job.workdir, Path) else agent.job.workdir
+        complete_msg(agent.model.basinID, agent.run_name, path_str, agent.model.user)
         return
 
 

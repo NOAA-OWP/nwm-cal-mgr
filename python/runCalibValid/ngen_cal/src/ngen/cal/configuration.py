@@ -501,7 +501,53 @@ class NoCalibModel(ModelExec):
         import pandas as pd
         return pd.read_csv(self._output_iter_file, index_col=0, parse_dates=True)
 
-    def write_iteration_outputs(self, agent, metrics: dict, obj_score: float):
+    @property
+    def basinID(self):
+        return self.eval_params.basinID
+
+    @property
+    def user(self):
+        return None
+
+    def write_run_complete_file(self, run_name: str, workdir: Path):
+        """Write a simple completion file for single-run NoCalibModel."""
+        complete_file = workdir / f"{run_name}_complete.txt"
+        with open(complete_file, "w") as f:
+            f.write("Single-run execution complete.\n")
+
+    def write_iteration_outputs(self, agent, metrics: dict, score: float):
+        import pandas as pd
+        from pathlib import Path
+        import logging
+
+        logger = logging.getLogger(__name__)
+        i = 0  # Always iteration 0 for single-run
+
+        # Write metrics to Output_Iteration
+        df = pd.DataFrame.from_dict(metrics, orient="index", columns=["value"])
+        basinID = self.eval_params.basinID
+        output_path = Path(agent.output_iter_path)
+        output_file = output_path / f"{basinID}_output_iteration_{i:04d}.csv"
+        df.to_csv(output_file)
+        logger.info(f"[NoCalibModel] Wrote: {output_file}")
+
+        # Write to Output_Calib as well
+        calib_path = Path(agent.calib_path)
+        df.to_csv(calib_path / f"{basinID}_output_calib_{i:04d}.csv")
+        logger.info(f"[NoCalibModel] Copied raw outputs to {calib_path}")
+
+        # Save cost function log for compatibility
+        df_log = pd.DataFrame([{
+            "best_objective_function": score,
+            "final_objective_function": score
+        }])
+        df_log.to_csv(calib_path / "cost_function_log.csv", index=False)
+
+    def write_cost_iter_file(self, i, path):
+        # No-op for single-run NoCalibModel
+        pass
+
+    def write_iteration_outputs_last(self, agent, metrics: dict, obj_score: float):
         i = 0
         basinID = self.eval_params.basinID
         if not basinID:
