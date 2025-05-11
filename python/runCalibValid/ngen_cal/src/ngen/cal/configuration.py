@@ -216,22 +216,25 @@ class NoCalibModel(ModelExec):
         pd.DataFrame([self.metrics]).to_csv(metrics_path, index=False)
 
         # Generate plots
+        plot_iter_path = workdir / "Plot_Iteration"
+        plot_iter_path.mkdir(parents=True, exist_ok=True)
+
         title = f"Single-Run Evaluation - {basin_id}"
 
         # Hydrograph
         df_hydro = df.copy()
         df_hydro["Time"] = df_hydro.index
         df_hydro = df_hydro[["Time", "obs_flow", "sim_flow"]]
-        pf.plot_streamflow(df_hydro, output_iter_path / f"{basin_id}_hydrograph_single_run.png", title)
+        pf.plot_streamflow(df_hydro, plot_iter_path / f"{basin_id}_hydrograph_single_run.png", title)
 
         # Flow Duration Curve
         df_fdc = df.rename(columns={"obs_flow": "Observation", "sim_flow": "SingleRun"})
-        pf.plot_fdc_calib(df_fdc, output_iter_path / f"{basin_id}_fdc_single_run.png", title)
+        pf.plot_fdc_calib(df_fdc, plot_iter_path / f"{basin_id}_fdc_single_run.png", title)
 
         # Scatterplot
         df_scat = df.rename(columns={"obs_flow": "Observation", "sim_flow": "SingleRun"})
         df_scat["Time"] = df.index
-        pf.scatterplot_streamflow(df_scat, output_iter_path / f"{basin_id}_scatter_single_run.png", title)
+        pf.scatterplot_streamflow(df_scat, plot_iter_path / f"{basin_id}_scatter_single_run.png", title)
 
         logger.info(f"[NoCalibModel] Post-processing of single-run output completed.")
 

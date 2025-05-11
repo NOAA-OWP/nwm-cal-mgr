@@ -123,7 +123,7 @@ def _evaluate(i: int, calibration_object: 'Evaluatable', agent: 'Agent', first_i
     # Calculate objective function and metrics
     metrics = _calc_metrics(calibration_object.output, calibration_object.observed, calibration_object.evaluation_range, calibration_object.threshold)
     #  Handle single-run execution output writing for NoCalibModel
-    if isinstance(calibration_object, NoCalibModel):
+    if agent.run_single_iteration:
         calibration_object.write_iteration_outputs(agent, metrics, metrics["objFunVal"])
         return metrics
 
@@ -287,7 +287,115 @@ def dds(start_iteration: int, iterations: int,  calibration_object: 'Evaluatable
         calibration_object.check_point(agent.job.workdir)
 
 
-def dds_set(start_iteration: int, iterations: int, agent: 'Agent')->None:
+def dds_set(start_iteration: int, iterations: int, agent: 'Agent') -> None:
+    """Perform parameter optimization using DDS algorithm.
+
+    Parameters
+    ----------
+    start_iteration : int
+        Starting iteration number
+    iterations : int
+        Total number of iterations to perform
+    agent : Agent
+        Agent object controlling model, config, and job info
+    """
+    from math import log
+    import logging
+    import shutil
+    from ngen.cal.utils import complete_msg
+    logger = logging.getLogger("NGEN_CAL")
+
+    # Handle single-run execution if run_single_iteration flag is set
+    if agent.run_single_iteration:
+        logger.info("[NoCalibModel] Detected NoCalibModel (single-run), executing single-run workflow.")
+        from pathlib import Path
+
+        output_iter_path = Path(agent.output_iter_path)
+        output_iter_path.mkdir(parents=True, exist_ok=True)
+
+        # Execute model once and compute metrics
+        # agent.execute_model()
+        # Copy realization file to job workdir
+        realization_src = Path(agent.realization_file)
+        realization_dst = Path(agent.job.workdir) / realization_src.name
+        if not realization_dst.exists():
+            logger.debug(f"Copying realization file {realization_src} -> {realization_dst}")
+            shutil.copy(realization_src, realization_dst)
+
+        # Update internal realization path
+        agent.model.realization = realization_dst
+
+        # Build and run ngen command
+        cmd = agent.cmd
+        logger.info(f"Executing single-run model: {cmd}")
+        try:
+            subprocess.check_call(cmd, shell=True, cwd=agent.job.workdir)
+        except subprocess.CalledProcessError as e:
+            logger.error(f"NGen execution failed with return code {e.returncode}")
+            raise
+
+        # Post-process results
+        agent.model.postprocess_single_run_output(
+            workdir=agent.job.workdir,
+            basin_id=agent.model.eval_params.basinID,
+            output_iter_path=output_iter_path
+        )
+
+        # Write completion marker
+        if hasattr(agent.model, "write_run_complete_file"):
+            agent.model.write_run_complete_file(agent.run_name, agent.job.workdir)
+        if hasattr(agent.model, "basinID") and hasattr(agent.model, "user"):
+            complete_msg(agent.model.basinID, agent.run_name, str(agent.job.workdir), agent.model.user)
+
+        logger.info("[NoCalibModel] Single-run DDS execution completed.")
+        return
+
+    # === Original DDS calibration workflow ===
+    if iterations < 2:
+        raise ValueError("iterations must be >= 2")
+    if start_iteration > iterations:
+        raise ValueError("start_iteration must be <= iterations")
+
+    neighborhood_size = agent.parameters.get('neighborhood', 0.2)
+    calibration_sets = agent.model.adjustables
+    init = start_iteration - 1 if start_iteration > 0 else start_iteration
+
+    for calibration_set in calibration_sets:
+        for calibration_object in calibration_set.adjustables:
+            calibration_object.df['sigma'] = neighborhood_size * (
+                calibration_object.df['max'] - calibration_object.df['min']
+            )
+            calibration_object.df_fill(init)
+            agent.update_config(init, calibration_object.adf[[str(init), 'param', 'model']], calibration_object.id)
+
+        if start_iteration == 0:
+            if calibration_set.output is None:
+                logger.info("Running {} to produce initial simulation".format(agent.cmd))
+                _execute(agent, start_iteration)
+            with pushd(agent.job.workdir):
+                _evaluate(0, calibration_set, agent, first_iter_for_agent=True, info=True)
+            calibration_set.check_point(agent.job.workdir)
+            start_iteration += 1
+
+        for i in range(start_iteration, iterations + 1):
+            inclusion_probability = 1 - log(i) / log(iterations)
+            for calibration_object in calibration_set.adjustables:
+                dds_update(i, inclusion_probability, calibration_object, agent)
+            logger.info("Running {} for iteration {}".format(agent.cmd, i))
+            _execute(agent, i)
+            with pushd(agent.job.workdir):
+                _evaluate(i, calibration_set, agent, first_iter_for_agent=False)
+            calibration_set.check_point(agent.job.workdir)
+
+        # Validation file creation and completion
+        for calibration_object in calibration_set.adjustables:
+            calibration_object.create_valid_realization_file(agent, calibration_object.adf, 'valid_control')
+            calibration_object.create_valid_realization_file(agent, calibration_object.adf, 'valid_best')
+            calibration_object.write_run_complete_file(agent.run_name, agent.workdir)
+            complete_msg(calibration_object.basinID, agent.run_name, agent.workdir, calibration_object.user)
+
+
+def dds_set_last(start_iteration: int, iterations: int, agent: 'Agent')->None:
     import random
     import shutil
     import logging
@@ -342,10 +450,13 @@ def dds_set(start_iteration: int, iterations: int, agent: 'Agent')->None:
 
         return
 
-    # Regular workflow (preserved exactly)
+    # Regular workflow
     logger.info("Starting calibration loop")
-    for i in range(start_iter, total_iter):
-        logger.info(f"Calibration iteration {i} of {total_iter}")
+    for i in range(start_iteration, iterations):
+        logger.info(f"Calibration iteration {i} of {iterations}")
+
+        #for i in range(start_iter, total_iter):
+        # logger.info(f"Calibration iteration {i} of {total_iter}")
         param_set = {
             p.name: p.value for p in agent.model.parameters
         }
