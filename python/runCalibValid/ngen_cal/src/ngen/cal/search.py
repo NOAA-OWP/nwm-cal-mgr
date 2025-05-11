@@ -327,21 +327,18 @@ def dds_set(start_iteration: int, iterations: int, agent: 'Agent')->None:
 
         # Post-process results
         agent.model.postprocess_single_run_output(
-            agent.job.workdir,
-            agent.model.eval_params.basinID,
-            Path(agent.calib_path_output).parent  # <-- Fix output_dir reference
+            workdir=agent.job.workdir,
+            basin_id=agent.model.eval_params.basinID,
+            output_iter_path=output_iter_path
         )
 
         # Write iteration output and completion marker
-        if hasattr(agent.model, "write_iteration_outputs"):
-            score = agent.model.metrics.get(agent.model.eval_params.objective.upper(), float("nan"))
-            agent.model.write_iteration_outputs(agent, agent.model.metrics, score)
 
         if hasattr(agent.model, "write_run_complete_file"):
             agent.model.write_run_complete_file(agent.run_name, agent.job.workdir)
 
         if hasattr(agent.model, "basinID") and hasattr(agent.model, "user"):
-            complete_msg(agent.model.basinID, agent.run_name, agent.job.workdir, agent.model.user)
+            complete_msg(agent.model.basinID, agent.run_name, str(agent.job.workdir), agent.model.user)
 
         return
 
