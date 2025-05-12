@@ -110,30 +110,7 @@ def main(general: General, model_conf):
     os.environ['NGEN_RESULTS_DIR'] = str(Path(agent.workdir).parent.parent)
     logging.info(f'Set environment variable NGEN_RESULTS_DIR to: {os.environ["NGEN_RESULTS_DIR"]}')
 
-    # set environment variables for ngen+modules log level settings
     import numpy as np
-
-    log_level_array = np.array([
-        ['NGEN_LOGLEVEL', 'INFO'], 
-        ['SFT_LOGLEVEL', 'INFO'], 
-        ['SMP_LOGLEVEL', 'INFO'],
-        ['CFE_LOGLEVEL', 'INFO'],
-        ['UEB_BMI_LOGLEVEL', 'INFO'], 
-        ['TROUTE_LOGLEVEL', 'DEBUG'], 
-        ['SNOW17_LOGLEVEL', 'INFO'], 
-        ['NOAHOWP_LOGLEVEL', 'INFO'], 
-        ['SACSMA_LOGLEVEL', 'INFO'], 
-        ['LASAM_LOGLEVEL', 'INFO'], 
-        ['SCHISM_LOGLEVEL', 'INFO'], 
-        ['SFINCS_LOGLEVEL', 'INFO'], 
-        ['TOPOFLOW_LOGLEVEL', 'INFO'], 
-        ['TOPMODEL_LOGLEVEL', 'INFO']
-        ])  # 2D array
-    logging.info("Setting environment variables for log level settings of ngen and it's sub-modules")
-    for i in range(len(log_level_array)):
-        logging.info(f"\t{log_level_array[i,0]} = {log_level_array[i,1]}")
-        os.environ[log_level_array[i,0]] = log_level_array[i,1]
-
     if general.strategy.algorithm == Algorithm.dds:
         start_iteration = general.start_iteration
         if general.restart:
