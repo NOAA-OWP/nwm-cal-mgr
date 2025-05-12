@@ -237,6 +237,49 @@ class NoCalibModel(ModelExec):
         pf.scatterplot_streamflow(df_scat, plot_iter_path / f"{basin_id}_scatter_single_run.png", title)
 
         logger.info(f"[NoCalibModel] Post-processing of single-run output completed.")
+        # At the end of postprocess_single_run_output() method in NoCalibModel
+
+        from .plot_output import plot_calib_output
+        from ngen.cal.plot_functions import barplot_metric, scatterplot_objfun_metric #plot_objective_function
+        import pandas as pd
+
+        #plot_calib_output(basin_id, self, 0, output_calib_path, plot_iter_path)
+        '''
+        plot_calib_output(
+            i=0,
+            calibration_object=self,      # NoCalibModel inherits necessary properties
+            agent=self.agent,             # You should set this earlier during model initialization
+            eval_range=self.eval_range    # Optional, if already defined
+        )
+        '''
+        # Prepare DataFrame for plotting
+        df_metrics = pd.DataFrame(self.metrics, index=[0])
+        df_metrics["iteration"] = 0
+        df_metrics.set_index("iteration", inplace=True)
+
+
+        barplot_metric(df_metrics, plot_iter_path / f"{basin_id}_barplot_metrics_iterations.png","braplot_metrics_test")
+
+        '''
+        plot_metric_values(
+            df_metrics=df_metrics,
+            path=output_iter_path,
+            basin_id=basin_id,
+            save_tag="iteration"
+        )
+
+        df_score = pd.DataFrame({"best_objective_function": [score], "iteration": [0]})
+        df_score.set_index("iteration", inplace=True)
+
+        plot_objective_function(
+            df_score=df_score,
+            path=output_iter_path,
+            basin_id=basin_id,
+            save_tag="iteration"
+        )
+        '''
+        logger.info("[NoCalibModel] Generated metric and objective function plots.")
+
 
     def postprocess_single_run_output_path_last(self, workdir: Path, basin_id: str, output_dir: Optional[Path] = None):
         """

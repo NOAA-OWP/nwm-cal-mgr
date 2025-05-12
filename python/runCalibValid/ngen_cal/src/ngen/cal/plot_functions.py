@@ -563,7 +563,9 @@ def barplot_metric(
     axs = trim_axs(axs, len(allcols))
     for ax, varname in zip(axs, allcols):
         if varname==allcols[-1]:
-            label0 = [x.replace("valid_","") for x in runtp]
+            #label0 = [x.replace("valid_","") for x in runtp]
+            label0 = [str(x).replace("valid_", "") for x in runtp]
+
         else:
             label0 = [""] * len(runtp)
         for i in range(len(runtp)):
