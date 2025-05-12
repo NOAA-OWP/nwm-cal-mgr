@@ -913,13 +913,17 @@ def create_symlinks(src_file_list, src_dir, dst_dir):
 
 def create_lstm_input(
         catids: List[str],
+        time_period: dict,
         attr_file: Union[str, Path],
-        lstm_input_dir: str,
-        lstm_data_dir: str,
-        lstm_run_dir:str
+        param_dir_source: Union[str, Path],
+        lstm_input_dir: Union[str, Path],
+        lstm_bmi_dir: Union[str, Path],
+
 ) -> None:
+
     """ Create BMI configuration file for LSTM
 
+    gfun.create_lstm_input(catids, time_period, attr_file, conf3[m1+'_parameter_dir'], mod_input_dir, conf3[m2+"_bmi_dir"])
     Parameters
     ----------
     catids : catchment IDs in the basin
@@ -930,6 +934,13 @@ def create_lstm_input(
     None
 
     """
+    print("CREATE_LSTM_INPUT")
+    print(f"catids : {catids}")
+    print(f"time_period : {time_period}")
+    print(f"param_dir_source: {param_dir_source}")
+    print(f"lstm_input_dir : {lstm_input_dir}")
+    print(f"lstm_bmi_dir : {lstm_bmi_dir}")
+
     os.makedirs(lstm_input_dir, exist_ok=True)
 
     # Read hydrofabric attribute file
@@ -937,6 +948,8 @@ def create_lstm_input(
     dfa.set_index("divide_id", inplace=True)
 
     # create the config file
+    lstm_data_dir = os.path.join(param_dir_source, "ngen_files/data/lstm")
+    lstm_run_dir = os.path.join(param_dir_source, "trained_neuralhydrology_models/nh_AORC_hourly_slope_elev_precip_temp_seq999_seed101_2801_191806")
     run_dir = lstm_input_dir #os.path.join(lstm_input_dir, 'run')
     lstm_train_data_dir = os.path.join(lstm_run_dir, 'train_data')
     train_data_dir = os.path.join(run_dir, 'train_data')
@@ -976,6 +989,7 @@ def create_lstm_input(
 
         with open(input_file, "w") as f:
             yaml.dump(config, f, default_flow_style=False, Dumper=QuotedDumper)
+        print("\nCOMPLETE create_lstm_input")
 
 def change_sac_snow17_input(
         module: str,
