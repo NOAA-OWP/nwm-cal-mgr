@@ -269,11 +269,10 @@ def create_input(filename):
                     gfun.change_lasam_input(catids, mod_input_dir, conf3[m2+"_bmi_dir"], conf3['lasam_parameter_dir'])
                 elif m1 == "smp" and output_dict['output_sm']:
                     output_dict['sm_profile_depth'] = gfun.change_smp_input(catids, mod_input_dir, conf3[m2+"_bmi_dir"], output_dict['sm_frac_depth'], output_dict['sm_profile_depth'])
-                else:
+                elif m1 != 'lstm':
                     # Create symbolic link
                     logger.info(f'{m2}: create symlink from {bmi_dir} to {mod_input_dir}')
                     os.symlink(bmi_dir, mod_input_dir, target_is_directory=True)
-                    
         else:
             if m1 in ['cfes', 'cfex']:
                 gfun.create_cfe_input(catids, modules, attr_file, mod_input_dir)

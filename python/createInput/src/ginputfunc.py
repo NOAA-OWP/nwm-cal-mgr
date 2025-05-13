@@ -939,7 +939,6 @@ def create_lstm_input(
     lstm_train_data_dir = os.path.join(lstm_run_dir, 'train_data')
     train_data_dir = os.path.join(run_dir, 'train_data')
     config_file = os.path.join(lstm_input_dir, 'config.yml')
-    #if not os.path.exists(train_data_dir):
     if not os.path.isdir(lstm_train_data_dir):
         raise ValueError(f"Source path '{lstm_train_data_dir}' must be an existing directory.")
 
@@ -947,40 +946,39 @@ def create_lstm_input(
         os.unlink(train_data_dir)
 
     os.symlink(lstm_train_data_dir, train_data_dir, target_is_directory=True)
-
+    
+    # Create config.yml
     params_to_remove = ['test_*', 'train_*', 'validation_*', '*_dir'] 
     create_lstm_config(
-        input_config_path = os.path.join(lstm_run_dir, 'config.yml'),
+        input_config_path = config_file,
         output_dir = lstm_input_dir,
         params_to_remove=params_to_remove
     )
 
     data_files = ['initial_states.csv', 'input_scaling.csv', 'lstm_mean_std.csv', 'sugar_creek_trained.pt']
     create_symlinks(data_files, lstm_data_dir, lstm_input_dir)
-
     data_files = ['model_epoch009.pt', 'optimizer_state_epoch009.pt']
     create_symlinks(data_files, lstm_run_dir, lstm_input_dir)
-
     for catID in catids:
-        input_file = os.path.join(lstm_input_dir, catID + '.yml')
+        edfs_bmi_file = os.path.join(lstm_bmi_dir, catID + '.yml')
+        if not os.path.isfile(edfs_bmi_file):
+            raise FileNotFoundError(f"Required bmi file not found: {edfs_bmi_file}")
 
-        config = {
+        with open(edfs_bmi_file, 'r') as f:
+            config = yaml.safe_load(f)
+
+        params_to_update = {
             "train_cfg_file": os.path.join(lstm_input_dir, 'config.yml'),
             'time_step': '1 hour',
             'initial_state': 'zero',
             'basin_name': catID,
-            'basin_id': catID,
-            'area_sqkm': 10.09406319443798,
-            'lat': 46.528817831207256,
-            'lon': -69.2994875283471,
             'verbose': 1,
-            'elev_mean': 316.713505221,
-            'slope_mean': 5.07506774
         }
 
+        config.update(params_to_update)
+        input_file = os.path.join(lstm_input_dir, catID + '.yml')
         with open(input_file, "w") as f:
             yaml.dump(config, f, default_flow_style=False, Dumper=QuotedDumper)
-
 
 def change_sac_snow17_input(
         module: str,
