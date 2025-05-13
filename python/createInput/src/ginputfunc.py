@@ -819,78 +819,63 @@ def create_sac_input(
         with open(input_file, "w") as f:
             f.writelines('\n'.join(input_list))
 
+def is_probably_regex(pattern):
+    return any(c in pattern for c in ['^', '$', '.', '(', '[', '|', '\\'])
+
 
 def create_lstm_config(
-    lstm_input_dir: str
+    input_config_path: str,
+    output_dir: str, 
+    params_to_remove=None, 
+    params_to_update=None
 ) -> None:
 
-    output_file = os.path.join(lstm_input_dir, 'config.yml')
-    data_dir = os.path.join(lstm_input_dir, 'data')
-    run_dir = lstm_input_dir #os.path.join(lstm_input_dir, 'run')
-    img_log_dir = os.path.join(lstm_input_dir, 'img_log')
-    validation_basin_file = ""
+    """
+    Reads a YAML config file, removes specified parameters, updates others,
+    and writes the result to a new config.yaml in a given output directory.
 
-    train_basin_file = f"{data_dir}/list_515_camels_basins_aorc.txt"
-    test_basin_file = train_basin_file
-    train_dir = f"{run_dir}/train_data"
+    :param input_config_path: Path to the original config.yaml
+    :param output_dir: Directory where the modified config will be saved
+    :param params_to_remove: List of top-level parameters to remove
+    :param params_to_update: Dict of parameters to update or add
+    """
+    import re
+    from fnmatch import fnmatch
 
-    config = {
-        'allow_subsequent_nan_losses': 1000,
-        'batch_size': 256,
-        'clip_gradient_norm': 1,
-        'clip_targets_to_zero': ['QObs(mm/h)'],
-        'commit_hash': 'a2e9bb2',
-        'data_dir': data_dir,
-        'dataset': 'hourly_camels_us',
-        'device': 'cuda:0',
-        'dynamic_inputs': ['APCP_surface', 'TMP_2maboveground'],
-        'epochs': 9,
-        'experiment_name': 'nh_AORC_hourly_slope_elev_precip_temp_seq999_seed101',
-        'forcings': ['aorc_hourly'],
-        'head': 'regression',
-        'hidden_size': 126,
-        'img_log_dir': img_log_dir,
-        'initial_forget_bias': 3,
-        'learning_rate': {
-            0: 0.001,
-            2: 0.0008,
-            4: 0.0005
-        },
-        'log_interval': 5,
-        'log_n_figures': 1,
-        'log_tensorboard': False,
-        'loss': 'NSE',
-        'metrics': ['NSE', 'KGE'],
-        'model': 'cudalstm',
-        'num_workers': 16,
-        'number_of_basins': 515,
-        'optimizer': 'Adam',
-        'output_activation': 'linear',
-        'output_dropout': 0.4,
-        'package_version': '1.10.0',
-        'predict_last_n': 1,
-        'run_dir': run_dir,
-        'save_weights_every': 1,
-        'seed': 101,
-        'seq_length': 999,
-        'static_attributes': ['elev_mean', 'slope_mean'],
-        'target_variables': ['QObs(mm/h)'],
-        'test_basin_file': test_basin_file,
-        'test_end_date': '30/09/2023',
-        'test_start_date': '01/10/1985',
-        'train_basin_file': train_basin_file,
-        'train_dir': train_dir,
-        'train_end_date': '30/09/2023',
-        'train_start_date': '01/10/2015',
-        'validate_every': 1,
-        'validate_n_random_basins': 100,
-        'validation_basin_file': validation_basin_file,
-        'validation_end_date': '30/09/2004',
-        'validation_start_date': '01/10/2003'
-    }
+    params_to_remove = params_to_remove or []
+    params_to_update = params_to_update or {}
 
-    with open(output_file, "w") as f:
-        yaml.dump(config, f, sort_keys=False, default_flow_style=False, Dumper=QuotedDumper)
+    # Read the original config
+    with open(input_config_path, 'r') as f:
+        config = yaml.safe_load(f)
+
+    # Remove specified parameters
+    keys_to_remove = set()
+    for key in config:
+        for pattern in params_to_remove:
+            try:
+                if fnmatch(key, pattern):
+                    keys_to_remove.add(key)
+                elif is_probably_regex(pattern) and re.fullmatch(pattern, key):
+                    keys_to_remove.add(key)
+            except re.error as regex_error:
+                print(f"Skipping invalid regex pattern: '{pattern}' - {regex_error}")
+    for key in keys_to_remove:
+        config.pop(key, None)
+    
+    # Update or add new parameters
+    config.update(params_to_update)
+
+    # Ensure output directory exists
+    os.makedirs(output_dir, exist_ok=True)
+    output_config_path = os.path.join(output_dir, "config.yaml")
+    
+    # Write the modified config
+    with open(output_config_path, 'w') as f:
+        yaml.dump(config, f, default_flow_style=False)
+
+    print(f"New config written to: {output_config_path}")
+
 
 def create_symlinks(src_file_list, src_dir, dst_dir):
 
@@ -962,7 +947,13 @@ def create_lstm_input(
         os.unlink(train_data_dir)
 
     os.symlink(lstm_train_data_dir, train_data_dir, target_is_directory=True)
-    create_lstm_config(lstm_input_dir)
+
+    params_to_remove = ['test_*', 'train_*', 'validation_*', '*_dir'] 
+    create_lstm_config(
+        input_config_path = os.path.join(lstm_run_dir, 'config.yml'),
+        output_dir = lstm_input_dir,
+        params_to_remove=params_to_remove
+    )
 
     data_files = ['initial_states.csv', 'input_scaling.csv', 'lstm_mean_std.csv', 'sugar_creek_trained.pt']
     create_symlinks(data_files, lstm_data_dir, lstm_input_dir)
@@ -989,7 +980,7 @@ def create_lstm_input(
 
         with open(input_file, "w") as f:
             yaml.dump(config, f, default_flow_style=False, Dumper=QuotedDumper)
-        print("\nCOMPLETE create_lstm_input")
+
 
 def change_sac_snow17_input(
         module: str,
