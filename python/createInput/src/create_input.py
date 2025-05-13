@@ -269,7 +269,11 @@ def create_input(filename):
                     gfun.change_lasam_input(catids, mod_input_dir, conf3[m2+"_bmi_dir"], conf3['lasam_parameter_dir'])
                 elif m1 == "smp" and output_dict['output_sm']:
                     output_dict['sm_profile_depth'] = gfun.change_smp_input(catids, mod_input_dir, conf3[m2+"_bmi_dir"], output_dict['sm_frac_depth'], output_dict['sm_profile_depth'])
-                elif m1 != 'lstm':
+                elif m1 == 'lstm':
+                    logger.info("lstm_create input called in A")
+                    gfun.create_lstm_input(catids, time_period, attr_file, conf3[m1+'_parameter_dir'], mod_input_dir, conf3[m2+"_bmi_dir"])
+
+                else:
                     # Create symbolic link
                     logger.info(f'{m2}: create symlink from {bmi_dir} to {mod_input_dir}')
                     os.symlink(bmi_dir, mod_input_dir, target_is_directory=True)
@@ -287,6 +291,7 @@ def create_input(filename):
             elif m1 == 'noah':
                 gfun.create_noah_input(catids, time_period, attr_file, conf3[m1+'_parameter_dir'], mod_input_dir)
             elif m1 == "lstm":
+                logger.info("lstm_create input called in B")
                 gfun.create_lstm_input(catids, time_period, attr_file, conf3[m1+'_parameter_dir'], mod_input_dir, conf3[m2+"_bmi_dir"])
             elif m1 == 'sft':
                 sft_dir = os.path.join(input_dir, 'sft_input')

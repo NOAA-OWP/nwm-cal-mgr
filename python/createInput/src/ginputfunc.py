@@ -868,7 +868,7 @@ def create_lstm_config(
 
     # Ensure output directory exists
     os.makedirs(output_dir, exist_ok=True)
-    output_config_path = os.path.join(output_dir, "config.yaml")
+    output_config_path = os.path.join(output_dir, "config.yml")
     
     # Write the modified config
     with open(output_config_path, 'w') as f:
@@ -934,9 +934,9 @@ def create_lstm_input(
 
     # create the config file
     lstm_data_dir = os.path.join(param_dir_source, "ngen_files/data/lstm")
-    lstm_run_dir = os.path.join(param_dir_source, "trained_neuralhydrology_models/nh_AORC_hourly_slope_elev_precip_temp_seq999_seed101_2801_191806")
+    lstm_train_dir = os.path.join(param_dir_source, "trained_neuralhydrology_models/nh_AORC_hourly_slope_elev_precip_temp_seq999_seed101_2801_191806")
     run_dir = lstm_input_dir #os.path.join(lstm_input_dir, 'run')
-    lstm_train_data_dir = os.path.join(lstm_run_dir, 'train_data')
+    lstm_train_data_dir = os.path.join(lstm_train_dir, 'train_data')
     train_data_dir = os.path.join(run_dir, 'train_data')
     config_file = os.path.join(lstm_input_dir, 'config.yml')
     if not os.path.isdir(lstm_train_data_dir):
@@ -948,17 +948,21 @@ def create_lstm_input(
     os.symlink(lstm_train_data_dir, train_data_dir, target_is_directory=True)
     
     # Create config.yml
-    params_to_remove = ['test_*', 'train_*', 'validation_*', '*_dir'] 
+    params_to_remove = ['test_*', 'train_*', 'validation_*', '*_dir']
+    params_to_update = {
+        "run_dir": run_dir
+    }
     create_lstm_config(
-        input_config_path = config_file,
+        input_config_path = os.path.join(lstm_train_dir, 'config.yml'),
         output_dir = lstm_input_dir,
-        params_to_remove=params_to_remove
+        params_to_remove=params_to_remove,
+        params_to_update=params_to_update
     )
 
     data_files = ['initial_states.csv', 'input_scaling.csv', 'lstm_mean_std.csv', 'sugar_creek_trained.pt']
     create_symlinks(data_files, lstm_data_dir, lstm_input_dir)
     data_files = ['model_epoch009.pt', 'optimizer_state_epoch009.pt']
-    create_symlinks(data_files, lstm_run_dir, lstm_input_dir)
+    create_symlinks(data_files, lstm_train_dir, lstm_input_dir)
     for catID in catids:
         edfs_bmi_file = os.path.join(lstm_bmi_dir, catID + '.yml')
         if not os.path.isfile(edfs_bmi_file):
