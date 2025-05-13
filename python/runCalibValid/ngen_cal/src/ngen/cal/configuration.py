@@ -126,9 +126,7 @@ class NoCalibModel(ModelExec):
 
     objective_score: Optional[float] = None 
     _output_iter_file: Path = PrivateAttr(default=None)
-    #metrics: Optional[dict] = None  # Ensure metrics can be assigned
     evaluation_range: Optional[List[datetime]] = None
-
     metrics: Optional[Dict[str, float]] = None
 
     def postprocess_single_run_output(self, workdir: Path, basin_id: str, output_iter_path: Path):
@@ -137,6 +135,8 @@ class NoCalibModel(ModelExec):
         import logging
         from ngen.cal import metric_functions as mf
         from ngen.cal import plot_functions as pf
+        from .plot_output import plot_calib_output
+
 
         logger = logging.getLogger("NGEN_CAL")
         output_dir = Path(workdir)
@@ -175,28 +175,11 @@ class NoCalibModel(ModelExec):
         df = pd.concat([df_raw["sim_flow"], obs], axis=1).dropna()
         df.columns = ["sim_flow", "obs_flow"]
         df = df.loc[self.evaluation_range[0]:self.evaluation_range[1]]
-        '''
-
-        # Read files
-        #sim_file = next((output_iter_path / f).resolve() for f in output_iter_path.glob(f"nex-{catchment_id}*_output.csv"))
-        sim_file = self._output_iter_file
-        sim_df = pd.read_csv(sim_file, index_col=0, parse_dates=True).rename(columns={sim_file.stem.split("_")[0]: "sim_flow"})
-        obs_df = pd.read_csv(self.obsflow, index_col=0, parse_dates=True).rename(columns={obs_df.columns[0]: "obs_flow"})
-
-        # Merge and align
-        df = pd.merge(obs_df, sim_df, left_index=True, right_index=True, how='inner')
-        '''
+        
         logger.info(f"eval_range : {self.evaluation_range}")
         logger.info(f"{df.head()}")
 
         # Compute metrics
-        '''
-        self.metrics = mf.evaluate_metrics(
-            df["sim_flow"], df["obs_flow"],
-            metrics=self.eval_params.metrics,
-            range=self.eval_params.evaluation_range
-        )
-        '''
         self.metrics = calculate_all_metrics(
             df["obs_flow"], df["sim_flow"], self.evaluation_range, self.threshold
         )
@@ -209,7 +192,6 @@ class NoCalibModel(ModelExec):
             score = self.metrics.get(self.eval_params.objective.upper(), None)
             if score is None:
                 raise ValueError(f"Objective function metric '{self.eval_params.objective}' not found in metrics")
-
 
         # Write metrics to CSV
         metrics_path = output_iter_path / f"{basin_id}_metrics_single_run.csv"
@@ -225,151 +207,25 @@ class NoCalibModel(ModelExec):
         df_hydro = df.copy()
         df_hydro["Time"] = df_hydro.index
         df_hydro = df_hydro[["Time", "obs_flow", "sim_flow"]]
-        pf.plot_streamflow(df_hydro, plot_iter_path / f"{basin_id}_hydrograph_single_run.png", title)
+        pf.plot_streamflow(df_hydro, plot_iter_path / f"{basin_id}_hydrograph_iterations.png", title)
 
         # Flow Duration Curve
         df_fdc = df.rename(columns={"obs_flow": "Observation", "sim_flow": "SingleRun"})
-        pf.plot_fdc_calib(df_fdc, plot_iter_path / f"{basin_id}_fdc_single_run.png", title)
+        pf.plot_fdc_calib(df_fdc, plot_iter_path / f"{basin_id}_fdc_iterations.png", title)
 
         # Scatterplot
         df_scat = df.rename(columns={"obs_flow": "Observation", "sim_flow": "SingleRun"})
         df_scat["Time"] = df.index
-        pf.scatterplot_streamflow(df_scat, plot_iter_path / f"{basin_id}_scatter_single_run.png", title)
+        pf.scatterplot_streamflow(df_scat, plot_iter_path / f"{basin_id}_scatter_iterations.png", title)
 
-        logger.info(f"[NoCalibModel] Post-processing of single-run output completed.")
-        # At the end of postprocess_single_run_output() method in NoCalibModel
-
-        from .plot_output import plot_calib_output
-        from ngen.cal.plot_functions import barplot_metric, scatterplot_objfun_metric #plot_objective_function
-        import pandas as pd
-
-        #plot_calib_output(basin_id, self, 0, output_calib_path, plot_iter_path)
-        '''
-        plot_calib_output(
-            i=0,
-            calibration_object=self,      # NoCalibModel inherits necessary properties
-            agent=self.agent,             # You should set this earlier during model initialization
-            eval_range=self.eval_range    # Optional, if already defined
-        )
-        '''
         # Prepare DataFrame for plotting
         df_metrics = pd.DataFrame(self.metrics, index=[0])
         df_metrics["iteration"] = 0
         df_metrics.set_index("iteration", inplace=True)
+        pf.barplot_metric(df_metrics, plot_iter_path / f"{basin_id}_barplot_metrics_iterations.png","braplot_metrics_test")
 
-
-        barplot_metric(df_metrics, plot_iter_path / f"{basin_id}_barplot_metrics_iterations.png","braplot_metrics_test")
-
-        '''
-        plot_metric_values(
-            df_metrics=df_metrics,
-            path=output_iter_path,
-            basin_id=basin_id,
-            save_tag="iteration"
-        )
-
-        df_score = pd.DataFrame({"best_objective_function": [score], "iteration": [0]})
-        df_score.set_index("iteration", inplace=True)
-
-        plot_objective_function(
-            df_score=df_score,
-            path=output_iter_path,
-            basin_id=basin_id,
-            save_tag="iteration"
-        )
-        '''
         logger.info("[NoCalibModel] Generated metric and objective function plots.")
-
-
-    def postprocess_single_run_output_path_last(self, workdir: Path, basin_id: str, output_dir: Optional[Path] = None):
-        """
-        Locate the ngen simulation output and copy/rename it to expected path
-        for evaluation in calibration workflow.
-        Also performs plotting and stores all iteration results to Output_Iteration.
-        """
-        from .plot_functions import plot_streamflow, plot_fdc_calib
-        # from .plot_output import plot_objfunc
-
-        output_dir = Path(output_dir or workdir)
-        output_iter_path = output_dir / "Output_Iteration"
-        output_iter_path.mkdir(parents=True, exist_ok=True)
-
-        plot_iter_path = output_dir / "Plot_Iteration"
-        plot_iter_path.mkdir(parents=True, exist_ok=True)
-
-        # Step 1: Get the fallback NEX CSV file
-        matches = list(workdir.glob("nex-*_output.csv"))
-        if not matches:
-            raise FileNotFoundError(f"No NEX output CSV found in {workdir}")
-        nex_file = matches[0]
-        warnings.warn(f"Using fallback output file: {nex_file.name}", RuntimeWarning)
-
-        # Step 2: Read the fallback file assuming no headers, manually assign
-        df_raw = pd.read_csv(nex_file, header=None, names=["Time", "sim_flow"], parse_dates=["Time"])
-        df_raw.set_index("Time", inplace=True)
-
-        # Step 3: Save to Output_Iteration
-        output_file = output_iter_path / f"{basin_id}_output_iteration_0000.csv"
-        df_raw.to_csv(output_file)
-        logger.info(f"[NoCalibModel] Wrote: {output_file}")
-
-        self._output_iter_file = output_file
-
-        # Step 4: Copy cat-* and nex-*output.csv to Output_Calib
-        output_calib_path = workdir / "Output_Calib"
-        output_calib_path.mkdir(parents=True, exist_ok=True)
-
-        for file in workdir.glob("cat-*.csv"):
-            shutil.move(file, output_calib_path)
-        for file in workdir.glob("nex-*_output.csv"):
-            shutil.move(file, output_calib_path)
-
-        logger.info(f"[NoCalibModel] Copied raw outputs to {output_calib_path}")
-
-        # Step 5: Compute and store metrics
-        obs = self.get_obsflow()
-        df = pd.concat([df_raw["sim_flow"], obs], axis=1).dropna()
-        df.columns = ["sim_flow", "obs_flow"]
-        df = df.loc[self.evaluation_range[0]:self.evaluation_range[1]]
-
-        #self.output = df
-
-        self.metrics = calculate_all_metrics(
-            df["obs_flow"], df["sim_flow"], self.evaluation_range, self.threshold
-        )
-
-        logger.info(f"eval_range : {self.evaluation_range}")
-        logger.info(f"self.metrics : {self.metrics}")
-        logger.info(f"self.eval_params.objective : {self.eval_params.objective}")
-
-
-        score = self.metrics.get(self.eval_params.objective, None)
-        if score is None:
-            score = self.metrics.get(self.eval_params.objective.upper(), None)
-            if score is None:
-                raise ValueError(f"Objective function metric '{self.eval_params.objective}' not found in metrics")
-        self.write_iteration_outputs(output_dir, self.metrics, score)
-
-        # Step 6: Save metrics and plots using regular workflow method
-        #self.eval_params.write_metric_iter_file(self.metrics, output_iter_path)
-        #self.eval_params.write_plots(output_iter_path, df["sim_flow"], df["obs_flow"])
-
-        # Save comparison data
-        try:
-            comparison_file = output_iter_path / f"{basin_id}_comparison.csv"
-            df.to_csv(comparison_file)
-            logger.info(f"[NoCalibModel] Saved comparison CSV: {comparison_file}")
-
-            # Generate plots
-            plot_streamflow(df, plot_iter_path, basin_id)
-            #plot_scatter(df, plot_iter_path, basin_id)
-            plot_fdc_calib(df, plot_iter_path, basin_id)
-            #plot_objfunc([df], plot_iter_path, basin_id)
-            logger.info("[NoCalibModel] Plots generated successfully.")
-        except Exception as e:
-            raise (e)
-
-        logger.info("[NoCalibModel] Post-processing of single-run output completed.")
+        logger.info(f"[NoCalibModel] Post-processing of single-run output completed.")
 
 
     def get_obsflow(self) -> pd.DataFrame:
@@ -412,7 +268,6 @@ class NoCalibModel(ModelExec):
     def realization_file(self) -> Path:
         return self.realization
 
-
     @property
     def output(self) -> pd.DataFrame:
         if not self._output_iter_file or not self._output_iter_file.exists():
@@ -449,7 +304,6 @@ class NoCalibModel(ModelExec):
         output_iter_path.mkdir(parents=True, exist_ok=True)
         plot_iter_path.mkdir(parents=True, exist_ok=True)
         calib_path.mkdir(parents=True, exist_ok=True)
-
 
         # Write CSVs
         df.to_csv(str(output_iter_path / f"{basinID}_output_iteration_{i:04d}.csv"))
