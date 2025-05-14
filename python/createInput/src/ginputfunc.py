@@ -1867,10 +1867,16 @@ def create_partition_file(
 
     # Log directory contents - for diagnostics only
     ngen_app_dir = os.path.dirname(partition_generator)
-    if os.path.exists(ngen_app_dir):
-        logger.info("Listing contents of %s:", ngen_app_dir)
+    logger.info("Evaluating directory for partition generator: %s", ngen_app_dir)
+
+    if ngen_app_dir == "":
+        logger.error("ngen_app_dir is an empty string, something is wrong with partition_generator: %s", partition_generator)
+    elif os.path.exists(ngen_app_dir):
+        logger.info("Directory %s exists", ngen_app_dir)
         try:
-            for f in os.listdir(ngen_app_dir):
+            files = os.listdir(ngen_app_dir)
+            logger.info("Listing contents of %s:", ngen_app_dir)
+            for f in files:
                 full_path = os.path.join(ngen_app_dir, f)
                 perms = oct(os.stat(full_path).st_mode)[-3:]
                 owner = os.stat(full_path).st_uid
