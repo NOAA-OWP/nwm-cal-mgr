@@ -1849,9 +1849,37 @@ def create_partition_file(
         nprocs: int,
         work_dir: str,
         basin: str ) -> Union[str, Path]:
-     partition_file = os.path.join( work_dir + '/Input', '{}'.format(basin) + '_partition_config.json' )
 
-     subprocess.check_call( f"{partition_generator} {hydrofab_file:} {hydrofab_file:} "
-                            f"{partition_file} {nprocs} '' ''", 
-                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True )
-     return partition_file
+    partition_file = os.path.join(work_dir, 'Input', f"{basin}_partition_config.json")
+    cmd = f"{partition_generator} {hydrofab_file} {hydrofab_file} {partition_file} {nprocs} '' ''"
+
+    # Print diagnostic information
+    print("[DEBUG] partition_generator:", partition_generator)
+    print("[DEBUG] hydrofab_file:", hydrofab_file)
+    print("[DEBUG] nprocs:", nprocs)
+    print("[DEBUG] work_dir:", work_dir)
+    print("[DEBUG] basin:", basin)
+    print("[DEBUG] partition_file:", partition_file)
+    print("[DEBUG] command:", cmd)
+    print("[DEBUG] Current working directory:", os.getcwd())
+    print("[DEBUG] PATH:", os.environ.get("PATH"))
+    print("[DEBUG] LD_LIBRARY_PATH:", os.environ.get("LD_LIBRARY_PATH"))
+
+    try:
+        # Run the command and capture output
+        result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        print("[DEBUG] Command output (stdout):", result.stdout.decode().strip())
+        print("[DEBUG] Command error (stderr):", result.stderr.decode().strip())
+        result.check_returncode()  # Will raise CalledProcessError if non-zero
+    except subprocess.CalledProcessError as e:
+        print("[ERROR] Command failed with exit code:", e.returncode)
+        print("[ERROR] Full command:", e.cmd)
+        print("[ERROR] Command output (stdout):", e.stdout.decode().strip())
+        print("[ERROR] Command error (stderr):", e.stderr.decode().strip())
+        raise
+    except FileNotFoundError as e:
+        print("[ERROR] partitionGenerator not found:", partition_generator)
+        print("[ERROR] Make sure the partitionGenerator executable exists and is executable.")
+        raise
+
+    return partition_file
