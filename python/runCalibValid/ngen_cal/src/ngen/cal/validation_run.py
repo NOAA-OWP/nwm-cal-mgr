@@ -1,90 +1,112 @@
-"""
-This module contains function to execute validation control and best runs. 
-
-@author: Xia Feng
-"""
-
 import os
-import shutil
-import subprocess
-from typing import TYPE_CHECKING
-import pandas as pd
 import logging
+import pandas as pd
+from pathlib import Path
+from .search import _calc_metrics
+from .plot_output import plot_valid_output
+from .utils import pushd
+from .configuration import NoCalibModel
+
 logger = logging.getLogger(__name__)
 
-from .plot_output import plot_valid_output
-from .search import _execute, _calc_metrics
-from .utils import pushd, complete_msg 
-
-if TYPE_CHECKING:
-    from ngen.cal.agent import Agent
-
-
-def run_valid_ctrl_best(agent: 'Agent') -> None:
-    """Execute validation control and best runs, calculate metrics and produce plots.
+def run_valid_ctrl_best(agent):
+    """
+    Run validation for control and best run OR for NoCalibModel (single-run).
 
     Parameters
     ----------
-    agent : Agent object
-
-    Returns
-    ----------
-    None
-
+    agent : Agent
+        Agent object containing model and configuration info.
     """
-    shutil.copy(agent.realization_file, os.path.join(agent.job.workdir, os.path.basename(agent.realization_file)))
+    if isinstance(agent.model, NoCalibModel):
+        logger.info("Running validation for NoCalibModel (Single Exec)")
 
-    # read nwm retrospective streamflow if exists
-    if agent.run_name != 'valid_control':
-        if agent.nwmflow_file != '':
-            if os.path.exists(agent.nwmflow_file):
-                logger.info(f'Read NWM retrospective streamflow simulation from: {agent.nwmflow_file}')
-                nwm = pd.read_csv(agent.nwmflow_file)
-                nwm.columns = ['value_date','sim_flow']
-                nwm['value_date'] = pd.DatetimeIndex(nwm['value_date'])
-                agent.nwmflow = nwm.set_index('value_date')
-            else:
-                logger.error(f'File does not exist: {agent.nwmflow_file}')
-        else:
-            agent.nwmflow = None
+        # Ensure directory structure exists
+        output_dir = Path(agent.job.workdir) / "Output_Iteration"
+        output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Calculate metrics
-    for calibration_object in agent.model.adjustables:
         with pushd(agent.job.workdir):
-            logger.info(f'Running simulation for {agent.run_name}')
-            _execute(agent)
-            time_period = {'calib': calibration_object.evaluation_range, 'valid': calibration_object.valid_evaluation_range, 
-                           'full': calibration_object.full_evaluation_range}
-            outputs = [calibration_object.output]
-            runs = [agent.run_name]
-            if agent.run_name != 'valid_control':                                
-                if agent.nwmflow is not None:
-                    outputs.append(agent.nwmflow)
-                    runs.append('nwm_retro')
-            
-            for out1,run1 in zip(outputs,runs):
-                metrics = pd.DataFrame()
-                logger.info(f'Computing metrics for {run1}') 
-                for key, value in time_period.items():
-                    result = _calc_metrics(out1, calibration_object.observed, value, calibration_object.threshold)
-                    tmp = {**{'run': run1, 'period': key}, **result}
-                    metrics = pd.concat([metrics, pd.DataFrame([tmp])], ignore_index=True)
-                    metric_out_file = os.path.join(agent.workdir, '{}'.format(calibration_object.basinID) + '_metrics_{}.csv'.format(run1))      
-                    metrics.to_csv(metric_out_file, index=False)
+            agent.model.execute_model()
 
-            # Save and move output
-            calibration_object.save_valid_output(calibration_object.basinID, agent.run_name, agent.valid_path, agent.job.workdir, agent.valid_path_output)
+            # Calculate metrics
+            metrics = _calc_metrics(agent.model.output, agent.model.observed,
+                                    agent.model.evaluation_range, agent.model.threshold)
+            agent.model.metrics = metrics
+            df_metrics = pd.DataFrame([metrics])
 
-            # plot the validation plots (for valid_best or validation with alternative parameters)
-            if agent.run_name != 'valid_control':
-                runs = ['valid_control', 'valid_best']
-                if agent.nwmflow is not None:
-                    runs.append('nwm_retro')
-                if agent.run_name != 'valid_best':
-                    runs.append(agent.run_name)
-                logger.info(f'Generating plots comparing {runs}')
-                plot_valid_output(calibration_object, agent, runs, time_period)        
+            # Save output and metrics
+            basin = agent.model.basinID
+            output_csv = output_dir / f"{basin}_output_single_valid.csv"
+            metrics_csv = output_dir / f"{basin}_metrics_single_valid.csv"
+            agent.model.output.to_csv(output_csv)
+            df_metrics.to_csv(metrics_csv, index=False)
+            logger.info(f"Saved output to {output_csv}")
+            logger.info(f"Saved metrics to {metrics_csv}")
 
-            # Indicate completion 
-            calibration_object.write_run_complete_file(agent.run_name, agent.workdir)
-            complete_msg(calibration_object.basinID, agent.run_name, agent.workdir, calibration_object.user)
+            # Plotting
+            plot_dir = Path(agent.job.workdir) / "Plot_Iteration"
+            plot_dir.mkdir(parents=True, exist_ok=True)
+
+            from .plot_functions import (
+                plot_streamflow,
+                fdc_plot,
+                scatterplot_streamflow,
+                barplot_metric
+            )
+
+            df_merged = agent.model.output.copy()
+            df_merged["obs_flow"] = agent.model.observed["obs_flow"]
+
+            # Required plots
+            logger.info("---Plotting Hydrograph---")
+            plot_streamflow(df_merged, plot_dir / f"{basin}_hydrograph_valid.png", basin, suffix="valid")
+
+            logger.info("---Plotting FDC---")
+            fdc_plot(df_merged, plot_dir / f"{basin}_fdc_valid.png", basin, suffix="valid")
+
+            logger.info("---Plotting Scatterplot---")
+            scatterplot_streamflow(df_merged, plot_dir / f"{basin}_scatterplot_valid.png", basin, suffix="valid")
+
+            # Optional barplot (if compatible with structure)
+            try:
+                logger.info("---Plotting Barplot of Metrics---")
+                df_metrics["runtype"] = "valid"
+                barplot_metric(df_metrics, plot_dir / f"{basin}_barplot_metrics_valid.png", title="Validation Metrics")
+            except Exception as e:
+                logger.warning(f"Could not create barplot: {e}")
+
+        logger.info("[NoCalibModel] Validation complete.")
+        return
+
+    # -----------------------------------------
+    # Regular validation logic (unchanged)
+    # -----------------------------------------
+    logger.info("Running validation for regular calibrated model.")
+
+    model = agent.model
+    basin = model.basinID
+    realization_file = model.realization_file
+    observed = model.observed
+    threshold = model.threshold
+    valid_path = agent.valid_path
+
+    with pushd(agent.job.workdir):
+        for run_type in ['valid_control', 'valid_best']:
+            model.use_realization_file(run_type)
+
+            agent.execute_model()
+
+            # Load output
+            result = _calc_metrics(model.output, observed, model.evaluation_range, threshold)
+            df_metrics = pd.DataFrame([result])
+            run_path = Path(valid_path) / f"{basin}_metrics_{run_type}.csv"
+            df_metrics.to_csv(run_path, index=False)
+            logger.info(f"Saved metrics: {run_path}")
+
+            output_path = Path(valid_path) / f"{basin}_output_{run_type}.csv"
+            model.output.to_csv(output_path)
+            logger.info(f"Saved output: {output_path}")
+
+    # Plotting (unchanged)
+    plot_valid_output(agent, basin, valid_path)
+

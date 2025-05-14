@@ -114,7 +114,6 @@ from . import plot_output
 
 #logger = logging.getLogger("NGEN_CAL")
 
-
 class NoCalibModel(ModelExec):
     type: Literal["nocalib"] = "nocalib"
     strategy: Optional[str] = Field(default="uniform")
@@ -128,6 +127,106 @@ class NoCalibModel(ModelExec):
     _output_iter_file: Path = PrivateAttr(default=None)
     evaluation_range: Optional[List[datetime]] = None
     metrics: Optional[Dict[str, float]] = None
+
+    def execute_model(self):
+        """
+        Execute the model run for single-execution validation.
+        This mirrors the interface of calibrated models.
+        """
+        logger.info("[NoCalibModel] Executing model (validation run)")
+        self.run(self.get_args())
+
+    def postprocess_single_run_output_new(self, output_dir, basin_id, output_iter_path):
+        from .search import _calc_metrics as calculate_all_metrics
+
+        if isinstance(output_dir, str):
+            output_dir = Path(output_dir)
+        if isinstance(output_iter_path, str):
+            output_iter_path = Path(output_iter_path)
+
+        ngen_output_dir = output_dir  # This is the worker root dir
+        nex_files = sorted(ngen_output_dir.glob(f"**/nex-*_output.csv"))
+        cat_files = sorted(ngen_output_dir.glob(f"**/cat-*.csv"))
+
+        if not nex_files:
+            raise FileNotFoundError(f"No nex output found in {ngen_output_dir}")
+
+        output_iter_path.mkdir(parents=True, exist_ok=True)
+        output_calib_path = ngen_output_dir / "Output_Calib"
+        output_calib_path.mkdir(parents=True, exist_ok=True)
+
+        for f in nex_files + cat_files:
+            shutil.copy2(f, output_calib_path)
+
+        df_raw = pd.read_csv(nex_files[0], index_col=0, parse_dates=True)
+        df_raw.rename(columns={df_raw.columns[0]: "sim_flow"}, inplace=True)
+
+        obs = pd.read_csv(self.obsflow, index_col=0, parse_dates=True)
+        obs.rename(columns={obs.columns[0]: "obs_flow"}, inplace=True)
+
+        df = pd.concat([obs, df_raw], axis=1).dropna()
+        logger.info(f"eval_range : {self.evaluation_range}")
+        logger.info(f"eval_range : ({self.eval_params.evaluation_start}, {self.eval_params.evaluation_stop})")
+        logger.info(df.head())
+
+        self.metrics = calculate_all_metrics(df["obs_flow"], df["sim_flow"], self.eval_params)
+        logger.info(f"self.metrics : {self.metrics}")
+
+        df_metrics = pd.DataFrame.from_dict(self.metrics, orient='index', columns=["metric"]).T
+        df_metrics.index = [0]
+        df_metrics["run_type"] = "calib"
+        df_metrics["iteration"] = 0
+
+        df_metrics.to_csv(output_iter_path / f"{basin_id}_output_iteration_0000.csv")
+
+        plot_iter_path = ngen_output_dir / "Plot_Iteration"
+        plot_iter_path.mkdir(parents=True, exist_ok=True)
+        df_plot = df.reset_index().rename(columns={"index": "Time"})
+
+        plot_streamflow(df_plot, plot_iter_path / f"{basin_id}_hydrograph_iteration.png")
+        plot_fdc(df_plot, plot_iter_path / f"{basin_id}_fdc_iteration.png")
+        plot_scatter(df_plot, plot_iter_path / f"{basin_id}_scatterplot_streamflow_iteration.png")
+        plot_obj_fun(df_metrics, plot_iter_path / f"{basin_id}_objfun_iteration.png")
+
+    def create_validation_configs(self, agent):
+        """
+        For NoCalibModel, generate dummy 'valid_control' and 'valid_best' config YAMLs
+        and their corresponding realization files, so validation workflow runs as expected.
+        """
+        import yaml
+        from copy import deepcopy
+        from pathlib import Path
+
+        logger.info("[NoCalibModel] Generating validation config files...")
+
+        basin_id = self.eval_params.basinID
+        valid_path = agent.valid_path
+        input_yaml_path = agent.yaml_file
+
+        for tag in ["valid_control", "valid_best"]:
+            yaml_out = Path(valid_path) / f"{basin_id}_config_{tag}.yaml"
+            realization_out = Path(valid_path) / f"{basin_id}_realization_config_bmi_{tag}.json"
+
+            # Copy realization file to validation path
+            shutil.copy2(self.realization, realization_out)
+
+            # Load original YAML
+            with open(input_yaml_path, "r") as f:
+                config = yaml.safe_load(f)
+
+            # Update general section
+            config["general"]["name"] = tag
+            config["general"]["yaml_file"] = str(yaml_out)
+            config["model"]["realization"] = str(realization_out)
+
+            # Optional: strip out params if they don't exist
+            config["model"].pop("params", None)
+
+            # Write new YAML
+            with open(yaml_out, "w") as f:
+                yaml.dump(config, f)
+
+            logger.info(f"Config file for {tag} created at {yaml_out}")
 
     def postprocess_single_run_output(self, workdir: Path, basin_id: str, output_iter_path: Path):
         import shutil
@@ -158,6 +257,7 @@ class NoCalibModel(ModelExec):
         logger.info(f"[NoCalibModel] Wrote: {output_file}")
 
         self._output_iter_file = output_file
+        self._output_iter_file = str(output_iter_path / f"{basin_id}_output_iteration_0000.csv")
 
         logger.info(f"[NoCalibModel] Wrote: {output_file}")
 
@@ -227,7 +327,7 @@ class NoCalibModel(ModelExec):
         logger.info("[NoCalibModel] Generated metric and objective function plots.")
         logger.info(f"[NoCalibModel] Post-processing of single-run output completed.")
 
-
+        
     def get_obsflow(self) -> pd.DataFrame:
         print(f'self.obsflow : {self.obsflow}')
         df = pd.read_csv(self.obsflow, index_col=0, parse_dates=True)

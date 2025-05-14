@@ -326,6 +326,8 @@ def dds_set(start_iteration: int, iterations: int, agent: 'Agent') -> None:
         agent.model.postprocess_single_run_output(
             Path(agent.job.workdir), agent.model.eval_params.basinID, output_iter_path
         )
+        # if isinstance(agent.model, NoCalibModel):
+        agent.model.create_validation_configs(agent)
         agent.model.write_run_complete_file(agent.run_name, Path(agent.job.workdir))
         complete_msg(agent.model.basinID, agent.run_name, str(agent.job.workdir), agent.model.user)
         return  # Exit early
