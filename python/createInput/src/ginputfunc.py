@@ -19,8 +19,11 @@ import geopandas as gpd
 import pandas as pd
 import yaml
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('createInput')
 logging.basicConfig(level=logging.INFO)
+
+logger.info("Testing ginputfunc.py logging")
+logger.debug("Testing DEBUG level in ginputfunc.py")
 
 from tempfile import mkstemp
 from createInput import settings

@@ -15,8 +15,12 @@ import re
 import geopandas as gpd
 import pandas as pd
 import logging
-logger = logging.getLogger(__name__)
+
+logger = logging.getLogger("createInput")
 logging.basicConfig(level=logging.INFO)
+
+logger.info("Testing create_input.py logging")
+logger.debug("Testing DEBUG level in create_input.py")
 
 from createInput import ginputfunc as gfun
 from createInput import settings
