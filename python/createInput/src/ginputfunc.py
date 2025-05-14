@@ -20,10 +20,6 @@ import pandas as pd
 import yaml
 
 logger = logging.getLogger('createInput')
-logging.basicConfig(level=logging.INFO)
-
-logger.info("Testing ginputfunc.py logging")
-logger.debug("Testing DEBUG level in ginputfunc.py")
 
 from tempfile import mkstemp
 from createInput import settings
@@ -1851,7 +1847,7 @@ def create_partition_file(
         hydrofab_file: str,
         nprocs: int,
         work_dir: str,
-        basin: str ) -> Union[str, Path]:
+        basin: str) -> Union[str, Path]:
 
     partition_file = os.path.join(work_dir, 'Input', f"{basin}_partition_config.json")
     cmd = f"{partition_generator} {hydrofab_file} {hydrofab_file} {partition_file} {nprocs} '' ''"
@@ -1868,6 +1864,22 @@ def create_partition_file(
     logger.info(" - Current working directory: %s", os.getcwd())
     logger.info(" - PATH: %s", os.environ.get("PATH"))
     logger.info(" - LD_LIBRARY_PATH: %s", os.environ.get("LD_LIBRARY_PATH"))
+
+    # Log directory contents - for diagnostics only
+    ngen_app_dir = os.path.dirname(partition_generator)
+    if os.path.exists(ngen_app_dir):
+        logger.info("Listing contents of %s:", ngen_app_dir)
+        try:
+            for f in os.listdir(ngen_app_dir):
+                full_path = os.path.join(ngen_app_dir, f)
+                perms = oct(os.stat(full_path).st_mode)[-3:]
+                owner = os.stat(full_path).st_uid
+                group = os.stat(full_path).st_gid
+                logger.info(" - %s (permissions: %s, owner: %s, group: %s)", f, perms, owner, group)
+        except Exception as e:
+            logger.error("Failed to list directory contents: %s", str(e))
+    else:
+        logger.error("Directory %s does not exist", ngen_app_dir)
 
     try:
         # Run the command and capture output
