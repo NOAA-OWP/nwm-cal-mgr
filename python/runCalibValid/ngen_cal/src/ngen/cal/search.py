@@ -323,7 +323,7 @@ def dds_set(start_iteration: int, iterations: int, agent: 'Agent') -> None:
         output_iter_path = Path(agent.job.workdir) / "Output_Iteration"
         output_iter_path.mkdir(parents=True, exist_ok=True)
 
-        agent.model.postprocess_single_run_output(
+        agent.model.postprocess_single_calibration_output(
             Path(agent.job.workdir), agent.model.eval_params.basinID, output_iter_path
         )
         # if isinstance(agent.model, NoCalibModel):
