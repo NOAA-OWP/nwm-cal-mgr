@@ -125,6 +125,7 @@ def plot_streamflow_precipitation(
 
     """
     logger.info('---Plotting Streamflow Time Series with Precipitation---')
+    print(f"\nplot_streamflow_precipitation : {dfp}")
 
     # Obtain column names
     colname = list(df.columns)
@@ -670,20 +671,24 @@ def plot_fdc_valid(
 
     """
     logger.info('---Plotting FDC of Observation and Other Runs---')
-
     # Figure arguments
     colname = list(df.columns)[1:]
+    print(colname)
     # this treatment is moved to plot_calib_output & plot_valid_output in plot_functions.py
     #df = df.iloc[24:] # remove initial big values
     #max0 = math.ceil(pd.melt(df, id_vars=[df.columns[0]], value_vars=colname[1:])['value'].max()) * 1.02
 
     # Plot
     cols = ['k', 'b', 'orange', 'tab:green','tab:cyan'] # cols = ['k','C1','C0','C3']
+    print(f"\nplot_fdc_valid : time_period : {time_period}")
     keys = list(time_period.keys())
+    print(keys)
     df.set_index(df.columns[0], inplace=True)
     fig, ax = plt.subplots(figsize=(12.2, 5.8), nrows=1, ncols=3, sharey=True)
     for key, value in time_period.items():
         df_copy = df.copy()
+        print("df_copy:")
+        print(df_copy)
         df_sub = df_copy[value[0]:value[1]]
         j = keys.index(key)
         for i in range(len(colname)):
