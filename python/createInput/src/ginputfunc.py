@@ -1869,26 +1869,57 @@ def create_partition_file(
     ngen_app_dir = os.path.dirname(partition_generator)
     logger.info("Evaluating directory for partition generator: %s", ngen_app_dir)
 
-    if ngen_app_dir == "":
-        logger.error("ngen_app_dir is an empty string, something is wrong with partition_generator: %s", partition_generator)
-    elif os.path.exists(ngen_app_dir):
-        logger.info("Directory %s exists", ngen_app_dir)
-        try:
-            files = os.listdir(ngen_app_dir)
-            logger.info("Listing contents of %s:", ngen_app_dir)
-            for f in files:
-                full_path = os.path.join(ngen_app_dir, f)
-                perms = oct(os.stat(full_path).st_mode)[-3:]
-                owner = os.stat(full_path).st_uid
-                group = os.stat(full_path).st_gid
-                logger.info(" - %s (permissions: %s, owner: %s, group: %s)", f, perms, owner, group)
-        except Exception as e:
-            logger.error("Failed to list directory contents: %s", str(e))
-    else:
-        logger.error("Directory %s does not exist", ngen_app_dir)
-
     try:
-        # Run the command and capture output
+        # Verify if the directory exists
+        if ngen_app_dir == "":
+            logger.error("ngen_app_dir is an empty string, something is wrong with partition_generator: %s", partition_generator)
+        elif os.path.exists(ngen_app_dir):
+            logger.info("Directory %s exists", ngen_app_dir)
+
+            # Check if the directory is a symbolic link
+            if os.path.islink(ngen_app_dir):
+                real_path = os.path.realpath(ngen_app_dir)
+                logger.info("Directory %s is a symbolic link pointing to %s", ngen_app_dir, real_path)
+            else:
+                logger.info("Directory %s is not a symbolic link", ngen_app_dir)
+
+            # List directory contents in Python
+            files = os.listdir(ngen_app_dir)
+            if not files:
+                logger.warning("Directory %s is empty", ngen_app_dir)
+            else:
+                logger.info("Listing contents of %s:", ngen_app_dir)
+                for f in files:
+                    full_path = os.path.join(ngen_app_dir, f)
+                    perms = oct(os.stat(full_path).st_mode)[-3:]
+                    owner = os.stat(full_path).st_uid
+                    group = os.stat(full_path).st_gid
+                    logger.info(" - %s (permissions: %s, owner: %s, group: %s)", f, perms, owner, group)
+
+            # List directory contents using shell
+            logger.info("Checking directory with shell command: ls -la %s", ngen_app_dir)
+            try:
+                result = subprocess.run(
+                    ["ls", "-la", ngen_app_dir], stdout=subprocess.PIPE, stderr=subprocess.PIPE
+                )
+                logger.info("Directory contents (shell):\n%s", result.stdout.decode().strip())
+                if result.stderr:
+                    logger.error("Directory error (shell):\n%s", result.stderr.decode().strip())
+            except Exception as e:
+                logger.error("Failed to list directory with shell command: %s", str(e))
+
+        else:
+            logger.error("Directory %s does not exist or is not accessible", ngen_app_dir)
+
+    except FileNotFoundError as e:
+        logger.error("Directory not found: %s", str(e))
+    except PermissionError as e:
+        logger.error("Permission denied when accessing directory: %s", str(e))
+    except Exception as e:
+        logger.error("Unexpected error when listing directory contents: %s", str(e))
+
+    # Run the command and capture output
+    try:
         result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         logger.info("Command output (stdout): %s", result.stdout.decode().strip())
         logger.info("Command error (stderr): %s", result.stderr.decode().strip())
@@ -1904,4 +1935,5 @@ def create_partition_file(
         logger.error("Make sure the PartitionGenerator executable exists and is executable.")
         raise
 
+    # Return the partition file path
     return partition_file
