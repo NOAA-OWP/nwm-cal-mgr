@@ -451,15 +451,6 @@ class NoCalibModel(ModelExec):
         sim_files = list(output_valid_dir.glob(f"nex-*_{valid_suffix}.csv"))
         obs_path = Path(self.obsflow)
 
-        '''
-
-        df_sim = pd.read_csv(self._output_iter_file, index_col=0, parse_dates=True)
-        df_obs = pd.read_csv(self.obsflow, index_col=0, parse_dates=True)
-        df = pd.DataFrame({"sim_flow": df_sim.iloc[:, 0], "obs_flow": df_obs.iloc[:, 0]})
-        df = df.loc[self.eval_params.eval_start : self.eval_params.eval_end]
-        '''
-
-
         # Merge and compute metrics for all files
         all_metrics = []
         for sim_file in sim_files:
@@ -495,7 +486,6 @@ class NoCalibModel(ModelExec):
             logger.error(f"Error copying output/metrics to Plot_Valid: {e}")
 
         # Create merged DataFrame for plotting
-        # try:
         obs_df = pd.read_csv(obs_path, index_col=0, parse_dates=True)
         obs_df = obs_df.rename(columns={obs_df.columns[0]: 'Observation'})
         sim_df = pd.read_csv(renamed_output, index_col=0, parse_dates=True)
@@ -504,9 +494,6 @@ class NoCalibModel(ModelExec):
         merged_df = pd.concat([nwm_df, obs_df, sim_df], axis=1).dropna()
         merged_df.index.name = "Time"
         df_plot = merged_df.iloc[24:].copy().reset_index()
-        #df_merged = pd.concat([obs_df, sim_df], axis=1).dropna().iloc[24:]
-        #df_merged.reset_index(inplace=True)
-        #df_merged = df_merged.rename(columns={"index": "Time"})
 
         pf.plot_streamflow(
             df=copy.deepcopy(df_plot),
@@ -567,178 +554,8 @@ class NoCalibModel(ModelExec):
             logger.warning(e)
 
         logger.info("[NoCalibModel] All validation plots generated in Plot_Valid.")
-    # except Exception as e:
-        #logger.error(f"Failed to generate final validation plots: {e}")
 
 
-
-
-
-
-        '''
-
-        import pandas as pd
-        import copy
-        from ngen.cal.plot_functions import (
-            plot_streamflow,
-            plot_fdc_valid,
-            plot_streamflow_precipitation,
-            barplot_metric
-        )
-
-        # --- 1. Prepare streamflow time series ---
-        obs_df = pd.read_csv(obs_path, index_col=0, parse_dates=True)
-        obs_df = obs_df.rename(columns={obs_df.columns[0]: 'Observation'})
-
-        merged_dfs = [obs_df]
-        for run in ["valid_best"]:
-            try:
-                sim_file = output_valid_dir / f"nex-{basin_id}_output_{run}.csv"
-                sim_df = pd.read_csv(sim_file, index_col=0, parse_dates=True)
-                sim_df = sim_df.rename(columns={sim_df.columns[0]: run})
-                merged_dfs.append(sim_df)
-            except Exception as e:
-                logger.warning(f"Skipping {run}: {e}")
-
-        df_merged = pd.concat(merged_dfs, axis=1).dropna()
-        df_merged = df_merged.iloc[24:].copy()  # drop spin-up day
-        df_merged.reset_index(inplace=True)
-        df_merged = df_merged.rename(columns={"index": "Time"})
-
-        # --- 2. Plot hydrograph ---
-        plot_streamflow(
-            df=copy.deepcopy(df_merged),
-            plotfile=output_valid_dir / f"{basin_id}_hydrograph_valid_run.png",
-            title=f"Hydrograph (Valid Best)\n{basin_id}"
-        )
-
-        # --- 3. Plot flow duration curve ---
-        df_fdc = df_merged.set_index("Time")
-        plot_fdc_valid(
-            df=copy.deepcopy(df_fdc),
-            plotfile=output_valid_dir / f"{basin_id}_fdc_valid_run.png",
-            title=f"Flow Duration Curve (Valid Best)"
-        )
-
-        # --- 4. (Optional) Plot precipitation if available ---
-        try:
-            df_precip = agent.df_precip
-            plot_streamflow_precipitation(
-                df=copy.deepcopy(df_merged),
-                dfp=df_precip,
-                plotfile=output_valid_dir / f"{basin_id}_streamflow_precip_valid_run.png",
-                title=f"Streamflow + Precipitation (Valid Best)"
-            )
-        except Exception as e:
-            logger.warning(f"Precipitation plot skipped: {e}")
-
-        # --- 5. Plot bar chart of metrics ---
-        metrics_df = pd.read_csv(metrics_path)
-        metrics_df.insert(0, "run_type", "valid_best")
-        metrics_df.insert(1, "basin_id", basin_id)
-
-        barplot_metric(
-            df=metrics_df,
-            plotfile=output_valid_dir / f"{basin_id}_barplot_metrics_valid_run.png",
-            title=f"Metrics for Valid Best Run"
-        )
-
-        '''
-        '''
-
-        basin_id = self.basinID
-        valid_path = agent.valid_path
-        valid_plot_path = agent.valid_path_plot
-
-        # Step 1: Locate output
-        csv_files = list(Path(valid_path).glob(f"{basin_id}_output*.csv"))
-        if not csv_files:
-            raise FileNotFoundError(f"No simulation output file found for {basin_id} in {valid_path}")
-        self._output_iter_file = str(csv_files[0])
-    
-        # Step 2: Compute metrics and save
-        df_sim = pd.read_csv(self._output_iter_file, index_col=0, parse_dates=True)
-        df_obs = pd.read_csv(self.obsflow, index_col=0, parse_dates=True)
-        df = pd.DataFrame({"sim_flow": df_sim.iloc[:, 0], "obs_flow": df_obs.iloc[:, 0]})
-        df = df.loc[self.eval_params.eval_start : self.eval_params.eval_end]
-
-        # Compute metrics
-        self.metrics = calculate_all_metrics(
-            df["obs_flow"], df["sim_flow"], self.evaluation_range, self.threshold
-        )
-
-        self.metrics.insert(0, 'label', 'valid_control')
-        self.metrics.insert(0, 'run', 'valid_control')
-
-        logger.info(f"self.metrics : {self.metrics}")
-        logger.info(f"self.eval_params.objective : {self.eval_params.objective}")
-
-        score = self.metrics.get(self.eval_params.objective, None)
-        if score is None:
-            score = self.metrics.get(self.eval_params.objective.upper(), None)
-            if score is None:
-                raise ValueError(f"Objective function metric '{self.eval_params.objective}' not found in metrics")
-
-        # Write metrics to CSV
-        metrics_path = output_iter_path / f"{basin_id}_metrics_single_run.csv"
-        pd.DataFrame([self.metrics]).to_csv(metrics_path, index=False)
-
-        # Save Metrices
-        out_metrics = Path(valid_path) / f"{basin_id}_metrics_valid_control.csv"
-        self.metrics.to_csv(out_metrics, index=False)
-        logger.info(f"[NoCalibModel] Metrics written: {out_metrics}")
-
-        target_output = Path(valid_path) / f"{basin_id}_output_valid_control.csv"
-        shutil.copy2(self._output_iter_file, target_output)
-
-        # Save aligned simulation time series
-        aligned_output = pd.DataFrame({"Q_obs": df["obs_flow"], "Q_sim": df["sim_flow"]})
-        output_file = validation_dir / "Q_obs_and_sim.csv"
-        aligned_output.to_csv(output_file)
-        logger.info(f"[NoCalibModel] Output time series saved: {output_file}")
-
-        # Step 4: Generate plots
-
-        plot_iter_path = workdir / "Plot_Iteration"
-        plot_iter_path.mkdir(parents=True, exist_ok=True)
-
-
-        generate_validation_plots(output_file, output_dir=plot_iter_path, basin_id=basin_id)
-        logger.info(f"[NoCalibModel] Validation post-processing complete.")
-        '''
-
-
-    def postprocess_single_validation_output_last(self, output_dir: Path, basin_id: str):
-            import shutil
-            import pandas as pd
-            from .search import _calc_metrics as calculate_all_metrics
-            from .plot_output import hydrograph_valid, fdc_plot_valid, barplot_metrics_valid, streamflow_precip_valid
-
-            logger.info(f"[NoCalibModel] Post-processing validation output for basin {basin_id}...")
-
-            plot_dir = output_dir / "Plot_Valid"
-            plot_dir.mkdir(parents=True, exist_ok=True)
-
-            output_src = output_dir / "Output_Iteration" / f"{basin_id}_output_iteration_0000.csv"
-            output_dst = output_dir / f"{basin_id}_output_valid_control.csv"
-            shutil.copy(output_src, output_dst)
-
-            df = self.align_obs_and_sim(output_dst, self.obsflow)
-            self.metrics = calculate_all_metrics(df["sim_flow"], df["obs_flow"], self.eval_params.threshold)
-            df_metrics = pd.DataFrame([self.metrics])
-            metrics_dst = output_dir / f"{basin_id}_metrics_valid_control.csv"
-            df_metrics.to_csv(metrics_dst, index=False)
-
-            hydrograph_valid(df, plot_dir, basin_id, label="Valid_Run")
-            fdc_plot_valid(df, plot_dir, basin_id, label="Valid_Run")
-            barplot_metrics_valid(df_metrics, plot_dir, basin_id, label="Valid_Run")
-
-            if self.precip_forcing and self.precip_forcing.exists():
-                streamflow_precip_valid(df, self.precip_forcing, plot_dir, basin_id, label="Valid_Run")
-
-            logger.info(f"[NoCalibModel] Validation post-processing completed.")
-
-        
     def get_obsflow(self) -> pd.DataFrame:
         print(f'self.obsflow : {self.obsflow}')
         df = pd.read_csv(self.obsflow, index_col=0, parse_dates=True)
@@ -759,23 +576,6 @@ class NoCalibModel(ModelExec):
         self.nexus = self.nexus.resolve()
         self.obsflow = self.obsflow.resolve()
         self.nwmflow = self.nwmflow.resolve()
-        '''
-        if "nwmflow" in self.model:
-            self.nwmflow = Path(self.model["nwmflow"]).resolve()
-        else:
-            logger.info("self.nwmflow NOT defined")
-        '''
-
-    '''
-    def resolve_paths(self, base_dir):
-        base_dir = Path(base_dir)
-        keys = ['realization', 'binary', 'catchments', 'obsflow', 'nwmflow']
-        for key in keys:
-            if key in self.model:
-                resolved = (base_dir / self.model[key]).resolve()
-                self.model[key] = str(resolved)
-                setattr(self, key, str(resolved))
-    '''
 
     @property
     def adjustables(self):

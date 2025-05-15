@@ -37,22 +37,6 @@ def run_valid_ctrl_best(agent):
         # Execute model run and post-process results
         with pushd(agent.job.workdir):
             agent.model.execute_model()
-            '''
-            agent.evaluation_object = CalibrationCatchment(
-                basin_id=agent.basin_id,
-                obs_file=agent.model.model['obsflow'],
-                streamflow_name="obs_flow",  # or the actual name used
-                station_name=agent.basin_id,  # or descriptive name
-                save_plot_iter_flag=False,
-                evaluation_range=(agent.general.start_time, agent.general.end_time),
-                valid_evaluation_range=(agent.general.start_time, agent.general.end_time),
-                time_period_dict={
-                    "calibration": [agent.general.start_time, agent.general.end_time],
-                    "validation": [agent.general.start_time, agent.general.end_time],
-                    "full": [agent.general.start_time, agent.general.end_time]
-                }
-            )
-            '''
             agent.model.postprocess_single_validation_output(agent)
         logger.info("[NoCalibModel] Validation complete.")
         return
