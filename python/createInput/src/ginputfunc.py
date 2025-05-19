@@ -1852,88 +1852,25 @@ def create_partition_file(
     partition_file = os.path.join(work_dir, 'Input', f"{basin}_partition_config.json")
     cmd = f"{partition_generator} {hydrofab_file} {hydrofab_file} {partition_file} {nprocs} '' ''"
 
-    # Log diagnostic information
-    logger.info("Creating partition file:")
+    logger.info("Creating partition file for basin %s", basin)
     logger.info(" - Partition generator: %s", partition_generator)
     logger.info(" - Hydrofabric file: %s", hydrofab_file)
     logger.info(" - Number of processors: %s", nprocs)
-    logger.info(" - Work directory: %s", work_dir)
-    logger.info(" - Basin: %s", basin)
     logger.info(" - Partition file: %s", partition_file)
     logger.info(" - Command: %s", cmd)
-    logger.info(" - Current working directory: %s", os.getcwd())
-    logger.info(" - PATH: %s", os.environ.get("PATH"))
-    logger.info(" - LD_LIBRARY_PATH: %s", os.environ.get("LD_LIBRARY_PATH"))
-
-    # Log directory contents - for diagnostics only
-    ngen_app_dir = os.path.dirname(partition_generator)
-    logger.info("Evaluating directory for partition generator: %s", ngen_app_dir)
-
-    try:
-        # Verify if the directory exists
-        if ngen_app_dir == "":
-            logger.error("ngen_app_dir is an empty string, something is wrong with partition_generator: %s", partition_generator)
-        elif os.path.exists(ngen_app_dir):
-            logger.info("Directory %s exists", ngen_app_dir)
-
-            # Check if the directory is a symbolic link
-            if os.path.islink(ngen_app_dir):
-                real_path = os.path.realpath(ngen_app_dir)
-                logger.info("Directory %s is a symbolic link pointing to %s", ngen_app_dir, real_path)
-            else:
-                logger.info("Directory %s is not a symbolic link", ngen_app_dir)
-
-            # List directory contents in Python
-            files = os.listdir(ngen_app_dir)
-            if not files:
-                logger.warning("Directory %s is empty", ngen_app_dir)
-            else:
-                logger.info("Listing contents of %s:", ngen_app_dir)
-                for f in files:
-                    full_path = os.path.join(ngen_app_dir, f)
-                    perms = oct(os.stat(full_path).st_mode)[-3:]
-                    owner = os.stat(full_path).st_uid
-                    group = os.stat(full_path).st_gid
-                    logger.info(" - %s (permissions: %s, owner: %s, group: %s)", f, perms, owner, group)
-
-            # List directory contents using shell
-            logger.info("Checking directory with shell command: ls -la %s", ngen_app_dir)
-            try:
-                result = subprocess.run(
-                    ["ls", "-la", ngen_app_dir], stdout=subprocess.PIPE, stderr=subprocess.PIPE
-                )
-                logger.info("Directory contents (shell):\n%s", result.stdout.decode().strip())
-                if result.stderr:
-                    logger.error("Directory error (shell):\n%s", result.stderr.decode().strip())
-            except Exception as e:
-                logger.error("Failed to list directory with shell command: %s", str(e))
-
-        else:
-            logger.error("Directory %s does not exist or is not accessible", ngen_app_dir)
-
-    except FileNotFoundError as e:
-        logger.error("Directory not found: %s", str(e))
-    except PermissionError as e:
-        logger.error("Permission denied when accessing directory: %s", str(e))
-    except Exception as e:
-        logger.error("Unexpected error when listing directory contents: %s", str(e))
 
     # Run the command and capture output
     try:
         result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         logger.info("Command output (stdout): %s", result.stdout.decode().strip())
-        logger.info("Command error (stderr): %s", result.stderr.decode().strip())
+        if result.stderr:
+            logger.error("Command error (stderr): %s", result.stderr.decode().strip())
         result.check_returncode()  # Will raise CalledProcessError if non-zero
     except subprocess.CalledProcessError as e:
-        logger.error("Command failed with exit code: %s", e.returncode)
-        logger.error("Full command: %s", e.cmd)
-        logger.error("Command output (stdout): %s", e.stdout.decode().strip())
-        logger.error("Command error (stderr): %s", e.stderr.decode().strip())
+        logger.error("Partition generator command failed with exit code %s", e.returncode)
         raise
     except FileNotFoundError as e:
-        logger.error("PartitionGenerator not found: %s", partition_generator)
-        logger.error("Make sure the PartitionGenerator executable exists and is executable.")
+        logger.error("Partition generator not found: %s", partition_generator)
         raise
 
-    # Return the partition file path
     return partition_file
