@@ -193,7 +193,6 @@ class NoCalibModel(ModelExec):
             logger.info(f"[NoCalibModel] Config file for {tag} created at {yaml_out}")
 
 
-    #def postprocess_single_calibration_output(self, workdir: Path, basin_id: str, output_iter_path: Path):
     def postprocess_single_calibration_output(self, agent):
         import os
         import shutil
@@ -322,156 +321,8 @@ class NoCalibModel(ModelExec):
             title="Metrics for Calibration Best Run"
         )
 
-    def postprocess_single_calibration_output2(self, workdir: Path, basin_id: str, output_iter_path: Path):
-        import shutil
-        import pandas as pd
-        import logging
-        import copy
-        from ngen.cal import metric_functions as mf
-        from ngen.cal import plot_functions as pf
-        from .plot_output import plot_calib_output
 
-
-        logger = logging.getLogger("NGEN_CAL")
-        output_dir = Path(workdir)
-
-         # Step 1: Get the fallback NEX CSV file
-        matches = list(workdir.glob("nex-*_output.csv"))
-        if not matches:
-            raise FileNotFoundError(f"No NEX output CSV found in {workdir}")
-        nex_file = matches[0]
-        warnings.warn(f"Using fallback output file: {nex_file.name}", RuntimeWarning)
-
-        # Step 2: Read the fallback file assuming no headers, manually assign
-        df_raw = pd.read_csv(nex_file, header=None, names=["Time", "sim_flow"], parse_dates=["Time"])
-        df_raw.set_index("Time", inplace=True)
-
-        # Step 3: Save to Output_Iteration
-        self._output_iter_file = str(output_iter_path / f"{basin_id}_output_iteration_0000.csv")
-        self._output_best_iter_file = str(output_iter_path / f"{basin_id}_output_best_iteration.csv")
-        self._output_last_iter_file = str(output_iter_path / f"{basin_id}_output_last_iteration.csv")
-
-        df_raw.to_csv(self._output_iter_file)
-        df_raw.to_csv(self._output_best_iter_file)
-        df_raw.to_csv(self._output_last_iter_file)
-        logger.info(f"[NoCalibModel] Wrote: {self._output_iter_file}, {self._output_best_iter_file}, {self._output_best_iter_file}")
-
-        # Step 4: Copy cat-* and nex-*output.csv to Output_Calib
-        output_calib_path = workdir / "Output_Calib"
-        output_calib_path.mkdir(parents=True, exist_ok=True)
-
-        for file in workdir.glob("cat-*.csv"):
-            shutil.move(file, output_calib_path)
-        for file in workdir.glob("nex-*_output.csv"):
-            shutil.move(file, output_calib_path)
-        
-        # Step 5: Compute and store metrics
-        obs = self.get_obsflow()
-        df = pd.concat([df_raw["sim_flow"], obs], axis=1).dropna()
-        df.columns = ["sim_flow", "obs_flow"]
-        df = df.loc[self.evaluation_range[0]:self.evaluation_range[1]]
-        
-        logger.info(f"eval_range : {self.evaluation_range}")
-        logger.info(f"{df.head()}")
-
-        # Compute metrics
-        self.metrics = calculate_all_metrics(
-            df["obs_flow"], df["sim_flow"], self.evaluation_range, self.threshold
-        )
-
-        logger.info(f"self.metrics : {self.metrics}")
-        logger.info(f"self.eval_params.objective : {self.eval_params.objective}")
-
-        score = self.metrics.get(self.eval_params.objective, None)
-        if score is None:
-            score = self.metrics.get(self.eval_params.objective.upper(), None)
-            if score is None:
-                raise ValueError(f"Objective function metric '{self.eval_params.objective}' not found in metrics")
-
-        # Write metrics to CSV
-        metrics_path = output_iter_path / f"{basin_id}_metrics_single_run.csv"
-        pd.DataFrame([self.metrics]).to_csv(metrics_path, index=False)
-
-
-        # Load all required simulation outputs
-        df_control = pd.read_csv(self._output_iter_file, index_col=0, parse_dates=True)
-        df_control.rename(columns={df_control.columns[0]: "control"})
-        df_best = pd.read_csv(self._output_best_iter_file, index_col=0, parse_dates=True)
-        df_best.rename(columns={df_best.columns[0]: "best"})
-        df_last = pd.read_csv(self._output_last_iter_file, index_col=0, parse_dates=True)
-        df_last.rename(columns={df_last.columns[0]: "last"})
-        df_obs = self.get_obsflow().rename(columns={self.get_obsflow().columns[0]: "Observation"})
-
-        # Merge all on Time index
-        df_merged = pd.concat([df_obs, df_control, df_last, df_best], axis=1).dropna()
-        df_merged.index.name = "Time"
-        df_plot = df_merged.iloc[24:].reset_index()  # drop spin-up if needed
-
-        # Generate Plots
-        plot_iter_path = workdir / "Plot_Iteration"
-        plot_iter_path.mkdir(parents=True, exist_ok=True)
-
-        # Plot updated hydrograph and FDC with full data
-        pf.plot_streamflow(
-            df=copy.deepcopy(df_plot),
-            plotfile=plot_iter_path / f"{basin_id}_hydrograph_iteration.png",
-            title=f"Hydrograph (Calibration Iteration)\n{basin_id}"
-        )
-
-        pf.plot_fdc_calib(
-            df=copy.deepcopy(df_merged),
-            plotfile=plot_iter_path / f"{basin_id}_fdc_iteration.png",
-            title=f"Flow Duration Curve (Calibration Iteration)"
-        )
-
-        # scatterplot with df_plot or df_merged
-        # Scatterplot
-        title=f"Scatterplot Streamflow Curve (Calibration Iteration)"
-        df_scat = df.rename(columns={"obs_flow": "Observation", "sim_flow": "SingleRun"})
-        df_scat["Time"] = df.index
-        pf.scatterplot_streamflow(df_scat, plot_iter_path / f"{basin_id}_scatter_iterations.png", title)
-
-        # Prepare DataFrame for plotting
-        df_metrics = pd.DataFrame(self.metrics, index=[0])
-        df_metrics["iteration"] = 0
-        df_metrics.set_index("iteration", inplace=True)
-        pf.barplot_metric(df_metrics, plot_iter_path / f"{basin_id}_barplot_metrics_iterations.png","braplot_metrics_test")
-
-
-        try:
-            df_precip = self.df_precip.reset_index()
-            pf.plot_streamflow_precipitation(
-                df=copy.deepcopy(df_plot),
-                dfp=df_precip,
-                plotfile=plot_iter_path / f"{basin_id}_streamflow_precip_iteration.png",
-                title=f"Streamflow + Precipitation (Calibration Iteration)"
-            )
-        except Exception as e:
-            logger.warning(f"[NoCalibModel] Precipitation plot skipped: {e}")
-
-
-        '''
-
-        # Generate plots
-
-        title = f"Single-Run Evaluation - {basin_id}"
-
-        # Hydrograph
-        df_hydro = df.copy()
-        df_hydro["Time"] = df_hydro.index
-        df_hydro = df_hydro[["Time", "obs_flow", "sim_flow"]]
-        pf.plot_streamflow(df_hydro, plot_iter_path / f"{basin_id}_hydrograph_iterations.png", title)
-
-        # Flow Duration Curve
-        df_fdc = df.rename(columns={"obs_flow": "Observation", "sim_flow": "SingleRun"})
-        pf.plot_fdc_calib(df_fdc, plot_iter_path / f"{basin_id}_fdc_iterations.png", title)
-        '''
-
-        logger.info("[NoCalibModel] Generated metric and objective function plots.")
-        logger.info(f"[NoCalibModel] Post-processing of single-run output completed.")
-
-
-    def postprocess_single_validation_output(self, agent: 'Agent'):
+    def postprocess_single_validation_output(self, agent: 'Agent', valid_suffix=None):
         """
         Post-process validation output for NoCalibModel.
 
@@ -495,7 +346,7 @@ class NoCalibModel(ModelExec):
         basin_id = self.basinID
         output_valid_dir = workdir / "Output_Valid"
         output_valid_dir.mkdir(exist_ok=True)
-
+        output_parent_path = Path(workdir).parent
 
         # Step 1: Get the fallback NEX CSV file
         matches = list(workdir.glob("nex-*_output.csv"))
@@ -508,25 +359,16 @@ class NoCalibModel(ModelExec):
         df_raw = pd.read_csv(nex_file, header=None, names=["Time", "sim_flow"], parse_dates=["Time"])
         df_raw.set_index("Time", inplace=True)
 
-        # Step 3: Save to Output_Iteration
-        best_output_file = workdir / f"{basin_id}_output_valid_best.csv"
-        best_nex_output_file = workdir / f"nex-{basin_id}_output_valid_best.csv"
-        best_nex_output_valid_file = output_valid_dir / f"nex-{basin_id}_output_valid_best.csv"
-        df_raw.to_csv(best_output_file)
-        df_raw.to_csv(best_nex_output_file)
-        df_raw.to_csv(best_nex_output_valid_file)
-        logger.info(f"[NoCalibModel] Wrote: {best_output_file}")
-        logger.info(f"[NoCalibModel] Wrote: {best_nex_output_file}")
-        logger.info(f"[NoCalibModel] Wrote: {best_nex_output_valid_file}")
-
-
         # Define file suffixes
-        valid_suffix = "valid_best"
+        if not valid_suffix:
+            valid_suffix = agent.run_name
 
-        # nex-01123000_output_valid_best.csv
+        # Step 3: Save to Output_Iteration
+        output_iter_file = output_parent_path / f"{basin_id}_output_{valid_suffix}.csv"
+        df_raw.to_csv(output_iter_file)
+        logger.info(f"[NoCalibModel] Wrote: {output_iter_file}")
 
         # Copy and rename output files
-        output_iter_path = workdir / "Output"
         for file in workdir.glob("*"):
             if file.suffix == ".csv" and ("cat-" in file.name or "nex-" in file.name):
                 parts = file.name.split(".")[0].split("-")
@@ -534,7 +376,7 @@ class NoCalibModel(ModelExec):
                     prefix = parts[0]  # cat or nex
                     catch_id = parts[1].split("_")[0]  # extract ID and remove existing suffix if present
                     new_name = f"{prefix}-{catch_id}_{valid_suffix}.csv"
-                    shutil.copy(file, output_valid_dir / new_name)
+                    shutil.move(file, output_valid_dir / new_name)
 
         # Locate renamed output files
         sim_files = list(output_valid_dir.glob(f"nex-*_{valid_suffix}.csv"))
@@ -557,47 +399,29 @@ class NoCalibModel(ModelExec):
 
         # Save metrics
         metrics_df = pd.DataFrame(all_metrics)
-        metrics_path = output_valid_dir / f"validation_metrics_{valid_suffix}.csv"
-        metrics_path_workdir = workdir / f"validation_metrics_{valid_suffix}.csv"
-        metrics_df.to_csv(metrics_path, index=False)
-        metrics_df.to_csv(metrics_path_workdir, index=False)
-        logger.info(f"[NoCalibModel] Metrics written: {metrics_path}")
+        metrics_path_parent = output_parent_path / f"validation_metrics_{valid_suffix}.csv"
+        metrics_df.to_csv(metrics_path_parent, index=False)
+        logger.info(f"[NoCalibModel] Metrics written: {metrics_path_parent}")
 
-        plot_valid_dir = Path(agent.job.workdir) / "Plot_Valid"
+
+        # Plottimg is not part of valid control workflow
+        if valid_suffix != 'valid_best':
+            logger.info(f"[NoCalibModel] Post-processing of single-run valid control output completed.")
+            return
+
+
+        plot_valid_dir = Path(output_parent_path) / "Plot_Valid"
         plot_valid_dir.mkdir(exist_ok=True)
 
-        try:
-            renamed_output = plot_valid_dir / f"{basin_id}_output_valid_best.csv"
-            shutil.copy(output_valid_dir / f"nex-{basin_id}_output_valid_best.csv", renamed_output)
-            renamed_metrics = plot_valid_dir / f"{basin_id}_metrics_valid_best.csv"
-            shutil.copy(metrics_path, renamed_metrics)
-        except Exception as e:
-            logger.error(f"Error copying output/metrics to Plot_Valid: {e}")
 
         # Create merged DataFrame for plotting
         obs_df = pd.read_csv(obs_path, index_col=0, parse_dates=True)
         obs_df = obs_df.rename(columns={obs_df.columns[0]: 'Observation'})
-        sim_df = pd.read_csv(renamed_output, index_col=0, parse_dates=True)
+        sim_df = pd.read_csv(output_iter_file, index_col=0, parse_dates=True)
         sim_df = sim_df.rename(columns={sim_df.columns[0]: 'valid_best'})
         nwm_df = self.df_nwm
 
         # Ensure all indices are datetime and aligned
-        # Align indices across dataframes
-        '''
-        obs_df.index = pd.to_datetime(obs_df.index)
-        sim_df.index = pd.to_datetime(sim_df.index)
-        nwm_df.index = pd.to_datetime(nwm_df.index)
-
-        # Outer merge to preserve timestamps, then manually drop only rows where all three are missing
-        merged_df = pd.concat([obs_df, sim_df, nwm_df], axis=1)
-
-        # Optional: only drop rows where all 3 are NaN
-        merged_df = merged_df.dropna(how='all', subset=['Observation', 'valid_best', 'nwm_retro'])
-
-        # Retain useful index
-        merged_df.index.name = "Time"
-        df_plot = merged_df.iloc[24:].copy().reset_index()
-        '''
         obs_df.index = pd.to_datetime(obs_df.index)
         sim_df.index = pd.to_datetime(sim_df.index)
         nwm_df.index = pd.to_datetime(nwm_df.index)
@@ -607,28 +431,21 @@ class NoCalibModel(ModelExec):
 
         # For plotting, keep a deep copy and reset index
         # Sort and reorder DataFrame columns explicitly
+
         merged_df = merged_df[["Observation", "nwm_retro", "valid_best"]]
         merged_df.index.name = "Time"
         df_plot = merged_df.iloc[24:].copy().reset_index()
         
-        '''
-
-        obs_df = pd.read_csv(obs_path, index_col=0, parse_dates=True)
-        obs_df = obs_df.rename(columns={obs_df.columns[0]: 'Observation'})
-        sim_df = pd.read_csv(renamed_output, index_col=0, parse_dates=True)
-        sim_df = sim_df.rename(columns={sim_df.columns[0]: 'valid_best'})
-        nwm_df = self.df_nwm
-        merged_df = pd.concat([obs_df, sim_df, nwm_df], axis=1).dropna()
-        #merged_df = pd.concat([nwm_df, obs_df, sim_df], axis=1).dropna()
-        merged_df.index.name = "Time"
-        df_plot = merged_df.iloc[24:].copy().reset_index()
-        '''
-
-        pf.plot_streamflow(
-            df=copy.deepcopy(df_plot),
-            plotfile=plot_valid_dir / f"{basin_id}_hydrograph_valid_run.png",
-            title=f"Hydrograph (Valid Best)\n{basin_id}"
-        )
+        try:
+            pf.plot_streamflow(
+                df=copy.deepcopy(df_plot),
+                plotfile=plot_valid_dir / f"{basin_id}_hydrograph_valid_run.png",
+                title=f"Hydrograph (Valid Best)\n{basin_id}"
+            )
+        except Exception as e:
+            logger.info(df_fdc)
+            logger.warning(f"plot_streamflow_valid : {e}")
+            logger.info(traceback.format_exc())
 
         try:
 
@@ -646,9 +463,6 @@ class NoCalibModel(ModelExec):
                     "full": (df_fdc.index.min(), df_fdc.index.max()),
                 }
             )
-
-
-
         except Exception as e:
             logger.info(df_fdc)
             logger.warning(f"plot_fdc_valid : {e}")
@@ -670,7 +484,7 @@ class NoCalibModel(ModelExec):
             logger.info(traceback.format_exc())
 
         try:
-            metrics_df = pd.read_csv(renamed_metrics)
+            metrics_df = pd.read_csv(metrics_path_parent)
             metrics_df.insert(0, "run_type", "valid_best")
             metrics_df.insert(1, "basin_id", basin_id)
             pf.barplot_metric(
