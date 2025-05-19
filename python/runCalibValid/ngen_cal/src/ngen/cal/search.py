@@ -287,7 +287,7 @@ def dds(start_iteration: int, iterations: int,  calibration_object: 'Evaluatable
         calibration_object.check_point(agent.job.workdir)
 
 
-def dds_set(start_iteration: int, iterations: int, agent: 'Agent') -> None:
+def single_exec(agent: 'Agent') -> None:
     """Perform parameter optimization using DDS or single-run for NoCalibModel."""
     from math import log
     from .utils import complete_msg
@@ -323,16 +323,21 @@ def dds_set(start_iteration: int, iterations: int, agent: 'Agent') -> None:
         output_iter_path = Path(agent.job.workdir) / "Output_Iteration"
         output_iter_path.mkdir(parents=True, exist_ok=True)
 
-        agent.model.postprocess_single_calibration_output(
-            Path(agent.job.workdir), agent.model.eval_params.basinID, output_iter_path
-        )
+        agent.model.postprocess_single_calibration_output(agent)
         # if isinstance(agent.model, NoCalibModel):
         agent.model.create_validation_configs(agent)
         agent.model.write_run_complete_file(agent.run_name, Path(agent.job.workdir))
         complete_msg(agent.model.basinID, agent.run_name, str(agent.job.workdir), agent.model.user)
-        return  # Exit early
 
-    # === Regular DDS logic ===
+
+def dds_set(start_iteration: int, iterations: int, agent: 'Agent') -> None:
+    """Perform parameter optimization using DDS or single-run for NoCalibModel."""
+    from math import log
+    from .utils import complete_msg
+    from .search import _execute, _evaluate, dds_update
+    #from .configuration import NoCalibModel
+    import shutil
+
     if iterations < 2:
         raise ValueError("iterations must be >= 2")
     if start_iteration > iterations:

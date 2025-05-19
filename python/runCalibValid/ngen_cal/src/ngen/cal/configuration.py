@@ -193,7 +193,8 @@ class NoCalibModel(ModelExec):
             logger.info(f"[NoCalibModel] Config file for {tag} created at {yaml_out}")
 
 
-    def postprocess_single_calibration_output(self, workdir: Path, basin_id: str, output_iter_path: Path):
+    #def postprocess_single_calibration_output(self, workdir: Path, basin_id: str, output_iter_path: Path):
+    def postprocess_single_calibration_output(self, agent):
         import os
         import shutil
         import pandas as pd
@@ -203,11 +204,12 @@ class NoCalibModel(ModelExec):
         from ngen.cal import plot_functions as pf
         import logging
 
-        basin_id = self.basinID
-        plot_iter_path = Path(workdir) / "Plot_Calib"
+        basin_id = agent.model.eval_params.basinID
+        workdir = agent.job.workdir
+        plot_iter_path = Path(workdir) / "Plot_Iteration"
         output_iter_path = Path(workdir)/"Output_Iteration"
         plot_iter_path.mkdir(exist_ok=True)
-
+        output_iter_path.mkdir(parents=True, exist_ok=True)
 
         logger = logging.getLogger("NGEN_CAL")
         output_dir = Path(workdir)
