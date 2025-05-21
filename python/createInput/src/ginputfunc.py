@@ -1855,8 +1855,8 @@ def create_partition_file(
     logger.info("Creating partition file for basin %s", basin)
     logger.info(" - Partition generator: %s", partition_generator)
     logger.info(" - Hydrofabric file: %s", hydrofab_file)
-    logger.info(" - Number of processors: %s", nprocs)
     logger.info(" - Partition file: %s", partition_file)
+    logger.info(" - Number of processors: %s", nprocs)
     logger.info(" - Command: %s", cmd)
 
     # Run the command and capture output
