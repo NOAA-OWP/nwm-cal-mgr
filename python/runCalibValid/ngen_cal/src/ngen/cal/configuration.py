@@ -205,7 +205,7 @@ class NoCalibModel(ModelExec):
         return df
 
 
-    def postprocess_single_calibration_output2(self, agent):
+    def postprocess_single_calibration_output_new(self, agent):
         import os
         import shutil
         import pandas as pd
@@ -285,6 +285,7 @@ class NoCalibModel(ModelExec):
         metrics = mf.calculate_all_metrics(y_true, y_pred)
         metrics["catchment_id"] = basin_id
         df_metrics = pd.DataFrame([metrics])
+        df_metrics["iteration"] = 0
         df_metrics.to_csv(metrics_best_path, index=False)
         
 
@@ -327,6 +328,7 @@ class NoCalibModel(ModelExec):
             metrics = mf.calculate_all_metrics(obs_aligned, sim_aligned)
 
             df_metrics = pd.DataFrame([metrics])
+            df_metrics["iteration"] = 0
             df_metrics.to_csv(output_calib / f"{basin_id}_metrics_best.csv", index=False)
         except Exception as e:
             logger.warning(f"Metric calculation failed: {e}")
@@ -343,12 +345,15 @@ class NoCalibModel(ModelExec):
                 cost_df.to_csv(output_calib / f"{basin_id}_output_cost.csv", index=False)
             except Exception as e:
                 logger.warning(f"cost calculation : {e}")
-    
+
+        df_plot = pd.concat([df_obs, df_sim], axis=1).reset_index()
+        df_plot.rename(columns={df_plot.columns[0]: "Time"}, inplace=True)    
+        df_metrics["iteration"] = 0
 
         # Plot hydrograph
         try:
             plot_streamflow(
-                df=pd.concat([df_obs, df_sim], axis=1),
+                df=df_plot,
                 plotfile=plot_dir / f"{basin_id}_hydrograph_iteration.png"
             )
         except Exception as e:
@@ -357,8 +362,9 @@ class NoCalibModel(ModelExec):
 
         # Plot FDC
         try:
+            df_fdc = df_plot[["Observation", "Simulated"]].copy()
             plot_fdc_calib(
-                df=pd.concat([df_obs, df_sim], axis=1),
+                df=df_fdc,
                 plotfile=plot_dir / f"{basin_id}_fdc_iteration.png"
             )
         except Exception as e:
@@ -367,7 +373,7 @@ class NoCalibModel(ModelExec):
 
         # Scatterplot: Observation vs Simulated
         try:
-            scatter_df = pd.concat([df_obs, df_sim], axis=1).copy()
+            scatter_df = df_plot.copy()
             scatter_df = scatter_df.reset_index()
             scatter_df.rename(columns={scatter_df.columns[0]: "Time"}, inplace=True)
             scatterplot_streamflow(
@@ -381,8 +387,8 @@ class NoCalibModel(ModelExec):
         # Precipitation plot
         try:
             df_precip = self.df_precip.reset_index()
-            pf.plot_streamflow_precipitation(
-                df=pd.concat([df_obs, df_sim], axis=1),
+            plot_streamflow_precipitation(
+                df=df_plot,
                 dfp=df_precip,
                 plotfile=plot_iter_path / f"{basin_id}_streamflow_precip_iteration.png",
                 title=f"Streamflow + Precipitation (Calibration Iteration)"
@@ -584,17 +590,18 @@ class NoCalibModel(ModelExec):
         y_true, y_pred = y_true.align(y_pred, join="inner")
         metrics = mf.calculate_all_metrics(y_true, y_pred)
         metrics["catchment_id"] = basin_id
+        metrics["iteration"] = 0
         metrics_df = pd.DataFrame([metrics])
-        metrics_path = output_iter_path / f"{basin_id}_metrics_best.csv"
-        metrics_df.to_csv(metrics_path, index=False)
-        shutil.copy(metrics_path, plot_iter_path / metrics_path.name)
+        metrics_best_path = output_iter_path / f"{basin_id}_metrics_best.csv"
+        metrics_df.to_csv(metrics_best_path, index=False)
+        # shutil.copy(metrics_path, plot_iter_path / metrics_path.name)
 
         # Cost function
         try:
             cost_dir = output_dir / "Output_Calib"
             cost_dir.mkdir(exist_ok=True)
             cost_path = cost_dir / f"{basin_id}_output_cost.csv"
-            obj_value = metrics[self.eval_params.objective.upper()].iloc[0]
+            obj_value = metrics[self.eval_params.objective.upper()]
             cost_df = pd.DataFrame({self.eval_params.objective: [obj_value]})
             cost_df.to_csv(cost_path, index=False)
         except Exception as e:
@@ -708,6 +715,32 @@ class NoCalibModel(ModelExec):
             logging.getLogger(__name__).warning(f"Precipitation plot skipped: {e}")
             logger.info(traceback.format_exc())
 
+
+
+        # Barplot metrics
+        try:
+            pf.barplot_metric(
+                df=metrics_df,
+                plotfile=plot_iter_path / f"{basin_id}_barplot_metrics_iteration.png"
+            )
+        except Exception as e:
+            logger.warning(f"barplot_metric failed: {e}")
+            logger.info(traceback.format_exc())
+
+        # Obj Fun
+        try:
+            pf.scatterplot_objfun(
+                metric_file=metrics_best_path,
+                plotfile=plot_iter_path / f"{basin_id}_objfun_iteration.png",
+                objective_fun_column=self.eval_params.objective.upper(),
+                best_iteration=0,
+                title="Objective Function vs Iteration",
+            )
+        except Exception as e:
+            logger.warning(f"scatterplot_objfun failed: {e}")
+            logger.info(traceback.format_exc())
+
+
         # Metrics Barplot
         try:
             metrics_df.insert(0, "run_type", "calib_best")
@@ -719,6 +752,43 @@ class NoCalibModel(ModelExec):
             )
         except Exception as e:
             logger.warning(f"barplot_metrics : {e}")
+            logger.info(traceback.format_exc())
+
+
+        # Metrics iteration
+        try:
+            pf.scatterplot_var(
+                var_file=metrics_best_path,
+                plotfile=plot_iter_path / f"{basin_id}_metric_iteration.png",
+                best_iteration=0,
+                title="Metrics by Iteration"
+            )
+        except Exception as e:
+            logger.warning(f"scatterplot_var (metric) failed: {e}")
+            logger.info(traceback.format_exc())
+
+        # Parameter iteration
+        try:
+            pf.scatterplot_var(
+                var_file=metrics_best_path,
+                plotfile=plot_iter_path / f"{basin_id}_param_iteration.png",
+                best_iteration=0,
+                title="Parameters by Iteration"
+            )
+        except Exception as e:
+            logger.warning(f"scatterplot_var (param) failed: {e}")
+            logger.info(traceback.format_exc())
+
+        # Objective vs Metric plot
+        try:
+            pf.scatterplot_objfun_metric(
+                var_file=metrics_best_path,
+                plotfile=plot_iter_path / f"{basin_id}_metric_objfun.png",
+                best_iteration=0,
+                title="Obj Fun vs Metrics"
+            )
+        except Exception as e:
+            logger.warning(f"scatterplot_objfun_metric failed: {e}")
             logger.info(traceback.format_exc())
 
         logger.info(f"[NoCalibModel] All calibration plots generated in Plot_Iteration.")
