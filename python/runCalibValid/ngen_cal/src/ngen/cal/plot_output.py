@@ -289,3 +289,4 @@ def plot_cost_func(
     title  = algorithm.upper() + ' Convergence Curve ' + '\n' + calibration_object.station_name
     #plf.plot_cost_hist(cost_hist_file, plotfile, title)
     plf.plot_cost_hist(cost_hist_file, plotfile, title, algorithm, calib_iter)
+

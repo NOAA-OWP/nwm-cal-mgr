@@ -192,7 +192,9 @@ def plot_streamflow_precipitation(
     ax2.set_yticklabels(label2)
 
     # Generate common legend
-    if len(lnlst)==3:
+    if len(lnlst)==2:
+        lns = lnlst[0] + lnlst[1] + ln3
+    elif len(lnlst)==3:
         lns = lnlst[0] + lnlst[1] + lnlst[2]  + ln3
     else:
         lns = lnlst[0] + lnlst[1] + lnlst[2] + lnlst[3] + ln3
@@ -771,3 +773,46 @@ def plot_cost_hist(
 
     fig.savefig(plotfile)
     plt.close()
+
+import os
+import matplotlib.pyplot as plt
+import pandas as pd
+from matplotlib.ticker import MaxNLocator
+
+def plot_obj_fun(agent, suffix="calib", output_dir=None):
+    """Plot cost function history for single or regular calibration runs."""
+    from pathlib import Path
+
+    basin_id = agent.model.eval_params.basinID
+    work_dir = Path(agent.job.workdir)
+    if output_dir is None:
+        output_dir = work_dir / "Plot_Iteration"
+    os.makedirs(output_dir, exist_ok=True)
+    
+    cost_file = work_dir / "Output_Calib" / f"{basin_id}_output_cost.csv"
+    if not cost_file.exists():
+        print(f"Cost file does not exist: {cost_file}")
+        return
+
+    df = pd.read_csv(cost_file)
+
+    if "value" not in df.columns or "iteration" not in df.columns:
+        print(f"Required columns not found in {cost_file}")
+        return
+
+    plt.style.use("ggplot")
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.plot(df["iteration"], df["value"], marker="o", linestyle="-", color="steelblue", label="Objective")
+
+    ax.set_title(f"Objective Function over Iterations ({suffix})")
+    ax.set_xlabel("Iteration")
+    ax.set_ylabel("Objective Function Value")
+    ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+    ax.legend()
+    ax.grid(True)
+
+    plot_path = os.path.join(output_dir, f"{basin_id}_cost_hist_{suffix}.png")
+    plt.tight_layout()
+    plt.savefig(plot_path)
+    plt.close()
+
