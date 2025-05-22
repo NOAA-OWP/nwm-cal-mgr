@@ -633,10 +633,12 @@ class NoCalibModel(ModelExec):
         df_last *= scale_factor
         df_iter *= scale_factor
 
-        # df_all = pd.concat([df_obs, df_iter, df_best, df_last], axis=1)
-        df_all = pd.concat([df_obs, df_best], axis=1)
+        df_best_sim = df_best.copy()
+        df_best_sim.columns = ['Simulated']
+        df_all = pd.concat([df_obs, df_best, df_best_sim], axis=1)
         df_all.index.name = "Time"
-        df_all = df_all.dropna(subset=["Observation", "Best Run"])  # Drop only when both are missing
+        df_all = df_all.dropna(subset=["Observation", "Simulated"])
+
 
         print(df_all.columns)
         print(f"\ndf_all : \n{df_all}")
@@ -674,8 +676,11 @@ class NoCalibModel(ModelExec):
 
         # Flow Duration Curve
         try:
+            df_fdc = df_all[["Observation", "Simulated"]].copy()
+            df_fdc = df_fdc.reset_index()
+            #df_fdc = df_fdc[["Observation", "Simulated"]]  # Drop 'Time' again if needed
             pf.plot_fdc_calib(
-                df=copy.deepcopy(df_all),
+                df=df_fdc,
                 plotfile=plot_iter_path / f"{basin_id}_fdc_iteration.png",
                 title="Flow Duration Curve (Calibration Iteration)"
             )
