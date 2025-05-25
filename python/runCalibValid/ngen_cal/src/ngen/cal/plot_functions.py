@@ -225,7 +225,9 @@ def scatterplot_streamflow(
     logger.info('---Plotting Scatterplot of Streamflow between Observation and Other Runs---')
 
     # Obtain column names and value range
+    print(df)
     colname = list(df.columns)
+    print(f"colname : {colname}")
     # this treatment is moved to plot_calib_output & plot_valid_output in plot_functions.py
     #df = df.iloc[24:] # remove first day with possible big values
     max0 = math.ceil(pd.melt(df, id_vars=['Time'], value_vars=colname[1:])['value'].max()) * 1.02
@@ -542,11 +544,14 @@ def barplot_metric(
 
     """
     logger.info('---Plotting Barplot of Metrics---')
+    print(df)
+    
 
     # Set index
     allcols = list(df.columns)
     df.set_index(allcols[0:2], inplace=True)
     allcols = list(df.columns)
+    print("allcols : {}".format(allcols))
 
     # Specify figure arguments
     figsize = (12, 8)
@@ -554,6 +559,8 @@ def barplot_metric(
     rows = math.ceil(len(allcols)/cols)
     runtp = list(df.index.get_level_values(0).unique())
     labels = list(df.index.get_level_values(1).unique())
+    print(f"labels : {labels}")
+
     x = np.arange(len(labels))
     width = 0.7/len(runtp)
     #xwidth = [x - width/2, x + width/2] if len(runtp) == 2 else [x - width, x, x + width]
