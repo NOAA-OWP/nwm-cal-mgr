@@ -545,7 +545,6 @@ class NoCalibModel(ModelExec):
         sim_files = list(output_valid_dir.glob(f"nex-*_{valid_suffix}.csv"))
         obs_path = Path(self.obsflow)
 
-
         try:
             obs_df = pd.read_csv(self.obsflow, parse_dates=["value_date"])
             obs_df = obs_df.rename(columns={"value_date": "Time", obs_df.columns[1]: "Observation"}).set_index("Time")
@@ -585,24 +584,51 @@ class NoCalibModel(ModelExec):
 
             logger.info(f"self.eval_params : {self.eval_params}")
 
-            df_all = pd.concat([obs_df, sim_df], axis=1).dropna()
+            output = sim_df
+            observed = obs_df
 
-            # Rename to expected column names
-            df_all_renamed = df_all.rename(columns={"Simulated": "sim_flow", "Observation": "obs_flow"})
-            result = _calc_metrics(df_all_renamed["sim_flow"], df_all_renamed["obs_flow"], self.eval_params._eval_range, self.eval_params.threshold)
+            # Ensure column names for _calc_metrics expectations
+            if isinstance(output, pd.Series):
+                output = output.to_frame(name='sim_flow')
+            else:
+                output = output.rename(columns={output.columns[0]: 'sim_flow'})
+
+            if isinstance(observed, pd.Series):
+                observed = observed.to_frame(name='obs_flow')
+            else:
+                observed = observed.rename(columns={observed.columns[0]: 'obs_flow'})
 
 
-            metrics_df = pd.DataFrame([result])
-            metrics_df["run_type"] = valid_suffix
-            logger.info(f"metrics_df : \n{metrics_df}")
-            #metrics_df["basin_id"] = basin_id
-            logger.info(f"\nValidation metrics 1 : \n{metrics_df}")
-            metrics_file = workdir / f"{basin_id}_metrics_{valid_suffix}.csv"
-            metrics_parent_path = Path(agent._valid_path) /  f"{basin_id}_metrics_{valid_suffix}.csv"
-            metrics_df.to_csv(metrics_file, index=False)
-            metrics_df.to_csv(metrics_parent_path, index=False)
-            logger.info(f"Metrics saved in :{metrics_parent_path}")
 
+            # Create dummy calibration object
+            calibration_object = SimpleNamespace(
+                output=output,
+                observed=observed, #self.observed,
+                station_name=basin_id,
+                basinID=basin_id,
+                evaluation_range=self.eval_params._eval_range,
+                valid_evaluation_range=self.eval_params._valid_eval_range,
+                full_evaluation_range=self.eval_params._full_eval_range,
+                streamflow_name="sim_flow",
+                threshold=self.eval_params.threshold
+            )
+            time_period = {'calib': calibration_object.evaluation_range, 'valid': calibration_object.valid_evaluation_range,
+                           'full': calibration_object.full_evaluation_range}
+
+            logger.info(f"time_period : {time_period}")
+
+            # Compute metrics for each time period
+            metrics = pd.DataFrame()
+            for period_name, date_range in time_period.items():
+                result = _calc_metrics(calibration_object.output, calibration_object.observed, date_range, calibration_object.threshold)
+                row = {'run': valid_suffix, 'period': period_name, **result}
+                metrics = pd.concat([metrics, pd.DataFrame([row])], ignore_index=True)
+
+            # Save metrics to CSV
+            metrics_path = Path(agent._valid_path) /  f"{basin_id}_metrics_{valid_suffix}.csv"
+            metrics.to_csv(metrics_path, index=False)
+
+            # df_all = pd.concat([obs_df, sim_df], axis=1).dropna()
         except Exception as e:
             logger.info(f"metrics calculation error : {e}")
             logger.info(traceback.format_exc())
@@ -612,7 +638,7 @@ class NoCalibModel(ModelExec):
             logger.info(f"[NoCalibModel] Post-processing of single-run valid control output completed.")
             return
 
-
+        # nwm_retro data
         try:
 
             if agent.nwmflow_file != '':
@@ -630,51 +656,75 @@ class NoCalibModel(ModelExec):
                 agent.nwmflow = self.nwmflow
             print(f'agent.nwmflow : {agent.nwmflow}')
 
+            df_nwm_metrics = pd.DataFrame()
 
-            # Create dummy calibration object
-            calibration_object = SimpleNamespace(
-                observed=obs_df, #self.observed,
-                station_name=basin_id,
-                basinID=basin_id,
-                evaluation_range=self.eval_params._eval_range,
-                valid_evaluation_range=self.eval_params._valid_eval_range,
-                full_evaluation_range=self.eval_params._full_eval_range,
-                streamflow_name="sim_flow",
-                threshold=self.eval_params.threshold
-            )
-            time_period = {'calib': calibration_object.evaluation_range, 'valid': calibration_object.valid_evaluation_range, 
-                           'full': calibration_object.full_evaluation_range}
+            observed = agent.nwmflow
 
-            logger.info(f"time_period : {time_period}")
+            if isinstance(observed, pd.Series):
+                observed = observed.to_frame(name='obs_flow')
+            else:
+                observed = observed.rename(columns={observed.columns[0]: 'obs_flow'})
 
-            try:
-                value = calibration_object.streamflow_name
-                basin_id = calibration_object.basinID
-                eval_range = calibration_object.evaluation_range
+            '''
+            nwmflow = None
+            if agent.nwmflow is not None:
+                if isinstance(agent.nwmflow, pd.Series):
+                    nwmflow = agent.nwmflow.to_frame(name='obs_flow')
+            else:
+                nwmflow = agent.nwmflow.rename(columns={agent.nwmflow.columns[0]: 'obs_flow'})
+            '''
+            for period_name, date_range in time_period.items():
+                result = _calc_metrics(calibration_object.output, observed, date_range, calibration_object.threshold)
+                nwm_row = {'run': 'nwm_retro', 'period': period_name, **result}  # or modify result if needed for NWM
+                df_nwm_metrics = pd.concat([df_nwm_metrics, pd.DataFrame([nwm_row])], ignore_index=True)
+            nwm_metrics_path = Path(agent._valid_path) /  f"{basin_id}_metrics_nwm_retro.csv"
+            df_nwm_metrics.to_csv(nwm_metrics_path, index=False)
+        except Exception as e:
+            logger.warning(f"Error computing nwm_retro metrics : {e}")
+            logger.info(traceback.format_exc())
 
-                df_nwm_metrics = pd.DataFrame({
-                    'sim_flow': agent.nwmflow.loc[eval_range[0]:eval_range[1]].squeeze(),
-                    'obs_flow': calibration_object.observed.loc[eval_range[0]:eval_range[1]].squeeze()
-                })
+        runs = []
+        try:
+            combined_metrics = []
+            for rname in ["nwm_retro", "valid_control", "valid_best"]:
+                mfile = Path(agent.valid_path) / f"{basin_id}_metrics_{rname}.csv"
+                if mfile.exists():
+                    df = pd.read_csv(mfile)
+                    '''
+                    df["run"] = rname
+                    df["basin_id"] = basin_id
+                    df["period"] = "valid"
+                    df["iteration"] = 0
+                    '''
+                    if "objFunVal" not in df.columns:
+                        df["objFunVal"] = df["KGE"] if "KGE" in df.columns else 0.0
+                    if "CORR" not in df.columns:
+                        df["CORR"] = 0.0
+                    combined_metrics.append(df)
+                    runs.append(rname)
+                else:
+                    logger.warning(f"Missing metrics file: {mfile}")
 
-                # Calculate metrics comparing NWM with observation
-                result_nwm = _calc_metrics(
-                    df_nwm_metrics['sim_flow'],
-                    df_nwm_metrics['obs_flow'],
-                    self.eval_params._eval_range,
-                    calibration_object.threshold
-                )
-                result_nwm['run'] = 'nwm_retro'
-                result_nwm["basin_id"] = basin_id
-                result_nwm["iteration"] = 0
+            if combined_metrics:
+                combined_df = pd.concat(combined_metrics, ignore_index=True)
 
-                # Write to nwm_retro metrics file
-                outfile_nwm = os.path.join(agent.valid_path, f"{basin_id}_metrics_nwm_retro.csv")
-                pd.DataFrame([result_nwm]).to_csv(outfile_nwm, index=False)
-                logger.info(f"[NoCalibModel] Wrote: {outfile_nwm}")
-            except Exception as e:
-                logger.warning(f"[NoCalibModel] Failed to write NWM metrics: {e}")
-                logger.info(traceback.format_exc())
+                # Drop excess columns if needed
+                drop_cols = ["run_type", "sim_flow", "obs_flow"]
+                combined_df = combined_df.drop(columns=[c for c in drop_cols if c in combined_df.columns])
+
+                # Reorder for consistency: objFunVal, CORR, others...
+                #front = ["objFunVal", "CORR"]
+                #rest = [c for c in combined_df.columns if c not in front]
+                #combined_df = combined_df[front + rest]
+
+                combined_path = Path(agent.valid_path) / f"{basin_id}_metrics_valid_run.csv"
+                combined_df.to_csv(combined_path, index=False)
+                logger.info(f"Saved combined validation metrics to {combined_path}")
+        except Exception as e:
+            logger.warning(f"Failed to create combined metrics_valid_run.csv: {e}")
+            logger.info(traceback.format_exc())
+
+        try:
 
             # Fix df_precip formatting to add a 'Time' column
             df_precip_fixed = agent.df_precip.copy()
@@ -682,7 +732,7 @@ class NoCalibModel(ModelExec):
 
             # Clone the agent with all fields + override df_precip
             agent_fixed = SimpleNamespace(**vars(agent), df_precip=df_precip_fixed, valid_path=agent.valid_path, valid_path_plot=agent.valid_path_plot)
-            
+           
 
             # Call plot_valid_output to produce all standard plots
 
@@ -690,7 +740,7 @@ class NoCalibModel(ModelExec):
             plot_valid_output(
                 calibration_object=calibration_object,
                 agent=agent_fixed,
-                runs=["nwm_retro", "valid_control", "valid_best"],
+                runs=runs,
                 time_period=time_period
             )
         except Exception as e:
