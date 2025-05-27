@@ -690,12 +690,6 @@ class NoCalibModel(ModelExec):
                 mfile = Path(agent.valid_path) / f"{basin_id}_metrics_{rname}.csv"
                 if mfile.exists():
                     df = pd.read_csv(mfile)
-                    '''
-                    df["run"] = rname
-                    df["basin_id"] = basin_id
-                    df["period"] = "valid"
-                    df["iteration"] = 0
-                    '''
                     if "objFunVal" not in df.columns:
                         df["objFunVal"] = df["KGE"] if "KGE" in df.columns else 0.0
                     if "CORR" not in df.columns:
@@ -748,6 +742,50 @@ class NoCalibModel(ModelExec):
             logger.info(traceback.format_exc())
 
         logger.info("[NoCalibModel] All validation plots generated in Plot_Valid.")
+
+
+        # Create merged DataFrame for plotting
+        obs_df = pd.read_csv(obs_path, index_col=0, parse_dates=True)
+        obs_df = obs_df.rename(columns={obs_df.columns[0]: 'Observation'})
+        sim_df = pd.read_csv(output_iter_file, index_col=0, parse_dates=True)
+        sim_df = sim_df.rename(columns={sim_df.columns[0]: 'valid_best'})
+        nwm_df = self.df_nwm
+
+        # Ensure all indices are datetime and aligned
+        obs_df.index = pd.to_datetime(obs_df.index)
+        sim_df.index = pd.to_datetime(sim_df.index)
+        nwm_df.index = pd.to_datetime(nwm_df.index)
+
+        merged_df = pd.concat([obs_df, sim_df, nwm_df], axis=1).dropna()
+        merged_df.index.name = "Time"
+
+        # For plotting, keep a deep copy and reset index
+        # Sort and reorder DataFrame columns explicitly
+
+        merged_df = merged_df[["Observation", "nwm_retro", "valid_best"]]
+
+
+        # Refactoring so that they all are visible in the plot
+        max_obs = merged_df['Observation'].max()
+        for col in merged_df.columns:
+            if col not in ['Time', 'Observation', 'nwm_retro']:
+                factor = max_obs / merged_df[col].max()
+                merged_df[col] *= factor
+
+
+        merged_df.index.name = "Time"
+        df_plot = merged_df.iloc[24:].copy().reset_index()
+
+        try:
+            pf.plot_streamflow(
+                df=copy.deepcopy(df_plot),
+                plotfile=Path(agent._valid_path_plot) / f"{basin_id}_hydrograph_valid_run_1.png",
+                title=f"Hydrograph (Valid Best)\n{basin_id}"
+            )
+        except Exception as e:
+            logger.info(df_plot)
+            logger.warning(f"plot_streamflow_valid : {e}")
+            logger.info(traceback.format_exc())
 
 
     def unused_valid_plot_functions_delete(self, agent):
