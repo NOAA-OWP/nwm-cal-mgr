@@ -265,7 +265,7 @@ class NoCalibModel(ModelExec):
         y_pred = pd.read_csv(sim_file, index_col=0, parse_dates=True).iloc[:, 0]
         y_true, y_pred = y_true.align(y_pred, join="inner")
         metrics = mf.calculate_all_metrics(y_true, y_pred)
-        metrics["catchment_id"] = basin_id
+        # metrics["catchment_id"] = basin_id
         metrics["iteration"] = 0
         metrics_df = pd.DataFrame([metrics])
         logger.info(f"Calibration metrics 0: \n{metrics_df}")
@@ -301,24 +301,13 @@ class NoCalibModel(ModelExec):
             df_all = pd.concat([obs_df, sim_df], axis=1).dropna()
             metrics = mf.calculate_all_metrics(df_all["Observation"], df_all["Simulated"])
             metrics_df = pd.DataFrame([metrics])
-            metrics_df["run_type"] = "calib"
-            metrics_df["basin_id"] = basin_id
-            metrics_df["iteration"] = 0
+            metrics_df.insert(0, "iteration", 0, True)
 
             logger.info(f"Calibration metrics 1: \n{metrics_df}")
 
             metrics_path = workdir / f"{basin_id}_metrics_iteration.csv"
             metrics_df.to_csv(metrics_path, index=False)
 
-            '''
-            # Plot metrics
-            from ngen.cal.plot_functions import barplot_metric
-            barplot_metric(
-                df=metrics_df,
-                plotfile=plot_iter_path / f"{basin_id}_barplot_metrics_iteration.png",
-                title="Calibration Metrics"
-            )
-            '''
         except Exception as e:
             logger.warning(f"Metrics or plot failed: {e}")
             logger.info(traceback.format_exc())
@@ -330,7 +319,8 @@ class NoCalibModel(ModelExec):
             cost_dir = output_dir / "Output_Calib"
             cost_dir.mkdir(exist_ok=True)
             cost_path = cost_dir / f"{basin_id}_output_cost.csv"
-            obj_value = metrics[self.eval_params.objective.upper()]
+            obj_key = self.eval_params.objective.upper()
+            obj_value = metrics.get(obj_key, list(metrics.values())[0])
             cost_df = pd.DataFrame({self.eval_params.objective: [obj_value]})
             cost_df.to_csv(cost_path, index=False)
         except Exception as e:
@@ -406,11 +396,6 @@ class NoCalibModel(ModelExec):
         try:
             df_all["Simulated"] = df_all["Best Run"]
             df_scatter = df_all.reset_index()
-            # df_scatter = df_all.copy()
-            # df_scatter = df_scatter.rename(columns={"Observation": "Observation", "best": "Simulated"})
-            # df_scatter = df_scatter.reset_index()  # Makes 'Time' a column
-            # df_scatter = df_all.rename(columns={"Best Run": "Simulated"})
-
 
             pf.scatterplot_streamflow(
                 df=df_scatter[["Time", "Observation", "Simulated"]],
@@ -434,25 +419,15 @@ class NoCalibModel(ModelExec):
             logging.getLogger(__name__).warning(f"Precipitation plot skipped: {e}")
             logger.info(traceback.format_exc())
 
-
         '''
-        # Barplot metrics
-        try:
-            pf.barplot_metric(
-                df=metrics_df,
-                plotfile=plot_iter_path / f"{basin_id}_barplot_metrics_iteration.png"
-            )
-        except Exception as e:
-            logger.warning(f"barplot_metric failed: {e}")
-            logger.info(traceback.format_exc())
-        '''
-
-
         df = pd.read_csv(metrics_best_path)
         for col in df.columns:
             if isinstance(df.at[0, col], np.ndarray):
                 df[col] = df[col].apply(lambda x: x[0] if isinstance(x, np.ndarray) else x)
+        
         df.to_csv(metrics_best_path, index=False)
+        logger.info(f"written updated metrics df to {metrics_best_path}")
+        '''
 
         # Obj Fun
         try:
@@ -508,37 +483,6 @@ class NoCalibModel(ModelExec):
         logger.info(f"[NoCalibModel] All calibration plots generated in Plot_Iteration.")
 
 
-    def call_plot_valid_output(self, agent):
-        """
-        Reconstruct calibration_object and call plot_valid_output() for validation plotting.
-        """
-        import types
-        from types import SimpleNamespace
-        from ngen.cal import plot_output
-
-        # Create a dummy calibration_object using SimpleNamespace
-        calibration_object = SimpleNamespace()
-
-        # Required attributes for plotting
-        calibration_object.job = agent.job  # General
-        calibration_object.param = {}  # No parameters in single-exec
-        calibration_object.metrics = self.metrics or {}  # Computed metrics
-        calibration_object.output_iter_file = self._output_iter_file
-        calibration_object.output_best_iter_file = self._output_best_iter_file or self._output_iter_file
-        calibration_object.output_last_iter_file = self._output_last_iter_file or self._output_iter_file
-        calibration_object.objective_score = self.objective_score
-        calibration_object.evaluation_range = self.evaluation_range
-        calibration_object.realization_file = self.realization
-
-        # Call plotting function exactly as regular workflow
-        logger.info("[NoCalibModel] Calling plot_valid_output()")
-        plot_output.plot_valid_output(
-            calibration_object,
-            agent,
-            runs=["valid_control", "valid_best"],
-            time_period="full",
-        )
-
 
     def postprocess_single_validation_output(self, agent: 'Agent', valid_suffix=None):
         """
@@ -558,6 +502,8 @@ class NoCalibModel(ModelExec):
         from ngen.cal import metric_functions as mf
         from ngen.cal import plot_functions as pf
         from ngen.cal.search import _calc_metrics
+        from types import SimpleNamespace
+        from ngen.cal.plot_output import plot_valid_output
 
         workdir = Path(agent.job.workdir)
         basin_id = self.basinID
@@ -667,13 +613,6 @@ class NoCalibModel(ModelExec):
             return
 
 
-        plot_valid_dir = Path(output_parent_path) / "Plot_Valid"
-        plot_valid_dir.mkdir(exist_ok=True)
-
-
-        from types import SimpleNamespace
-        from ngen.cal.plot_output import plot_valid_output
-
         try:
 
             if agent.nwmflow_file != '':
@@ -690,10 +629,6 @@ class NoCalibModel(ModelExec):
                 agent.nwmflow = None
                 agent.nwmflow = self.nwmflow
             print(f'agent.nwmflow : {agent.nwmflow}')
-
-
-
-            
 
 
             # Create dummy calibration object
@@ -741,8 +676,6 @@ class NoCalibModel(ModelExec):
                 logger.warning(f"[NoCalibModel] Failed to write NWM metrics: {e}")
                 logger.info(traceback.format_exc())
 
-            from types import SimpleNamespace
-
             # Fix df_precip formatting to add a 'Time' column
             df_precip_fixed = agent.df_precip.copy()
             df_precip_fixed = df_precip_fixed.reset_index().rename(columns={"index": "Time"})
@@ -764,9 +697,13 @@ class NoCalibModel(ModelExec):
             logger.warning(f"plot_valid_output failed: {e}")
             logger.info(traceback.format_exc())
 
-        logger.info("\nValidation Workflow Done\n\n")
+        logger.info("[NoCalibModel] All validation plots generated in Plot_Valid.")
 
-        return
+
+    def unused_valid_plot_functions_delete(self, agent):
+        '''
+        This is old code that will be deleted
+        '''
 
         # Create merged DataFrame for plotting
         obs_df = pd.read_csv(obs_path, index_col=0, parse_dates=True)
@@ -849,11 +786,6 @@ class NoCalibModel(ModelExec):
 
       
         try:
-            '''
-            metrics_df = pd.read_csv(metrics_path_parent)
-            metrics_df.insert(0, "run_type", valid_suffix)
-            metrics_df.insert(1, "basin_id", basin_id)
-            '''
             pf.barplot_metric(
                 df=df_combined,
                 plotfile=plot_valid_dir / f"{basin_id}_barplot_metrics_valid_run.png",
