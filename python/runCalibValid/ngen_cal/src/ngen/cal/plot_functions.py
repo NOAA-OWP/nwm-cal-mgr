@@ -133,8 +133,13 @@ def plot_streamflow_precipitation(
     # Change date column to datetime dtype
     ts = pd.DatetimeIndex(df[colname[0]])
     df['Dates'] = ts
-    ts = pd.DatetimeIndex(dfp[colname[0]])
-    dfp['Dates'] = ts
+    try:
+        ts = pd.DatetimeIndex(dfp[colname[0]])
+        dfp['Dates'] = ts
+    except Exception as e:
+        print(e)
+        ts = pd.DatetimeIndex(dfp.index)
+        dfp['Dates'] = ts
 
     # Plot
     # this treatment is moved to plot_calib_output & plot_valid_output in plot_functions.py
@@ -415,8 +420,11 @@ def scatterplot_var(
     logger.info('---Plotting Scatterplot between Variables and Iteration---')
 
     # Read file
+    logger.info(var_file)
     df = pd.read_csv(var_file)
     allcols = list(df.columns)[1:]
+    logger.info(df)
+    logger.info(allcols)
 
     # ignore cloumn 'objFunVal' from metrics_iteration.csv
     allcols = [c1 for c1 in allcols if c1 != 'objFunVal']
@@ -482,6 +490,10 @@ def scatterplot_objfun_metric(
     df = pd.read_csv(var_file)
     objcol = list(df.columns)[1]
     allcols = list(df.columns)[2:]
+
+    print(var_file)
+    print(allcols)
+    print(df)
     
     # make sure objfunc is not NaN
     df.dropna(subset=[objcol], inplace=True)

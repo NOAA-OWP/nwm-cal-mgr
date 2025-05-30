@@ -281,7 +281,8 @@ class NoCalibModel(ModelExec):
         logger = logging.getLogger("NGEN_CAL")
         output_dir = Path(workdir)
         
-        streamflow_name = "sim_flow"
+        sim_streamflow_col = "sim_flow"
+        obs_flow_col = "obs_flow"
 
         netcdf_files = list(workdir.glob("troute_output_*.nc"))
         if not netcdf_files:
@@ -295,25 +296,25 @@ class NoCalibModel(ModelExec):
         try:
 
             sim_df = self.get_sim_df(trout_file, _wb_lst)
-            logger.info(f"sim_df.columns : {sim_df.columns}")
-            logger.info(sim_df.index)
-            logger.info(sim_df)
             sim_df.reset_index()
             if "Time" in sim_df.columns:
                 sim_df = sim_df.set_index("Time")
-            logger.info(sim_df.index)
-            #sim_df.columns = ["Simulated"]
+            sim_df.columns = [sim_streamflow_col]
+            sim_df.index = pd.to_datetime(sim_df.index)
+            logger.info(f"sim_df : \n{sim_df}")
+
             # Load observed data
             obs_df = pd.read_csv(self.obsflow, parse_dates=["value_date"])
-            print(obs_df)
-            #obs_df = obs_df.rename(columns={"value_date": "Time", obs_df.columns[1]: "Observation"}).set_index("Time")
-            obs_df = obs_df.rename(columns={"value_date": "Time"}).set_index("Time")
-            logger.info(f"obs_df columns: {obs_df.columns}")
+            obs_df = obs_df.rename(columns={"value_date": "Time", obs_df.columns[1]: obs_flow_col}).set_index("Time")
+            obs_df.columns = [obs_flow_col]
+            obs_df.index = pd.to_datetime(obs_df.index)
+            obs_df = obs_df[(obs_df.index >= sim_df.index.min()) & (obs_df.index <= sim_df.index.max())]
 
-            df_all = pd.concat([obs_df, sim_df], axis=1).dropna()
+            df_all = pd.merge(obs_df, sim_df, left_index=True, right_index=True)
+            #df_all = pd.concat([obs_df, sim_df], axis=1).dropna()
             logger.info(f"df_all : \n{df_all}")
 
-            metrics = mf.calculate_all_metrics(df_all["obs_flow"], df_all["sim_flow"])
+            metrics = mf.calculate_all_metrics(df_all[obs_flow_col], df_all[sim_streamflow_col])
             metrics_df = pd.DataFrame([metrics])
             metrics_df.insert(0, "iteration", 0, True)
 
@@ -387,22 +388,20 @@ class NoCalibModel(ModelExec):
 
             # Ensure column names for _calc_metrics expectations
             if isinstance(output, pd.Series):
-                output = output.to_frame(name='sim_flow')
+                output = output.to_frame(name=sim_streamflow_col)
             else:
-                output = output.rename(columns={output.columns[0]: 'sim_flow'})
+                output = output.rename(columns={output.columns[0]: sim_streamflow_col})
 
             if isinstance(observed, pd.Series):
-                observed = observed.to_frame(name='obs_flow')
+                observed = observed.to_frame(name=obs_flow_col)
             else:
-                observed = observed.rename(columns={observed.columns[0]: 'obs_flow'})
-
-
+                observed = observed.rename(columns={observed.columns[0]: obs_flow_col})
 
             # Create calibration_object with required fields
             calibration_object = SimpleNamespace(
                 output=output,
                 threshold=self.eval_params.threshold,
-                streamflow_name="sim_flow",
+                streamflow_name=sim_streamflow_col,
                 observed=observed,
                 station_name=basin_id,
                 metric_iter_file=metrics_best_path,
@@ -594,8 +593,8 @@ class NoCalibModel(ModelExec):
         output_valid_dir.mkdir(exist_ok=True)
         output_parent_path = Path(workdir).parent
 
-        streamflow_name = "sim_flow"
-        # Define file suffixes
+        sim_streamflow_col = "sim_flow"
+        obs_flow_col = "obs_flow"
         if not valid_suffix:
             valid_suffix = agent.run_name
 
@@ -611,17 +610,25 @@ class NoCalibModel(ModelExec):
 
 
         try:
-
             sim_df = self.get_sim_df(trout_file, _wb_lst)
-            logger.info(f"sim_df.columns : {sim_df.columns}")
-            logger.info(sim_df)
             sim_df.reset_index()
             if "Time" in sim_df.columns:
                 sim_df = sim_df.set_index("Time")
+            sim_df.columns = [sim_streamflow_col]
+            sim_df.index = pd.to_datetime(sim_df.index)
+            logger.info(f"sim_df : \n{sim_df}")
 
+            # Load observed data
             obs_df = pd.read_csv(self.obsflow, parse_dates=["value_date"])
-            # obs_df = obs_df.rename(columns={"value_date": "Time", obs_df.columns[1]: "Observation"}).set_index("Time")
-            obs_df = obs_df.rename(columns={"value_date": "Time", obs_df.columns[1]: "Observation"}).set_index("Time")
+            obs_df = obs_df.rename(columns={"value_date": "Time", obs_df.columns[1]: obs_flow_col}).set_index("Time")
+            obs_df.columns = [obs_flow_col]
+            obs_df.index = pd.to_datetime(obs_df.index)
+            obs_df = obs_df[(obs_df.index >= sim_df.index.min()) & (obs_df.index <= sim_df.index.max())]
+
+            df_all = pd.merge(obs_df, sim_df, left_index=True, right_index=True)
+            #df_all = pd.concat([obs_df, sim_df], axis=1).dropna()
+            logger.info(f"df_all : \n{df_all}")
+
 
             self.eval_params._eval_range = (
                 pd.to_datetime(self.eval_params.evaluation_start),
@@ -643,16 +650,14 @@ class NoCalibModel(ModelExec):
 
             # Ensure column names for _calc_metrics expectations
             if isinstance(output, pd.Series):
-                output = output.to_frame(name='sim_flow')
+                output = output.to_frame(name=sim_streamflow_col)
             else:
-                output = output.rename(columns={output.columns[0]: 'sim_flow'})
+                output = output.rename(columns={output.columns[0]: sim_streamflow_col})
 
             if isinstance(observed, pd.Series):
-                observed = observed.to_frame(name='obs_flow')
+                observed = observed.to_frame(name=obs_flow_col)
             else:
-                observed = observed.rename(columns={observed.columns[0]: 'obs_flow'})
-
-
+                observed = observed.rename(columns={observed.columns[0]: obs_flow_col})
 
             # Create dummy calibration object
             calibration_object = SimpleNamespace(
@@ -663,7 +668,7 @@ class NoCalibModel(ModelExec):
                 evaluation_range=self.eval_params._eval_range,
                 valid_evaluation_range=self.eval_params._valid_eval_range,
                 full_evaluation_range=self.eval_params._full_eval_range,
-                streamflow_name="sim_flow",
+                streamflow_name=sim_streamflow_col,
                 threshold=self.eval_params.threshold
             )
             time_period = {'calib': calibration_object.evaluation_range, 'valid': calibration_object.valid_evaluation_range,
