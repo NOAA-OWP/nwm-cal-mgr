@@ -196,18 +196,7 @@ class NoCalibModel(ModelExec):
             with open(yaml_out, "w") as f:
                 yaml.dump(config, f)
             logger.info(f"[NoCalibModel] Config file for {tag} created at {yaml_out}")
-    
-    def read_streamflow(self, file_path):
-        """Read a streamflow CSV with 'Time' column as datetime index."""
-        import pandas as pd
-        df = pd.read_csv(file_path)
-        if "Time" in df.columns:
-            df["Time"] = pd.to_datetime(df["Time"])
-            df.set_index("Time", inplace=True)
-        else:
-            df.index.name = "Time"
-        return df
-
+   
 
     def get_working_basins_from_crosswalk(self, crosswalk_path, target_basin_id):
 
@@ -234,8 +223,6 @@ class NoCalibModel(ModelExec):
             ncvar=netCDF4.Dataset(_output_file, "r")
             fid_index = [list(ncvar['feature_id'][0:]).index(int(fid)) for fid in _wb_lst]
             _output = pd.DataFrame(data={'sim_flow': pd.DataFrame(ncvar['flow'][fid_index], index=fid_index).T.sum(axis=1)})
-
-            print(os.getcwd())
 
             # Get date 
             tnx_file = list(Path(_output_file).parent.glob("nex*.csv"))[0]
@@ -286,12 +273,9 @@ class NoCalibModel(ModelExec):
 
         netcdf_files = list(workdir.glob("troute_output_*.nc"))
         if not netcdf_files:
-            logger.info(os.listdir(os.getcwd()))
             raise FileNotFoundError(f"No troute_output_*.nc file found in {os.getcwd()}.")
         trout_file = netcdf_files[0]
-        logger.info(f"trout_file : {trout_file}")
         _wb_lst = self.get_working_basins_from_crosswalk(self.crosswalk, agent.model.eval_params.basinID)
-        logger.info(f"_wb_lst  : {_wb_lst }")
 
         try:
 
@@ -311,8 +295,6 @@ class NoCalibModel(ModelExec):
             obs_df = obs_df[(obs_df.index >= sim_df.index.min()) & (obs_df.index <= sim_df.index.max())]
 
             df_all = pd.merge(obs_df, sim_df, left_index=True, right_index=True)
-            #df_all = pd.concat([obs_df, sim_df], axis=1).dropna()
-            logger.info(f"df_all : \n{df_all}")
 
             metrics = mf.calculate_all_metrics(df_all[obs_flow_col], df_all[sim_streamflow_col])
             metrics_df = pd.DataFrame([metrics])
@@ -320,9 +302,6 @@ class NoCalibModel(ModelExec):
 
             # IS THIS CORRECT???????
             metrics_df["objFunVal"] = metrics_df[self.eval_params.objective.upper()]
-
-            logger.info(f"Calibration metrics: \n{metrics_df}")
-
             metrics_best_path = workdir / f"{basin_id}_metrics_iteration.csv"
             metrics_df.to_csv(metrics_best_path, index=False)
 
@@ -331,14 +310,9 @@ class NoCalibModel(ModelExec):
             logger.info(traceback.format_exc())
 
 
-        #sim_df = pd.read_csv(nex_file, header=None, names=["Time", "sim_flow"], parse_dates=["Time"])
-        #sim_df.set_index("Time", inplace=True)
-        # Save to Output_Iteration
         self._output_iter_file = str(output_iter_path / f"{basin_id}_output_iteration_0000.csv")
         self._output_best_iter_file = str(output_iter_path / f"{basin_id}_output_best_iteration.csv")
         self._output_last_iter_file = str(output_iter_path / f"{basin_id}_output_last_iteration.csv")
-
-        # shutil.copy(output_iter_path, _output_dir / f"{station_id}_output_best_iteration.csv"
 
         sim_df.to_csv(self._output_iter_file)
         sim_df.to_csv(self._output_best_iter_file)
@@ -601,12 +575,9 @@ class NoCalibModel(ModelExec):
         # Get the simulation output from trout
         netcdf_files = list(workdir.glob("troute_output_*.nc"))
         if not netcdf_files:
-            logger.info(os.listdir(os.getcwd()))
             raise FileNotFoundError(f"No troute_output_*.nc file found in {os.getcwd()}.")
         trout_file = netcdf_files[0]
-        logger.info(f"trout_file : {trout_file}")
         _wb_lst = self.get_working_basins_from_crosswalk(self.crosswalk, agent.model.eval_params.basinID)
-        logger.info(f"_wb_lst  : {_wb_lst }")
 
 
         try:
@@ -626,9 +597,6 @@ class NoCalibModel(ModelExec):
             obs_df = obs_df[(obs_df.index >= sim_df.index.min()) & (obs_df.index <= sim_df.index.max())]
 
             df_all = pd.merge(obs_df, sim_df, left_index=True, right_index=True)
-            #df_all = pd.concat([obs_df, sim_df], axis=1).dropna()
-            logger.info(f"df_all : \n{df_all}")
-
 
             self.eval_params._eval_range = (
                 pd.to_datetime(self.eval_params.evaluation_start),
@@ -642,8 +610,6 @@ class NoCalibModel(ModelExec):
                 pd.to_datetime(self.eval_params.full_eval_start_time),
                 pd.to_datetime(self.eval_params.full_eval_end_time)
             )
-
-            logger.info(f"self.eval_params : {self.eval_params}")
 
             output = sim_df
             observed = obs_df
@@ -673,8 +639,6 @@ class NoCalibModel(ModelExec):
             )
             time_period = {'calib': calibration_object.evaluation_range, 'valid': calibration_object.valid_evaluation_range,
                            'full': calibration_object.full_evaluation_range}
-
-            logger.info(f"time_period : {time_period}")
 
             # Compute metrics for each time period
             metrics = pd.DataFrame()
@@ -724,14 +688,12 @@ class NoCalibModel(ModelExec):
                     nwm = pd.read_csv(agent.nwmflow_file)
                     nwm.columns = ['value_date','sim_flow']
                     nwm['value_date'] = pd.DatetimeIndex(nwm['value_date'])
-                    print(nwm['value_date'])
                     agent.nwmflow = nwm.set_index('value_date')
                 else:
                     logger.error(f'File does not exist: {agent.nwmflow_file}')
             else:
                 agent.nwmflow = None
                 agent.nwmflow = self.nwmflow
-            print(f'agent.nwmflow : {agent.nwmflow}')
 
             df_nwm_metrics = pd.DataFrame()
 
@@ -742,14 +704,6 @@ class NoCalibModel(ModelExec):
             else:
                 observed = observed.rename(columns={observed.columns[0]: 'obs_flow'})
 
-            '''
-            nwmflow = None
-            if agent.nwmflow is not None:
-                if isinstance(agent.nwmflow, pd.Series):
-                    nwmflow = agent.nwmflow.to_frame(name='obs_flow')
-            else:
-                nwmflow = agent.nwmflow.rename(columns={agent.nwmflow.columns[0]: 'obs_flow'})
-            '''
             for period_name, date_range in time_period.items():
                 result = _calc_metrics(calibration_object.output, observed, date_range, calibration_object.threshold)
                 nwm_row = {'run': 'nwm_retro', 'period': period_name, **result}  # or modify result if needed for NWM
@@ -783,11 +737,6 @@ class NoCalibModel(ModelExec):
                 drop_cols = ["run_type", "sim_flow", "obs_flow"]
                 combined_df = combined_df.drop(columns=[c for c in drop_cols if c in combined_df.columns])
 
-                # Reorder for consistency: objFunVal, CORR, others...
-                #front = ["objFunVal", "CORR"]
-                #rest = [c for c in combined_df.columns if c not in front]
-                #combined_df = combined_df[front + rest]
-
                 combined_path = Path(agent.valid_path) / f"{basin_id}_metrics_valid_run.csv"
                 combined_df.to_csv(combined_path, index=False)
                 logger.info(f"Saved combined validation metrics to {combined_path}")
@@ -804,10 +753,7 @@ class NoCalibModel(ModelExec):
             # Clone the agent with all fields + override df_precip
             agent_fixed = SimpleNamespace(**vars(agent), df_precip=df_precip_fixed, valid_path=agent.valid_path, valid_path_plot=agent.valid_path_plot)
            
-
             # Call plot_valid_output to produce all standard plots
-
-            logger.info("\nCalling plot_valid_output")
             plot_valid_output(
                 calibration_object=calibration_object,
                 agent=agent_fixed,
@@ -820,7 +766,7 @@ class NoCalibModel(ModelExec):
 
         logger.info("[NoCalibModel] All validation plots generated in Plot_Valid.")
 
-
+        '''
         # Create merged DataFrame for plotting
         obs_df = pd.read_csv(Path(self.obsflow), index_col=0, parse_dates=True)
         obs_df = obs_df.rename(columns={obs_df.columns[0]: 'Observation'})
@@ -864,6 +810,7 @@ class NoCalibModel(ModelExec):
             logger.warning(f"plot_streamflow_valid : {e}")
             logger.info(traceback.format_exc())
 
+        '''
 
     def unused_valid_plot_functions_delete(self, agent):
         '''
@@ -875,7 +822,7 @@ class NoCalibModel(ModelExec):
         obs_df = obs_df.rename(columns={obs_df.columns[0]: 'Observation'})
         sim_df = pd.read_csv(output_iter_file, index_col=0, parse_dates=True)
         sim_df = sim_df.rename(columns={sim_df.columns[0]: 'valid_best'})
-        nwm_df = self.df_nwm
+        nwm_df = pd.read_csv(agent.nwmflow_file)
 
         # Ensure all indices are datetime and aligned
         obs_df.index = pd.to_datetime(obs_df.index)
@@ -944,7 +891,7 @@ class NoCalibModel(ModelExec):
         metrics_best_path = output_parent_path /  f"{basin_id}_metrics_valid_best.csv"
         df_control = pd.read_csv(metrics_control_path)
         df_best = pd.read_csv(metrics_best_path)
-        df_nwm = pd.read_csv(obs_path)
+        df_nwm = pd.read_csv(agent.nwmflow_file)
 
         df_combined = pd.concat([df_control, df_best, df_nwm], axis=0)
         df_combined.to_csv("01123000_metrics_combined.csv", index=False)
@@ -962,13 +909,6 @@ class NoCalibModel(ModelExec):
 
         logger.info("[NoCalibModel] All validation plots generated in Plot_Valid.")
 
-
-    def get_obsflow(self) -> pd.DataFrame:
-        print(f'self.obsflow : {self.obsflow}')
-        df = pd.read_csv(self.obsflow, index_col=0, parse_dates=True)
-        if 'Time' in df.columns:
-            df.set_index("Time", inplace=True)
-        return df
 
     def get_args(self) -> str:
         return f"{self.catchments} all {self.nexus} all {self.realization}"
@@ -1026,6 +966,7 @@ class NoCalibModel(ModelExec):
         with open(complete_file, "w") as f:
             f.write("Single-run execution complete.\n")
 
+    '''
     def write_iteration_outputs(self, output_dir, metrics: dict, obj_score: float):
         """
         Save metrics, objective logs, dummy params, and standard plots.
@@ -1070,7 +1011,9 @@ class NoCalibModel(ModelExec):
             plot_streamflow(agent, df, self.observed, basinID, plot_iter_path, title="Streamflow")
             plot_scatterplot(agent, df, self.observed, basinID, plot_iter_path)
             plot_fdc(agent, df, self.observed, basinID, plot_iter_path)
-        
+    '''
+
+    
     @property
     def df_nwm(self):
         if not hasattr(self, "nwmflow"):
@@ -1081,6 +1024,7 @@ class NoCalibModel(ModelExec):
         df = pd.read_csv(path, index_col=0, parse_dates=True)
         df = df.rename(columns={df.columns[0]: 'nwm_retro'})
         return df
+    
 
     @property
     def df_precip(self):
@@ -1096,21 +1040,13 @@ class NoCalibModel(ModelExec):
         if not realization_path.exists():
             raise FileNotFoundError(f"Realization file not found: {realization_path}")
 
-        print(realization_path)
-
         with open(realization_path, 'r') as f:
             realization = json.load(f)
 
-        print(realization.get("global", {}).get("forcing", {}))
-        #forcing_cfg = realization.get('global_config', {}).get('forcing', {})
         forcing_cfg = realization.get("global", {}).get("forcing", {})
-        print(f"\nforcing_cfg : {forcing_cfg}")
 
         forcing_path = forcing_cfg.get('path')
         file_pattern = forcing_cfg.get('file_pattern', '*.csv')
-
-        # start_date = datetime.strftime(realization.get("time").get("start_time"), '%Y-%m-%d %H:%M:%S')
-        # end_date = datetime.strftime(realization.get("time").get("end_time"), '%Y-%m-%d %H:%M:%S')
 
         start_date = realization.get("time").get("start_time")
         end_date = realization.get("time").get("end_time")

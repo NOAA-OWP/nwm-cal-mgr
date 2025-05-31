@@ -134,7 +134,8 @@ def plot_streamflow_precipitation(
     ts = pd.DatetimeIndex(df[colname[0]])
     df['Dates'] = ts
     try:
-        ts = pd.DatetimeIndex(dfp[colname[0]])
+        ts = dfp.index if isinstance(dfp.index, pd.DatetimeIndex) else pd.DatetimeIndex(dfp[colname[0]])
+        #ts = pd.DatetimeIndex(dfp[colname[0]])
         dfp['Dates'] = ts
     except Exception as e:
         print(e)
