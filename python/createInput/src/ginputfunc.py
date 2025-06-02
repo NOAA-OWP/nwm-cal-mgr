@@ -1414,8 +1414,6 @@ def create_troute_config(
     None
 
     """
-
-    print("create_troute_config : {}, {}, {}, {}".format(gpkg_file, rt_cfg_file, start_date, nts))
     # bmi_parameters 
     bmi_param = {"flowpath_columns": ["id", "toid", "lengthkm"],
                  "attributes_columns": ['attributes_id',
@@ -1880,24 +1878,6 @@ def create_realization_file(
         main_output_variable = "total_discharge"
 
     if 'lstm' in modules:
-        '''
-        {
-          "name": "bmi_python",
-          "params": {
-          "python_type": "lstm.bmi_lstm.bmi_LSTM",
-              "model_type_name": "bmi_LSTM",
-              "init_config": "./data/lstm/yml_files/HUC01/cat-11475.yml",
-              "main_output_variable": "land_surface_water__runoff_volume_flux",
-              "uses_forcing_file": false,
-              "variables_names_map" : {
-                  "streamflow_cms": "land_surface_water__runoff_volume_flux"},
-              "pytorch_model_path": "./data/lstm/sugar_creek_trained.pt",
-              "normalization_path": "./data/lstm/input_scaling.csv",
-              "initial_state_path": "./data/lstm/initial_states.csv",
-              "useGPU": false
-         }
-        } 
-        '''  
         model_configs['lstm'] = {"name": "bmi_python",
                                   "params": {
                                              "python_type": "lstm.bmi_lstm.bmi_LSTM",

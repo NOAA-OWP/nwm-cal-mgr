@@ -269,7 +269,6 @@ def create_input(filename):
                 elif m1 == "smp" and output_dict['output_sm']:
                     output_dict['sm_profile_depth'] = gfun.change_smp_input(catids, mod_input_dir, conf3[m2+"_bmi_dir"], output_dict['sm_frac_depth'], output_dict['sm_profile_depth'])
                 elif m1 == 'lstm':
-                    logger.info("lstm_create input called in A")
                     gfun.create_lstm_input(catids, time_period, attr_file, conf3[m1+'_parameter_dir'], mod_input_dir, conf3[m2+"_bmi_dir"])
 
                 else:
@@ -328,9 +327,7 @@ def create_input(filename):
 
     # Create model realization file
     realization_file = work_dir + '/{}'.format(basin) + '_realization_config_bmi_calib.json' 
-    print(realization_file)
     routing_config_file = os.path.join(work_dir + '/Input', '{}'.format(basin) + run_configs[0])
-    # print("routing_config_file :{}".format(routing_config_file))
     bmi_dir = {}
     #modules1 = [m1 for m1 in modules if m1 not in ['sloth','troute']]
     for m1 in modules:
