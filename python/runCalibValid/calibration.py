@@ -81,8 +81,6 @@ def log_level_set():
             format='%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)s - %(funcName)s]: %(message)s',
             stream=sys.stderr,
         )  
-
-    LOG.info("Inside log_level_set") 
     
 def main(general: General, model_conf):
     # Seed the random number generators if requested

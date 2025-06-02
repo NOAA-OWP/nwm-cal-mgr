@@ -53,11 +53,11 @@ def _execute(meta: 'Agent', i: int = None) -> None:
         subprocess.check_call(meta.cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=True, cwd=meta.job.workdir)
     else:
         run_log_file = str(meta.job.log_file)
-        if not os.path.exists(run_log_file):
-            with open(run_log_file, 'w') as log_file:
-                log_file.write('Starting ' + '{}'.format(meta.run_name).capitalize() + ' Run\n')
+#        if not os.path.exists(run_log_file):
+#            with open(run_log_file, 'w') as log_file:
+#                log_file.write('Starting ' + '{}'.format(meta.run_name).capitalize() + ' Run\n')
         if i is not None:
-            with open(run_log_file, 'a+') as log_file:
+            with open(run_log_file, 'w') as log_file:
                 log_file.write('------ Iteration = {}'.format(i) + ' ------\n')
         with open(run_log_file, 'a+') as log_file:
             subprocess.check_call(meta.cmd, stdout=log_file, stderr=log_file, shell=True, cwd=meta.job.workdir)
@@ -197,7 +197,7 @@ def dds_update(iteration: int, inclusion_probability: float, calibration_object:
     agent : Agent object
 
     """
-    logger.info( "inclusion probability: {}".format(inclusion_probability) )
+    logger.debug( "inclusion probability: {}".format(inclusion_probability) )
     neighborhood = calibration_object.variables.sample(frac=inclusion_probability)
     if neighborhood.empty:
         neighborhood = calibration_object.variables.sample(n=1)
