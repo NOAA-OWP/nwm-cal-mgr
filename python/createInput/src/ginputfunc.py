@@ -859,7 +859,7 @@ def create_lstm_config(
                 elif is_probably_regex(pattern) and re.fullmatch(pattern, key):
                     keys_to_remove.add(key)
             except re.error as regex_error:
-                print(f"Skipping invalid regex pattern: '{pattern}' - {regex_error}")
+                logger.info(f"Skipping invalid regex pattern: '{pattern}' - {regex_error}")
     for key in keys_to_remove:
         config.pop(key, None)
     
@@ -874,7 +874,7 @@ def create_lstm_config(
     with open(output_config_path, 'w') as f:
         yaml.dump(config, f, default_flow_style=False)
 
-    print(f"New config written to: {output_config_path}")
+    logger.info(f"New config written to: {output_config_path}")
 
 
 def create_symlinks(src_file_list, src_dir, dst_dir):
@@ -919,13 +919,6 @@ def create_lstm_input(
     None
 
     """
-    print("CREATE_LSTM_INPUT")
-    print(f"catids : {catids}")
-    print(f"time_period : {time_period}")
-    print(f"param_dir_source: {param_dir_source}")
-    print(f"lstm_input_dir : {lstm_input_dir}")
-    print(f"lstm_bmi_dir : {lstm_bmi_dir}")
-
     os.makedirs(lstm_input_dir, exist_ok=True)
 
     # Read hydrofabric attribute file

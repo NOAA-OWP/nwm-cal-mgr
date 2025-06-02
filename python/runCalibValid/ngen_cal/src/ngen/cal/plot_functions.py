@@ -125,7 +125,6 @@ def plot_streamflow_precipitation(
 
     """
     logger.info('---Plotting Streamflow Time Series with Precipitation---')
-    print(f"\nplot_streamflow_precipitation : {dfp}")
 
     # Obtain column names
     colname = list(df.columns)
@@ -138,7 +137,7 @@ def plot_streamflow_precipitation(
         #ts = pd.DatetimeIndex(dfp[colname[0]])
         dfp['Dates'] = ts
     except Exception as e:
-        print(e)
+        logger.info(e)
         ts = pd.DatetimeIndex(dfp.index)
         dfp['Dates'] = ts
 
@@ -231,9 +230,7 @@ def scatterplot_streamflow(
     logger.info('---Plotting Scatterplot of Streamflow between Observation and Other Runs---')
 
     # Obtain column names and value range
-    print(df)
     colname = list(df.columns)
-    print(f"colname : {colname}")
     # this treatment is moved to plot_calib_output & plot_valid_output in plot_functions.py
     #df = df.iloc[24:] # remove first day with possible big values
     max0 = math.ceil(pd.melt(df, id_vars=['Time'], value_vars=colname[1:])['value'].max()) * 1.02
@@ -492,10 +489,6 @@ def scatterplot_objfun_metric(
     objcol = list(df.columns)[1]
     allcols = list(df.columns)[2:]
 
-    print(var_file)
-    print(allcols)
-    print(df)
-    
     # make sure objfunc is not NaN
     df.dropna(subset=[objcol], inplace=True)
     if df.shape[0] == 0:
@@ -557,14 +550,11 @@ def barplot_metric(
 
     """
     logger.info('---Plotting Barplot of Metrics---')
-    print(df)
-    
 
     # Set index
     allcols = list(df.columns)
     df.set_index(allcols[0:2], inplace=True)
     allcols = list(df.columns)
-    print("allcols : {}".format(allcols))
 
     # Specify figure arguments
     figsize = (12, 8)
@@ -572,7 +562,6 @@ def barplot_metric(
     rows = math.ceil(len(allcols)/cols)
     runtp = list(df.index.get_level_values(0).unique())
     labels = list(df.index.get_level_values(1).unique())
-    print(f"labels : {labels}")
 
     x = np.arange(len(labels))
     width = 0.7/len(runtp)
@@ -759,7 +748,6 @@ def plot_cost_hist(
     logger.info('---Plotting Convergence Curve for Global and Local Best Values---')
 
     # Read file
-    print(f'cost_file = {cost_file}') # check which file it is trying to open
     df = pd.read_csv(cost_file)
     df.pop('iteration')
 
@@ -811,13 +799,13 @@ def plot_obj_fun(agent, suffix="calib", output_dir=None):
     
     cost_file = work_dir / "Output_Calib" / f"{basin_id}_output_cost.csv"
     if not cost_file.exists():
-        print(f"Cost file does not exist: {cost_file}")
+        logger.info(f"Cost file does not exist: {cost_file}")
         return
 
     df = pd.read_csv(cost_file)
 
     if "value" not in df.columns or "iteration" not in df.columns:
-        print(f"Required columns not found in {cost_file}")
+        logger.info(f"Required columns not found in {cost_file}")
         return
 
     plt.style.use("ggplot")
