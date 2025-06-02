@@ -221,7 +221,6 @@ def create_input(filename):
         modules1 =['cfes'] + [m1 for m1 in modules if m1!='cfes']
     if 'cfex' in modules:
         modules1 =['cfex'] + [m1 for m1 in modules if m1!='cfex']        
-
     for m1 in modules1:
 
         # module name used by the UI
@@ -290,9 +289,6 @@ def create_input(filename):
                 gfun.create_sac_input(catids, attr_file, mod_input_dir)
             elif m1 == 'noah':
                 gfun.create_noah_input(catids, time_period, attr_file, conf3[m1+'_parameter_dir'], mod_input_dir)
-            elif m1 == "lstm":
-                logger.info("lstm_create input called in B")
-                gfun.create_lstm_input(catids, time_period, attr_file, conf3[m1+'_parameter_dir'], mod_input_dir, conf3[m2+"_bmi_dir"])
             elif m1 == 'sft':
                 sft_dir = os.path.join(input_dir, 'sft_input')
                 smp_dir = os.path.join(input_dir, 'smp_input')
