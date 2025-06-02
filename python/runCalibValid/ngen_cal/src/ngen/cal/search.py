@@ -86,8 +86,6 @@ def _calc_metrics(
     if df.empty:
         logger.warning("Cannot compute objective function, do time indicies align?")
     if eval_range:
-        print(f'eval_range : {eval_range}')
-        print(df.head())
         df = df.loc[eval_range[0]:eval_range[1]]
  
     df.reset_index(inplace=True)
@@ -208,7 +206,6 @@ def dds_update(iteration: int, inclusion_probability: float, calibration_object:
     neighborhood = calibration_object.variables.sample(frac=inclusion_probability)
     if neighborhood.empty:
         neighborhood = calibration_object.variables.sample(n=1)
-    #print( "neighborhood:\n{}".format(neighborhood) )
 
     # Generate new parameter set by perturbng the best parameters  
     calibration_object.df[str(iteration)] = calibration_object.df[agent.best_params]
@@ -243,17 +240,7 @@ def dds(start_iteration: int, iterations: int,  calibration_object: 'Evaluatable
 
     """
 
-    print(f"agent.run_single_iteration : {agent.run_single_iteration}")
     if iterations < 2:
-        '''
-        if agent.run_single_iteration:
-            logger.info("Skipping DDS loop — single-run mode with no calibratable parameters.")
-            _execute(agent, start_iter)
-            _evaluate(start_iter, agent.model, agent, first_iter_for_agent=True, info=True)
-            return
-        else:
-        '''
-
         raise ValueError("iterations must be >= 2 for DDS with calibratable parameters.")
 
     if start_iteration > iterations:
@@ -331,7 +318,15 @@ def single_exec(agent: 'Agent') -> None:
 
 
 def dds_set(start_iteration: int, iterations: int, agent: 'Agent') -> None:
-    """Perform parameter optimization using DDS or single-run for NoCalibModel."""
+    """Perform parameter optimization using DDS algorithm.
+
+    parameters
+    ----------
+    start_iteration : starting iteration
+    iterations : total number of iterations
+    agent : Agent object
+
+    """
     from math import log
     from .utils import complete_msg
     from .search import _execute, _evaluate, dds_update

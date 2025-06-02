@@ -32,6 +32,8 @@ def run_valid_ctrl_best(agent):
         Agent object containing model and configuration info.
     """
     # Single-execution model (NoCalibModel) validation
+
+    
     if isinstance(agent.model, NoCalibModel):
         logger.info("Running validation for NoCalibModel (Single Exec)")
         # Execute model run and post-process results
@@ -68,6 +70,7 @@ def run_valid_ctrl_best(agent):
             _execute(agent)
             time_period = {'calib': calibration_object.evaluation_range, 'valid': calibration_object.valid_evaluation_range,
                            'full': calibration_object.full_evaluation_range}
+
             outputs = [calibration_object.output]
             runs = [agent.run_name]
             if agent.run_name != 'valid_control':
@@ -77,7 +80,7 @@ def run_valid_ctrl_best(agent):
 
             for out1,run1 in zip(outputs,runs):
                 metrics = pd.DataFrame()
-                logger.info(f'Computing metrics for {run1}')
+                logger.info(f'Computing metrics for out1 : {out1}, run1: {run1}')
                 for key, value in time_period.items():
                     result = _calc_metrics(out1, calibration_object.observed, value, calibration_object.threshold)
                     tmp = {**{'run': run1, 'period': key}, **result}
@@ -96,6 +99,7 @@ def run_valid_ctrl_best(agent):
                 if agent.run_name != 'valid_best':
                     runs.append(agent.run_name)
                 logger.info(f'Generating plots comparing {runs}')
+
                 plot_valid_output(calibration_object, agent, runs, time_period)
 
             # Indicate completion
