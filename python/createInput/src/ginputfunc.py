@@ -19,8 +19,7 @@ import geopandas as gpd
 import pandas as pd
 import yaml
 
-logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger('createInput')
 
 from tempfile import mkstemp
 from createInput import settings
@@ -2052,10 +2051,30 @@ def create_partition_file(
         hydrofab_file: str,
         nprocs: int,
         work_dir: str,
-        basin: str ) -> Union[str, Path]:
-     partition_file = os.path.join( work_dir + '/Input', '{}'.format(basin) + '_partition_config.json' )
+        basin: str) -> Union[str, Path]:
 
-     subprocess.check_call( f"{partition_generator} {hydrofab_file:} {hydrofab_file:} "
-                            f"{partition_file} {nprocs} '' ''", 
-                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True )
-     return partition_file
+    partition_file = os.path.join(work_dir, 'Input', f"{basin}_partition_config.json")
+    cmd = f"{partition_generator} {hydrofab_file} {hydrofab_file} {partition_file} {nprocs} '' ''"
+
+    logger.info("Creating partition file for basin %s", basin)
+    logger.info(" - Partition generator: %s", partition_generator)
+    logger.info(" - Hydrofabric file: %s", hydrofab_file)
+    logger.info(" - Partition file: %s", partition_file)
+    logger.info(" - Number of processors: %s", nprocs)
+    logger.info(" - Command: %s", cmd)
+
+    # Run the command and capture output
+    try:
+        result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        logger.info("Command output (stdout): %s", result.stdout.decode().strip())
+        if result.stderr:
+            logger.error("Command error (stderr): %s", result.stderr.decode().strip())
+        result.check_returncode()  # Will raise CalledProcessError if non-zero
+    except subprocess.CalledProcessError as e:
+        logger.error("Partition generator command failed with exit code %s", e.returncode)
+        raise
+    except FileNotFoundError as e:
+        logger.error("Partition generator not found: %s", partition_generator)
+        raise
+
+    return partition_file
