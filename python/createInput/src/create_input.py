@@ -15,8 +15,8 @@ import re
 import geopandas as gpd
 import pandas as pd
 import logging
-
-logger = logging.getLogger("createInput")
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
 from createInput import ginputfunc as gfun
 from createInput import settings
@@ -64,8 +64,10 @@ def create_input(filename):
                                             "full": [conf2['full_eval_start_period'], conf2['full_eval_end_period']]}}
 
     # General settings 
-    algorithm = conf2['optimization_algorithm'].lower()
-    swarm_size = int(conf2['swarm_size'])
+    algorithm = conf2.get('optimization_algorithm', None)
+    if algorithm:
+        algorithm = algorithm.lower()
+    swarm_size = int(conf2.get('swarm_size', 0))
     strategy = {'type': 'estimation', 'algorithm': algorithm} 
     if algorithm == 'pso': 
         strategy.update({'parameters': {'pool': swarm_size, 'particles': swarm_size, \
@@ -146,7 +148,12 @@ def create_input(filename):
 
     # Create Input directory 
     basin = conf1['basin']
-    run_dir = os.path.join(conf1['main_dir'], '_'.join([conf2['objective_function'], conf2['optimization_algorithm']]))
+    try:
+        run_dir = os.path.join(conf1['main_dir'], '_'.join([conf2['objective_function'], conf2['optimization_algorithm']]))
+    except Exception as e:
+        logger.info(str(e))
+        run_dir = os.path.join(conf1['main_dir'], 'single_exec')
+
     work_dir = os.path.join(run_dir, conf1['formulation'] + '/' + basin)
     input_dir = os.path.join(work_dir, 'Input/') 
     os.makedirs(input_dir, exist_ok=True)
@@ -356,7 +363,7 @@ def create_input(filename):
     calib_config_file = os.path.join(work_dir + '/Input', '{}'.format(basin) + '_config_calib.yaml')
     model_dict = {'type': 'ngen', 'binary': conf3['ngen_exe_file'], 'realization': realization_file, 'catchments': cat_file, 'nexus': nexus_file,
             'crosswalk':  walk_file, 'obsflow': obsflow_file, 'strategy': 'uniform', 'params': None,
-            'eval_params': {'objective': conf2['objective_function'], 
+            'eval_params': {'objective': conf2.get('objective_function', None), 
                             'evaluation_start': time_period['evaluation_time_period'][conf1['run_type']][0],
                             'evaluation_stop': time_period['evaluation_time_period'][conf1['run_type']][1], 
                             'valid_start_time': time_period['run_time_period']['valid'][0],
