@@ -333,7 +333,9 @@ class NoCalibModel(ModelExec):
             shutil.move(file, output_calib_path)
 
         '''
-        # Cost function: Not needed for single exec as there is no objective function
+        # Cost function: Not needed for single exec as no obective function
+        cost_path = None
+
         try:
             cost_dir = output_dir / "Output_Calib"
             cost_dir.mkdir(exist_ok=True)

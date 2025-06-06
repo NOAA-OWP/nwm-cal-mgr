@@ -55,7 +55,7 @@ def plot_streamflow(
     None
     """
 
-    logger.debug('---Plotting Streamflow Time Series---')
+    logger.info('---Plotting Streamflow Time Series---')
 
     # Obtain column names
     colname = list(df.columns)
@@ -124,7 +124,7 @@ def plot_streamflow_precipitation(
     None
 
     """
-    logger.debug('---Plotting Streamflow Time Series with Precipitation---')
+    logger.info('---Plotting Streamflow Time Series with Precipitation---')
 
     # Obtain column names
     colname = list(df.columns)
@@ -227,7 +227,7 @@ def scatterplot_streamflow(
     None
 
     """
-    logger.debug('---Plotting Scatterplot of Streamflow between Observation and Other Runs---')
+    logger.info('---Plotting Scatterplot of Streamflow between Observation and Other Runs---')
 
     # Obtain column names and value range
     colname = list(df.columns)
@@ -277,7 +277,7 @@ def plot_output(
     None
 
     """
-    logger.debug('---Plotting Output from Different Runs---')
+    logger.info('---Plotting Output from Different Runs---')
 
     # Change date column to datetime dtype
     ts = pd.DatetimeIndex(df['Time'])
@@ -362,7 +362,7 @@ def scatterplot_objfun(
     None
 
     """
-    logger.debug('---Plotting Scatterplot between Objective Funtion and Iteration---')
+    logger.info('---Plotting Scatterplot between Objective Funtion and Iteration---')
 
     # Read file
     df = pd.read_csv(metric_file)
@@ -415,7 +415,7 @@ def scatterplot_var(
     None
 
     """
-    logger.debug('---Plotting Scatterplot between Variables and Iteration---')
+    logger.info('---Plotting Scatterplot between Variables and Iteration---')
 
     # Read file
     logger.info(var_file)
@@ -482,7 +482,7 @@ def scatterplot_objfun_metric(
     None
 
     """
-    logger.debug('---Plotting Scatterplot between Objective Function and Metric---')
+    logger.info('---Plotting Scatterplot between Objective Function and Metric---')
 
     # Read file
     df = pd.read_csv(var_file)
@@ -549,7 +549,7 @@ def barplot_metric(
     None
 
     """
-    logger.debug('---Plotting Barplot of Metrics---')
+    logger.info('---Plotting Barplot of Metrics---')
 
     # Set index
     allcols = list(df.columns)
@@ -627,7 +627,7 @@ def plot_fdc_calib(
     None
 
     """
-    logger.debug('---Plotting FDC of Observation and Other Runs---')
+    logger.info('---Plotting FDC of Observation and Other Runs---')
 
     # Figure arguments
     colname = list(df.columns)[1:]
@@ -681,8 +681,7 @@ def plot_fdc_valid(
     None
 
     """
-    logger.debug('---Plotting FDC of Observation and Other Runs---')
-
+    logger.info('---Plotting FDC of Observation and Other Runs---')
     # Figure arguments
     colname = list(df.columns)[1:]
     # this treatment is moved to plot_calib_output & plot_valid_output in plot_functions.py
@@ -746,7 +745,7 @@ def plot_cost_hist(
     None
 
     """
-    logger.debug('---Plotting Convergence Curve for Global and Local Best Values---')
+    logger.info('---Plotting Convergence Curve for Global and Local Best Values---')
 
     # Read file
     df = pd.read_csv(cost_file)
