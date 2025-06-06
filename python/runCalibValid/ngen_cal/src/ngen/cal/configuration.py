@@ -301,7 +301,7 @@ class NoCalibModel(ModelExec):
             metrics_df.insert(0, "iteration", 0, True)
 
             # IS THIS CORRECT???????
-            metrics_df["objFunVal"] = metrics_df[self.eval_params.objective.upper()]
+            #metrics_df["objFunVal"] = metrics_df[self.eval_params.objective.upper()]
             metrics_best_path = workdir / f"{basin_id}_metrics_iteration.csv"
             metrics_df.to_csv(metrics_best_path, index=False)
 
@@ -332,7 +332,8 @@ class NoCalibModel(ModelExec):
         for file in workdir.glob("nex-*_output.csv"):
             shutil.move(file, output_calib_path)
 
-        # Cost function
+        '''
+        # Cost function: Not needed for single exec as there is no objective function
         try:
             cost_dir = output_dir / "Output_Calib"
             cost_dir.mkdir(exist_ok=True)
@@ -348,7 +349,8 @@ class NoCalibModel(ModelExec):
             except Exception as e:
                 logger.warning(f"Cost file generation failed: {e}")
                 logger.info(traceback.format_exc())
-      
+        '''
+
         # Dummy parameter and objfun DataFrames
         param_df = pd.DataFrame()
         objfun_df = pd.DataFrame()
@@ -380,7 +382,7 @@ class NoCalibModel(ModelExec):
                 station_name=basin_id,
                 metric_iter_file=metrics_best_path,
                 best_params=0,
-                cost_iter_file=cost_path,
+                cost_iter_file=None,
                 param_iter_file=metrics_best_path,
                 save_plot_iter_flag=False,
                 basinID=basin_id,

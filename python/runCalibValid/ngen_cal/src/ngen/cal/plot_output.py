@@ -136,13 +136,14 @@ def plot_calib_output(
         df_merged_copy4 = copy.deepcopy(df_merged)
         plf.plot_streamflow_precipitation(df_merged_copy4, agent.df_precip, plotfile, title)
 
-    # Plot scatterplot between objective function and iteration
-    if calibration_object.save_plot_iter_flag:
-        plotfile = os.path.join(fig_path, calibration_object.basinID + '_objfun_iteration_' + str('{:04d}').format(i) +'.png')  
-    else:
-        plotfile = os.path.join(fig_path, calibration_object.basinID + '_objfun_iteration.png')  
-    title  = 'Scatterplot of Objective Function vs Iteration ' + '\n' + calibration_object.station_name
-    plf.scatterplot_objfun(calibration_object.metric_iter_file, plotfile, "objFunVal", int(float(calibration_object.best_params)), title)
+    if not single_exec:
+        # Plot scatterplot between objective function and iteration
+        if calibration_object.save_plot_iter_flag:
+            plotfile = os.path.join(fig_path, calibration_object.basinID + '_objfun_iteration_' + str('{:04d}').format(i) +'.png')  
+        else:
+            plotfile = os.path.join(fig_path, calibration_object.basinID + '_objfun_iteration.png')  
+        title  = 'Scatterplot of Objective Function vs Iteration ' + '\n' + calibration_object.station_name
+        plf.scatterplot_objfun(calibration_object.metric_iter_file, plotfile, "objFunVal", int(float(calibration_object.best_params)), title)
 
     # Plot scatterplot between metrics and iteration
     if calibration_object.save_plot_iter_flag:
@@ -152,16 +153,17 @@ def plot_calib_output(
     title  = 'Scatterplot of Metrics vs Iteration ' + '\n' + calibration_object.station_name
     plf.scatterplot_var(calibration_object.metric_iter_file, plotfile, int(float(calibration_object.best_params)), title)    
 
-    # Plot scatterplot between metrics and objective function
-    if calibration_object.save_plot_iter_flag:
-        plotfile = os.path.join(fig_path, calibration_object.basinID + '_metric_objfun_' + str('{:04d}').format(i) +'.png')  
-    else:
-        plotfile = os.path.join(fig_path, calibration_object.basinID + '_metric_objfun.png')  
-    title  = 'Scatterplot of Metrics vs Objectiv Function ' + '\n' + calibration_object.station_name
-    plf.scatterplot_objfun_metric(calibration_object.metric_iter_file, plotfile, int(float(calibration_object.best_params)), title)    
-
-    # Plot scatterplot between parameters and iteration
+    
     if not single_exec:
+        # Plot scatterplot between metrics and objective function
+        if calibration_object.save_plot_iter_flag:
+            plotfile = os.path.join(fig_path, calibration_object.basinID + '_metric_objfun_' + str('{:04d}').format(i) +'.png')  
+        else:
+            plotfile = os.path.join(fig_path, calibration_object.basinID + '_metric_objfun.png')  
+        title  = 'Scatterplot of Metrics vs Objectiv Function ' + '\n' + calibration_object.station_name
+        plf.scatterplot_objfun_metric(calibration_object.metric_iter_file, plotfile, int(float(calibration_object.best_params)), title)    
+
+        # Plot scatterplot between parameters and iteration
         if calibration_object.save_plot_iter_flag:
             plotfile = os.path.join(fig_path, calibration_object.basinID + '_param_iteration_' + str('{:04d}').format(i) +'.png')  
         else:
@@ -169,10 +171,10 @@ def plot_calib_output(
         title  = 'Scatterplot of Parameters vs Iteration ' + '\n' + calibration_object.station_name
         plf.scatterplot_var(calibration_object.param_iter_file, plotfile, int(float(calibration_object.best_params)), title)    
 
-    # Plot scatterplot between parameters and iteration
-    if agent.algorithm !='dds':
-        plf.scatterplot_var(calibration_object.param_iter_file, plotfile, int(float(calibration_object.best_params)), title)    
-        plot_cost_func(calibration_object, agent, os.path.join(agent.workdir, calibration_object.cost_iter_file), agent.algorithm, calib_iter=False)
+        # Plot scatterplot between parameters and iteration
+        if agent.algorithm !='dds':
+            plf.scatterplot_var(calibration_object.param_iter_file, plotfile, int(float(calibration_object.best_params)), title)    
+            plot_cost_func(calibration_object, agent, os.path.join(agent.workdir, calibration_object.cost_iter_file), agent.algorithm, calib_iter=False)
 
 def plot_valid_output(
     calibration_object: 'Evaluatable',
