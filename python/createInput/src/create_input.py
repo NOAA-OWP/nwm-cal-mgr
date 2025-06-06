@@ -42,8 +42,8 @@ def create_input(filename):
     conf2 = configs['Calibration']
     conf3 = configs['DataFile']
 
-    conf2['objective_function'] = conf2.get('objective_function', 'kge')
-    conf2['optimization_algorithm'] = conf2.get('optimization_algorithm', 'dds')
+    conf2['objective_function'] = conf2.get('objective_function', 'none')
+    conf2['optimization_algorithm'] = conf2.get('optimization_algorithm', 'none')
 
     #get the parallel section
     parallelSec = configs['Parallel'] if config.has_section("Parallel") else None  
