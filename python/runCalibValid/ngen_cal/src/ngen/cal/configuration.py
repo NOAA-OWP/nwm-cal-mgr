@@ -255,6 +255,7 @@ class NoCalibModel(ModelExec):
         from ngen.cal import plot_functions as pf
         from ngen.cal.plot_output import plot_calib_output
         from types import SimpleNamespace
+        from ngen.cal.utils import report_to_ngencerf
         import logging
 
         basin_id = agent.model.eval_params.basinID
@@ -393,6 +394,8 @@ class NoCalibModel(ModelExec):
             
                 )
             plot_calib_output(0, calibration_object, agent, single_exec=True)
+
+            report_to_ngencerf(agent)
 
         except Exception as e:
                 logger.warning(f"Cost file generation failed: {e}")
