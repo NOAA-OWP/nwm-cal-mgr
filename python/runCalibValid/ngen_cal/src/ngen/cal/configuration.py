@@ -243,7 +243,6 @@ class NoCalibModel(ModelExec):
 
         return hydrograph
 
-
     def postprocess_single_calibration_output(self, agent):
         import os
         import shutil
@@ -333,27 +332,6 @@ class NoCalibModel(ModelExec):
         for file in workdir.glob("nex-*_output.csv"):
             shutil.move(file, output_calib_path)
 
-        '''
-        # Cost function: Not needed for single exec as no obective function
-        cost_path = None
-
-        try:
-            cost_dir = output_dir / "Output_Calib"
-            cost_dir.mkdir(exist_ok=True)
-            cost_path = cost_dir / f"{basin_id}_output_cost.csv"
-            obj_key = self.eval_params.objective.upper()
-            obj_value = metrics.get(obj_key, list(metrics.values())[0])
-            cost_df = pd.DataFrame({self.eval_params.objective: [obj_value]})
-            cost_df.to_csv(cost_path, index=False)
-        except Exception as e:
-            try:
-                cost_df = pd.DataFrame({self.eval_params.objective: [metrics[self.eval_params.objective]]})
-                cost_df.to_csv(output_calib / f"{basin_id}_output_cost.csv", index=False)
-            except Exception as e:
-                logger.warning(f"Cost file generation failed: {e}")
-                logger.info(traceback.format_exc())
-        '''
-
         # Dummy parameter and objfun DataFrames
         param_df = pd.DataFrame()
         objfun_df = pd.DataFrame()
@@ -398,155 +376,11 @@ class NoCalibModel(ModelExec):
             report_to_ngencerf(agent)
 
         except Exception as e:
-                logger.warning(f"Cost file generation failed: {e}")
+                logger.warning(f"Calibration plot generation failed: {e}")
                 logger.info(traceback.format_exc())
         
         logger.info(f"[NoCalibModel] All calibration plots generated in Plot_Iteration.")
-
-
-    def unused_calib_plot_functions_to_be_deleted(self):
-        # The following portion is previous implementation of Calibration Plot Generation which will be DELETED
-
-
-        # Load streamflow time series
-        df_obs = pd.read_csv(self.obsflow, index_col=0, parse_dates=True)
-        df_iter = pd.read_csv(output_iter_path / f"{basin_id}_output_iteration_0000.csv", index_col=0, parse_dates=True)
-        df_best = pd.read_csv(output_iter_path / f"{basin_id}_output_best_iteration.csv", index_col=0, parse_dates=True)
-        df_last = pd.read_csv(output_iter_path / f"{basin_id}_output_last_iteration.csv", index_col=0, parse_dates=True)
-
-        df_obs.columns = ['Observation']
-        df_iter.columns = ['Control Run']
-        df_best.columns = ['Best Run']
-        df_last.columns = ['Last Run']
-
-        # temporary scaling to see the graph
-        scale_factor = df_obs.mean().values[0] / df_best.mean().values[0]
-        df_best *= scale_factor
-        df_last *= scale_factor
-        df_iter *= scale_factor
-
-        df_best_sim = df_best.copy()
-        df_best_sim.columns = ['Simulated']
-        df_all = pd.concat([df_obs, df_best, df_best_sim], axis=1)
-        df_all.index.name = "Time"
-        df_all = df_all.dropna(subset=["Observation", "Simulated"])
-
-
-        try:
-            pf.plot_obj_fun(agent)
-        except Exception as e:
-            logger.warning(f"plot_obj_fun : {e}")
-            logger.info(traceback.format_exc())
-
-
-        # Hydrograph
-        try:
-            df_hydro = df_all.reset_index()
-            pf.plot_streamflow(
-                df=copy.deepcopy(df_hydro),
-                plotfile=plot_iter_path / f"{basin_id}_hydrograph_iteration_old.png",
-                title=f"Hydrograph (Calibration Iteration)\n{basin_id}"
-            )
-        except Exception as e:
-            logger.warning(f"plot_streamflow : {e}")
-            logger.info(traceback.format_exc())
-
-        # Flow Duration Curve
-        try:
-            df_fdc = df_all[["Observation", "Simulated"]].copy()
-            df_fdc = df_fdc.reset_index()
-            #df_fdc = df_fdc[["Observation", "Simulated"]]  # Drop 'Time' again if needed
-            pf.plot_fdc_calib(
-                df=df_fdc,
-                plotfile=plot_iter_path / f"{basin_id}_fdc_iteration_old.png",
-                title="Flow Duration Curve (Calibration Iteration)"
-            )
-        except Exception as e:
-            logger.warning(f"plot_fdc_calib : {e}")
-            logger.info(traceback.format_exc())
-
-        # Scatter Plot
-        try:
-            df_all["Simulated"] = df_all["Best Run"]
-            df_scatter = df_all.reset_index()
-
-            pf.scatterplot_streamflow(
-                df=df_scatter[["Time", "Observation", "Simulated"]],
-                plotfile=plot_iter_path / f"{basin_id}_scatterplot_streamflow_iterations_old.png",
-                title="Scatterplot Streamflow Curve (Calibration Iteration)"
-            )
-        except Exception as e:
-            logging.getLogger(__name__).warning(f"Scatterpl;ot Streamflow plot skipped: {e}")
-            logger.info(traceback.format_exc())
-
-        # Streamflow + Precip
-        try:
-            df_precip = self.df_precip.reset_index()
-            pf.plot_streamflow_precipitation(
-                df=copy.deepcopy(df_hydro),
-                dfp=df_precip,
-                plotfile=plot_iter_path / f"{basin_id}_streamflow_precip_iteration_old.png",
-                title=f"Streamflow + Precipitation (Calibration Iteration)"
-            )
-        except Exception as e:
-            logging.getLogger(__name__).warning(f"Precipitation plot skipped: {e}")
-            logger.info(traceback.format_exc())
-
-        # Obj Fun
-        try:
-            pf.scatterplot_objfun(
-                metric_file=metrics_best_path,
-                plotfile=plot_iter_path / f"{basin_id}_objfun_iteration_old.png",
-                objective_fun_column=self.eval_params.objective.upper(),
-                best_iteration=0,
-                title="Objective Function vs Iteration",
-            )
-        except Exception as e:
-            logger.info(metrics_best_path)
-            logger.warning(f"scatterplot_objfun failed: {e}")
-            logger.info(traceback.format_exc())
-
-
-        # Metrics iteration
-        try:
-            pf.scatterplot_var(
-                var_file=metrics_best_path,
-                plotfile=plot_iter_path / f"{basin_id}_metric_iteration_old.png",
-                best_iteration=0,
-                title="Metrics by Iteration"
-            )
-        except Exception as e:
-            logger.warning(f"scatterplot_var (metric) failed: {e}")
-            logger.info(traceback.format_exc())
-
-        # Parameter iteration
-        try:
-            pf.scatterplot_var(
-                var_file=metrics_best_path,
-                plotfile=plot_iter_path / f"{basin_id}_param_iteration_old.png",
-                best_iteration=0,
-                title="Parameters by Iteration"
-            )
-        except Exception as e:
-            logger.warning(f"scatterplot_var (param) failed: {e}")
-            logger.info(traceback.format_exc())
-
-        # Objective vs Metric plot
-        try:
-            pf.scatterplot_objfun_metric(
-                var_file=metrics_best_path,
-                plotfile=plot_iter_path / f"{basin_id}_metric_objfun_old.png",
-                best_iteration=0,
-                title="Obj Fun vs Metrics"
-            )
-        except Exception as e:
-            logger.warning(f"scatterplot_objfun_metric failed: {e}")
-            logger.info(traceback.format_exc())
-
-        logger.info(f"[NoCalibModel] All calibration plots generated in Plot_Iteration.")
-
-
-
+    
     def postprocess_single_validation_output(self, agent: 'Agent', valid_suffix=None):
         """
         Post-process validation output for NoCalibModel.
@@ -663,7 +497,6 @@ class NoCalibModel(ModelExec):
             logger.info(f"metrics calculation error : {e}")
             logger.info(traceback.format_exc())
 
-
         # Step 3: Save to Output_Iteration
         output_iter_file = output_parent_path / f"{basin_id}_output_{valid_suffix}.csv"
         sim_df.to_csv(output_iter_file)
@@ -772,150 +605,6 @@ class NoCalibModel(ModelExec):
             logger.info(traceback.format_exc())
 
         logger.info("[NoCalibModel] All validation plots generated in Plot_Valid.")
-
-        '''
-        # Create merged DataFrame for plotting
-        obs_df = pd.read_csv(Path(self.obsflow), index_col=0, parse_dates=True)
-        obs_df = obs_df.rename(columns={obs_df.columns[0]: 'Observation'})
-        sim_df = pd.read_csv(output_iter_file, index_col=0, parse_dates=True)
-        sim_df = sim_df.rename(columns={sim_df.columns[0]: 'valid_best'})
-        nwm_df = self.df_nwm
-
-        # Ensure all indices are datetime and aligned
-        obs_df.index = pd.to_datetime(obs_df.index)
-        sim_df.index = pd.to_datetime(sim_df.index)
-        nwm_df.index = pd.to_datetime(nwm_df.index)
-
-        merged_df = pd.concat([obs_df, sim_df, nwm_df], axis=1).dropna()
-        merged_df.index.name = "Time"
-
-        # For plotting, keep a deep copy and reset index
-        # Sort and reorder DataFrame columns explicitly
-
-        merged_df = merged_df[["Observation", "nwm_retro", "valid_best"]]
-
-
-        # Refactoring so that they all are visible in the plot
-        max_obs = merged_df['Observation'].max()
-        for col in merged_df.columns:
-            if col not in ['Time', 'Observation', 'nwm_retro']:
-                factor = max_obs / merged_df[col].max()
-                merged_df[col] *= factor
-
-
-        merged_df.index.name = "Time"
-        df_plot = merged_df.iloc[24:].copy().reset_index()
-
-        try:
-            pf.plot_streamflow(
-                df=copy.deepcopy(df_plot),
-                plotfile=Path(agent._valid_path_plot) / f"{basin_id}_hydrograph_valid_run_1.png",
-                title=f"Hydrograph (Valid Best)\n{basin_id}"
-            )
-        except Exception as e:
-            logger.info(df_plot)
-            logger.warning(f"plot_streamflow_valid : {e}")
-            logger.info(traceback.format_exc())
-
-        '''
-
-    def unused_valid_plot_functions_delete(self, agent):
-        '''
-        This is old code that will be deleted
-        '''
-
-        # Create merged DataFrame for plotting
-        obs_df = pd.read_csv(obs_path, index_col=0, parse_dates=True)
-        obs_df = obs_df.rename(columns={obs_df.columns[0]: 'Observation'})
-        sim_df = pd.read_csv(output_iter_file, index_col=0, parse_dates=True)
-        sim_df = sim_df.rename(columns={sim_df.columns[0]: 'valid_best'})
-        nwm_df = pd.read_csv(agent.nwmflow_file)
-
-        # Ensure all indices are datetime and aligned
-        obs_df.index = pd.to_datetime(obs_df.index)
-        sim_df.index = pd.to_datetime(sim_df.index)
-        nwm_df.index = pd.to_datetime(nwm_df.index)
-
-        merged_df = pd.concat([obs_df, sim_df, nwm_df], axis=1).dropna()
-        merged_df.index.name = "Time"
-
-        # For plotting, keep a deep copy and reset index
-        # Sort and reorder DataFrame columns explicitly
-
-        merged_df = merged_df[["Observation", "nwm_retro", "valid_best"]]
-        merged_df.index.name = "Time"
-        df_plot = merged_df.iloc[24:].copy().reset_index()
-        
-        try:
-            pf.plot_streamflow(
-                df=copy.deepcopy(df_plot),
-                plotfile=plot_valid_dir / f"{basin_id}_hydrograph_valid_run.png",
-                title=f"Hydrograph (Valid Best)\n{basin_id}"
-            )
-        except Exception as e:
-            logger.info(df_fdc)
-            logger.warning(f"plot_streamflow_valid : {e}")
-            logger.info(traceback.format_exc())
-
-        try:
-
-            df_fdc = merged_df.iloc[24:].copy()
-            df_fdc.index = pd.to_datetime(df_fdc.index) 
-            df_fdc = df_fdc.reset_index() 
-            
-            pf.plot_fdc_valid(
-                df=copy.deepcopy(df_fdc),
-                plotfile=plot_valid_dir / f"{basin_id}_fdc_valid_run.png",
-                title=f"Flow Duration Curve (Valid Best)",
-                time_period={
-                    "calib": (df_fdc.index.min(), df_fdc.index.max()),
-                    "valid": (df_fdc.index.min(), df_fdc.index.max()),
-                    "full": (df_fdc.index.min(), df_fdc.index.max()),
-                }
-            )
-        except Exception as e:
-            logger.info(df_fdc)
-            logger.warning(f"plot_fdc_valid : {e}")
-            logger.info(traceback.format_exc())
-
-
-        try:
-            df_precip = self.df_precip.reset_index()
-            #df_precip.rename(columns={'Precip(mm)': 'RAINRATE'}, inplace=True)
-            pf.plot_streamflow_precipitation(
-                df=copy.deepcopy(df_plot),
-                dfp=df_precip,
-                plotfile=plot_valid_dir / f"{basin_id}_streamflow_precip_valid_run.png",
-                title=f"Streamflow + Precipitation (Valid Best)"
-            )
-        except Exception as e:
-            
-            logger.warning(f"Precipitation plot skipped: {e}")
-            logger.info(traceback.format_exc())
-
-
-        metrics_control_path = output_parent_path /  f"{basin_id}_metrics_valid_control.csv"
-        metrics_best_path = output_parent_path /  f"{basin_id}_metrics_valid_best.csv"
-        df_control = pd.read_csv(metrics_control_path)
-        df_best = pd.read_csv(metrics_best_path)
-        df_nwm = pd.read_csv(agent.nwmflow_file)
-
-        df_combined = pd.concat([df_control, df_best, df_nwm], axis=0)
-        df_combined.to_csv("01123000_metrics_combined.csv", index=False)
-
-      
-        try:
-            pf.barplot_metric(
-                df=df_combined,
-                plotfile=plot_valid_dir / f"{basin_id}_barplot_metrics_valid_run.png",
-                title=f"Metrics for Valid Best Run"
-            )
-        except Exception as e:
-            logger.info(f"metrics df : {metrics_df}")
-            logger.warning(e)
-
-        logger.info("[NoCalibModel] All validation plots generated in Plot_Valid.")
-
 
     def get_args(self) -> str:
         return f"{self.catchments} all {self.nexus} all {self.realization}"

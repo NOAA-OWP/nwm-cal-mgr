@@ -19,8 +19,7 @@ import pandas as pd # type: ignore
 from .gwo_global_best import GlobalBestGWO
 from .metric_functions import treat_values, calculate_all_metrics
 from .plot_output import plot_calib_output, plot_cost_func
-from .utils import pushd, complete_msg 
-from .ngencerf import report
+from .utils import pushd, complete_msg, report_to_ngencerf 
 
 import logging
 logger = logging.getLogger(__name__)
@@ -184,9 +183,7 @@ def _evaluate(i: int, calibration_object: 'Evaluatable', agent: 'Agent', first_i
     calibration_object.write_last_iteration(i)
 
     # report info back to server if running from ngenCERF GUI
-    if agent._general.ngen_cerf:
-        worker = os.path.basename(agent.job.workdir).replace('ngen_','').replace('_worker','')
-        report(agent._general.calibration_run_id, i, worker, first_iter_for_agent, agent._general.auth_token)
+    report_to_ngencerf(agent, iteration=i, first_iter=first_iter_for_agent)
 
     return score
 
