@@ -19,7 +19,14 @@ import geopandas as gpd
 import pandas as pd
 import yaml
 
-logger = logging.getLogger("createInput")
+logger = logging.getLogger(__name__)
+if not logging.getLogger().hasHandlers():
+    # When running outside of Django, configure basic logging to stderr
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S"
+    )
 
 from tempfile import mkstemp
 from createInput import settings

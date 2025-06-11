@@ -16,7 +16,16 @@ import geopandas as gpd
 import pandas as pd
 import logging
 
-logger = logging.getLogger("createInput")
+logger = logging.getLogger(__name__)
+if not logging.getLogger().hasHandlers():
+    # When running outside of Django, configure basic logging to stderr
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S"
+    )
+
+logger.info('info log from create_input')
 
 from createInput import ginputfunc as gfun
 from createInput import settings
