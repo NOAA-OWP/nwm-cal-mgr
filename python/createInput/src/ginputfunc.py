@@ -1984,7 +1984,6 @@ def create_calib_config_file(
     # individual modules in the directory given by par_file
 
     calib_modules_config = list(settings.modules_all.loc[settings.modules_all['calibratable'], 'name_config'])
-    print("calib_modules_config :{}".format(calib_modules_config))
 
     if os.path.isfile(par_file):
         df_params = pd.read_fwf(par_file).copy()
