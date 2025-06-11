@@ -15,8 +15,8 @@ import re
 import geopandas as gpd
 import pandas as pd
 import logging
-logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
+
+logging.getLogger("createInput")
 
 from createInput import ginputfunc as gfun
 from createInput import settings
