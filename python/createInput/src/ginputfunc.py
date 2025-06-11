@@ -19,7 +19,7 @@ import geopandas as gpd
 import pandas as pd
 import yaml
 
-logging.getLogger("createInput")
+logger = logging.getLogger("createInput")
 
 from tempfile import mkstemp
 from createInput import settings
