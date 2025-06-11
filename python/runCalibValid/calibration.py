@@ -81,8 +81,6 @@ def log_level_set():
             format='%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)s - %(funcName)s]: %(message)s',
             stream=sys.stderr,
         )  
-
-    LOG.info("Inside log_level_set") 
     
 def main(general: General, model_conf):
     # Seed the random number generators if requested
@@ -110,15 +108,7 @@ def main(general: General, model_conf):
     os.environ['NGEN_RESULTS_DIR'] = str(Path(agent.workdir).parent.parent)
     logging.info(f'Set environment variable NGEN_RESULTS_DIR to: {os.environ["NGEN_RESULTS_DIR"]}')
 
-    # set environment variables for ngen+modules log level settings
     import numpy as np
-
-    log_level_array = np.array([['ngen_ll', 'ERROR'], ['sft_ll', 'INFO'], ['smp_ll', 'INFO'], ['cfe_ll', 'INFO'], ['ueb_ll', 'INFO'], ['t-route_ll', 'DEBUG'], ['snow-17_ll', 'INFO'], ['noahowp_ll', 'INFO'], ['sacsma_ll', 'INFO'], ['lasam_ll', 'INFO'], ['schism_ll', 'INFO'], ['sfincs_ll', 'INFO'], ['topoflow_ll', 'INFO'], ['gc2d_ll', 'INFO']])  # 2D array
-    logging.info("Setting environment variables for log level settings of ngen and it's sub-modules")
-    for i in range(len(log_level_array)):
-        logging.info(f"\t{log_level_array[i,0]} = {log_level_array[i,1]}")
-        os.environ[log_level_array[i,0]] = log_level_array[i,1]
-
     if general.strategy.algorithm == Algorithm.dds:
         start_iteration = general.start_iteration
         if general.restart:

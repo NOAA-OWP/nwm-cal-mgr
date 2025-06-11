@@ -123,11 +123,11 @@ class CalibrationSet(Evaluatable):
             self._output.index = dt_range
             self._output.index.name='Time'
             self._output = self._output.resample('1h').first()
-            logger.info("Simulation results ready (DataFrame populated)")
+            logger.debug("Simulation results ready (DataFrame populated)")
             hydrograph = self._output
 
         except FileNotFoundError:
-            logger.info("Output is currently empty.")
+            logger.debug("Output is currently empty.")
             hydrograph = None
         except Exception as e:
             raise(e)
