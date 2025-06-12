@@ -639,3 +639,18 @@ class ModelExec(BaseModel, Configurable):
             str: Preconfigured arg string to pass to the binary upon execution
         """
         return self.args
+
+    def run(self, args: str = None) -> None:
+        """
+        Execute the model binary with arguments in the specified working directory.
+        """
+        import subprocess
+
+        cmd = [self.binary]
+        if args:
+            cmd.extend(args.split())
+        elif self.args:
+            cmd.extend(self.args.split())
+
+        logger.info(f"Executing model: {' '.join(cmd)} in {self.workdir}")
+        subprocess.run(cmd, cwd=self.workdir, check=True)
