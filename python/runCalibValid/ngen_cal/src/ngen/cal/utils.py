@@ -6,9 +6,10 @@ This module contains utility functions for executing calibration and validation 
 
 from contextlib import contextmanager
 from email.mime.text import MIMEText
-from os import getcwd, chdir, PathLike
+from os import getcwd, chdir, PathLike, path
 import smtplib
 from typing import Union
+from .ngencerf import report
 
 @contextmanager
 def pushd(path: Union[str, PathLike]) -> None:
@@ -66,3 +67,11 @@ def complete_msg(basinid: str, run_name: str, path: Union[str, PathLike]=None, u
                 server.quit()
         else:
             print(content)
+
+
+def report_to_ngencerf(agent, iteration=0, first_iter=True):
+    if agent._general.ngen_cerf:
+        print(f"Made report to ngen-cerf with run_id : {agent._general.calibration_run_id}")
+        worker = path.basename(agent.job.workdir).replace('ngen_','').replace('_worker','')
+        report(agent._general.calibration_run_id, iteration, worker, first_iter, agent._general.auth_token)
+

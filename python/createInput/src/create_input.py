@@ -16,7 +16,16 @@ import geopandas as gpd
 import pandas as pd
 import logging
 
-logger = logging.getLogger("createInput")
+logger = logging.getLogger(__name__)
+if not logging.getLogger().hasHandlers():
+    # When running outside of Django, configure basic logging to stderr
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S"
+    )
+
+logger.info('info log from create_input')
 
 from createInput import ginputfunc as gfun
 from createInput import settings
@@ -41,6 +50,10 @@ def create_input(filename):
     conf1 = configs['General']
     conf2 = configs['Calibration']
     conf3 = configs['DataFile']
+
+    conf2['objective_function'] = conf2.get('objective_function', 'none')
+    conf2['optimization_algorithm'] = conf2.get('optimization_algorithm', 'none')
+
     #get the parallel section
     parallelSec = configs['Parallel'] if config.has_section("Parallel") else None  
 
@@ -65,7 +78,7 @@ def create_input(filename):
 
     # General settings 
     algorithm = conf2['optimization_algorithm'].lower()
-    swarm_size = int(conf2['swarm_size'])
+    swarm_size = int(conf2.get('swarm_size', 0))
     strategy = {'type': 'estimation', 'algorithm': algorithm} 
     if algorithm == 'pso': 
         strategy.update({'parameters': {'pool': swarm_size, 'particles': swarm_size, \
@@ -121,7 +134,6 @@ def create_input(filename):
     modules = [m1 for m1 in settings.modules_all['module'] if m1 in modules]
     logger.info(f"Final list of modules in formulation: {modules}\n")
 
-    
     # check modules selected for each process
     procs = []
     for p1 in settings.modules_all['process']:
@@ -139,7 +151,7 @@ def create_input(filename):
 
     # library files for all modules included in the formulation
     lib_file = {}
-    modules1 = [m1 for m1 in modules if m1 != 'troute']
+    modules1 = [m1 for m1 in modules if m1 not in ['troute', 'lstm']]
     for m1 in modules1:
         m2 = settings.modules_all.loc[settings.modules_all['module']==m1,'name_ui'].iloc[0]
         m2 = m2 if m2 not in ['cfe-s','cfe-x'] else 'cfe'
@@ -148,6 +160,7 @@ def create_input(filename):
     # Create Input directory 
     basin = conf1['basin']
     run_dir = os.path.join(conf1['main_dir'], '_'.join([conf2['objective_function'], conf2['optimization_algorithm']]))
+
     work_dir = os.path.join(run_dir, conf1['formulation'] + '/' + basin)
     input_dir = os.path.join(work_dir, 'Input/') 
     os.makedirs(input_dir, exist_ok=True)
@@ -226,7 +239,7 @@ def create_input(filename):
 
         # module name used by the UI
         m2 = settings.modules_all.loc[settings.modules_all['module']==m1,'name_ui'].iloc[0]
-
+        
         # define module input directory
         mod_input_dir = os.path.join(input_dir, m2 + '_input')
         if os.path.isdir(mod_input_dir):
@@ -269,11 +282,13 @@ def create_input(filename):
                     gfun.change_lasam_input(catids, mod_input_dir, conf3[m2+"_bmi_dir"], conf3['lasam_parameter_dir'])
                 elif m1 == "smp" and output_dict['output_sm']:
                     output_dict['sm_profile_depth'] = gfun.change_smp_input(catids, mod_input_dir, conf3[m2+"_bmi_dir"], output_dict['sm_frac_depth'], output_dict['sm_profile_depth'])
+                elif m1 == 'lstm':
+                    gfun.create_lstm_input(catids, time_period, attr_file, conf3[m1+'_parameter_dir'], mod_input_dir, conf3[m2+"_bmi_dir"])
+
                 else:
                     # Create symbolic link
                     logger.info(f'{m2}: create symlink from {bmi_dir} to {mod_input_dir}')
                     os.symlink(bmi_dir, mod_input_dir, target_is_directory=True)
-                    
         else:
             if m1 in ['cfes', 'cfex']:
                 gfun.create_cfe_input(catids, modules, attr_file, mod_input_dir)
@@ -341,9 +356,8 @@ def create_input(filename):
         if smp_index > sft_index:
             modules.remove("smp")
             modules.insert(sft_index, "smp")
-
     gfun.create_realization_file(work_dir, lib_file, bmi_dir, forcing_path, realization_file, modules, time_period, rt_dict, output_dict)
-
+    
     #make the partition file
     part_file = gfun.create_partition_file( parallelSec[ 'partition_generator_exe' ],
                                     gpkg_file,
@@ -397,7 +411,6 @@ def create_input(filename):
 
     general_dict['calibration_run_id'] = int(general_dict['calibration_run_id'])
     general_dict['ngen_cerf'] = True if general_dict['ngen_cerf'].lower()=='true' else False
-
     gfun.create_calib_config_file(conf3['calib_parameter_file'], modules, work_dir, general_dict, model_dict, calib_config_file)
 
 def main():

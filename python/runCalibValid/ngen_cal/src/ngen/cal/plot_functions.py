@@ -132,8 +132,14 @@ def plot_streamflow_precipitation(
     # Change date column to datetime dtype
     ts = pd.DatetimeIndex(df[colname[0]])
     df['Dates'] = ts
-    ts = pd.DatetimeIndex(dfp[colname[0]])
-    dfp['Dates'] = ts
+    try:
+        ts = dfp.index if isinstance(dfp.index, pd.DatetimeIndex) else pd.DatetimeIndex(dfp[colname[0]])
+        #ts = pd.DatetimeIndex(dfp[colname[0]])
+        dfp['Dates'] = ts
+    except Exception as e:
+        logger.info(e)
+        ts = pd.DatetimeIndex(dfp.index)
+        dfp['Dates'] = ts
 
     # Plot
     # this treatment is moved to plot_calib_output & plot_valid_output in plot_functions.py
@@ -191,7 +197,9 @@ def plot_streamflow_precipitation(
     ax2.set_yticklabels(label2)
 
     # Generate common legend
-    if len(lnlst)==3:
+    if len(lnlst)==2:
+        lns = lnlst[0] + lnlst[1] + ln3
+    elif len(lnlst)==3:
         lns = lnlst[0] + lnlst[1] + lnlst[2]  + ln3
     else:
         lns = lnlst[0] + lnlst[1] + lnlst[2] + lnlst[3] + ln3
@@ -477,7 +485,7 @@ def scatterplot_objfun_metric(
     df = pd.read_csv(var_file)
     objcol = list(df.columns)[1]
     allcols = list(df.columns)[2:]
-    
+
     # make sure objfunc is not NaN
     df.dropna(subset=[objcol], inplace=True)
     if df.shape[0] == 0:
@@ -551,6 +559,7 @@ def barplot_metric(
     rows = math.ceil(len(allcols)/cols)
     runtp = list(df.index.get_level_values(0).unique())
     labels = list(df.index.get_level_values(1).unique())
+
     x = np.arange(len(labels))
     width = 0.7/len(runtp)
     #xwidth = [x - width/2, x + width/2] if len(runtp) == 2 else [x - width, x, x + width]
@@ -563,7 +572,9 @@ def barplot_metric(
     axs = trim_axs(axs, len(allcols))
     for ax, varname in zip(axs, allcols):
         if varname==allcols[-1]:
-            label0 = [x.replace("valid_","") for x in runtp]
+            #label0 = [x.replace("valid_","") for x in runtp]
+            label0 = [str(x).replace("valid_", "") for x in runtp]
+
         else:
             label0 = [""] * len(runtp)
         for i in range(len(runtp)):
@@ -668,7 +679,6 @@ def plot_fdc_valid(
 
     """
     logger.debug('---Plotting FDC of Observation and Other Runs---')
-
     # Figure arguments
     colname = list(df.columns)[1:]
     # this treatment is moved to plot_calib_output & plot_valid_output in plot_functions.py
@@ -735,7 +745,6 @@ def plot_cost_hist(
     logger.debug('---Plotting Convergence Curve for Global and Local Best Values---')
 
     # Read file
-    print(f'cost_file = {cost_file}') # check which file it is trying to open
     df = pd.read_csv(cost_file)
     df.pop('iteration')
 
@@ -769,3 +778,46 @@ def plot_cost_hist(
 
     fig.savefig(plotfile)
     plt.close()
+
+import os
+import matplotlib.pyplot as plt
+import pandas as pd
+from matplotlib.ticker import MaxNLocator
+
+def plot_obj_fun(agent, suffix="calib", output_dir=None):
+    """Plot cost function history for single or regular calibration runs."""
+    from pathlib import Path
+
+    basin_id = agent.model.eval_params.basinID
+    work_dir = Path(agent.job.workdir)
+    if output_dir is None:
+        output_dir = work_dir / "Plot_Iteration"
+    os.makedirs(output_dir, exist_ok=True)
+    
+    cost_file = work_dir / "Output_Calib" / f"{basin_id}_output_cost.csv"
+    if not cost_file.exists():
+        logger.info(f"Cost file does not exist: {cost_file}")
+        return
+
+    df = pd.read_csv(cost_file)
+
+    if "value" not in df.columns or "iteration" not in df.columns:
+        logger.info(f"Required columns not found in {cost_file}")
+        return
+
+    plt.style.use("ggplot")
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.plot(df["iteration"], df["value"], marker="o", linestyle="-", color="steelblue", label="Objective")
+
+    ax.set_title(f"Objective Function over Iterations ({suffix})")
+    ax.set_xlabel("Iteration")
+    ax.set_ylabel("Objective Function Value")
+    ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+    ax.legend()
+    ax.grid(True)
+
+    plot_path = os.path.join(output_dir, f"{basin_id}_cost_hist_{suffix}.png")
+    plt.tight_layout()
+    plt.savefig(plot_path)
+    plt.close()
+

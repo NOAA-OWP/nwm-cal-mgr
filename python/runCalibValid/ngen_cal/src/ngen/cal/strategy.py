@@ -21,6 +21,7 @@ class Algorithm(str, Enum):
     dds = "dds"
     pso = "pso"
     gwo = "gwo"
+    none = "none"
 
 class Objective(str, Enum):
     """Enumeration of supported objective functions."""
@@ -41,7 +42,7 @@ class Objective(str, Enum):
                     "pod": metric_functions.categorical_score,
                     "pkbias": metric_functions.event_based_metrics,
                     "pkte": metric_functions.event_based_metrics,
-                    "evbias": metric_functions.event_based_metrics,
+                    "evbias": metric_functions.event_based_metrics
                 }
 
     kge = "kge"
@@ -61,6 +62,7 @@ class Objective(str, Enum):
     pkbias = "pkbias"
     pkte = "pkte"
     evbias = "evbias"
+    none = "none"
 
     def __call__(self, *args, **kwargs):
         return self.__func_map__[self.value](*args, **kwargs)
