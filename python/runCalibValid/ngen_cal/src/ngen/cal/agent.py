@@ -15,7 +15,7 @@ import pandas as pd
 
 from .strategy import Algorithm
 from ngen.cal.meta import JobMeta
-from .configuration import Model
+from .configuration import Model, NoCalibModel
 from .utils import pushd
 
 import logging
@@ -75,6 +75,7 @@ class BaseAgent(ABC):
 
 class Agent(BaseAgent):
     """This is class for agent."""
+
     def __init__(self, model_conf: dict, workdir: 'Path', general: 'General', log: bool=False, restart: bool=False, agent_counter=0):
         """Construct attributes for the Agent class."""
         self._workdir = workdir
@@ -86,6 +87,10 @@ class Agent(BaseAgent):
         self._calib_path = general.calib_path
         self._valid_path = general.valid_path
         self._general = general
+        self.run_single_iteration = False
+
+        worker_prefix = 'ngen' if model_conf['type'] == 'nocalib' else model_conf['type']
+
         if restart and 'calib' in self._run_name:
             # find prior ngen workdirs
             # FIXME if a user starts with an independent calibration strategy
@@ -96,14 +101,14 @@ class Agent(BaseAgent):
             # 0 correctly since not all basin params can be loaded.
             # There are probably some similar issues with explicit and independent, since they have
             # similar data semantics
-            workdirs = list(Path(workdir).rglob(model_conf['type']+"_*_worker"))
+            workdirs = list(Path(workdir).rglob(worker_prefix+"_*_worker"))
             if( len(workdirs) > 1 and self._algorithm=="pso") :
                 logger.warning("More than one existing {} workdir, cannot restart")
             else:
-                self._job = JobMeta(model_conf['type'], workdir, workdirs[agent_counter], log=log)
+                self._job = JobMeta(worker_prefix, workdir, workdirs[agent_counter], log=log)
 
         if(self._job is None):
-            self._job = JobMeta(model_conf['type'], workdir, log=log)
+            self._job = JobMeta(worker_prefix, workdir, log=log)
 
         if 'calib' in self._run_name:
             self._calib_path_output = os.path.join(self._job.workdir, 'Output_Calib')
@@ -130,7 +135,12 @@ class Agent(BaseAgent):
         except ValidationError as e:
             print(f'validation error: {e.json()}')
             raise
+        if not self.adjustables:
+            logger.info("No calibratable parameters — activating single-run mode.")
+            self.run_single_iteration = True
+
         self._model.model.resolve_paths()
+        self.nwmflow_file = ''
 
     @property
     def parameters(self) -> 'Mapping[str, Any]':

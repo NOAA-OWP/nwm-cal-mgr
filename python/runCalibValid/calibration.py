@@ -14,8 +14,8 @@ from pathlib import Path
 
 import yaml
 from ngen.cal.agent import Agent
-from ngen.cal.configuration import General
-from ngen.cal.search import dds, dds_set, pso_search, gwo_search
+from ngen.cal.configuration import General, NoCalibModel
+from ngen.cal.search import dds, dds_set, pso_search, gwo_search, single_exec
 from ngen.cal.strategy import Algorithm
 
 from ngen.cal.git_util import print_git_info_all
@@ -136,7 +136,13 @@ def main(general: General, model_conf):
               
     # NOTE this assumes we calibrate each catchment independently, it may be possible to design an "aggregate" calibration
     # that works in a more sophisticated manner.
-    if agent.model.strategy == 'explicit': #FIXME this needs a refactor...should be able to use a calibration_set with explicit loading
+    if isinstance(agent.model, NoCalibModel):
+        LOG.info("Running Single Execution Model Calibration (NoCalibModel)")
+        single_exec(agent)
+
+        LOG.info("Calibration complete.")
+
+    elif agent.model.strategy == 'explicit': #FIXME this needs a refactor...should be able to use a calibration_set with explicit loading
         for catchment in agent.model.adjustables:
             dds(start_iteration, general.iterations, catchment, agent)
 
