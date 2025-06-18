@@ -1,9 +1,3 @@
-"""
-This module contains function to execute validation control and best runs. 
-
-@author: Xia Feng
-"""
-
 import os
 import shutil
 import subprocess
@@ -20,18 +14,39 @@ if TYPE_CHECKING:
     from ngen.cal.agent import Agent
 
 
-def run_valid_ctrl_best(agent: 'Agent') -> None:
-    """Execute validation control and best runs, calculate metrics and produce plots.
 
+import logging
+from pathlib import Path
+from .utils import pushd
+from .configuration import NoCalibModel
+
+logger = logging.getLogger(__name__)
+
+def run_valid_ctrl_best(agent):
+    """
+    Run validation for control and best runs, or execute single-run validation for NoCalibModel.
+    
     Parameters
     ----------
-    agent : Agent object
-
-    Returns
-    ----------
-    None
-
+    agent : Agent
+        Agent object containing model and configuration info.
     """
+    # Single-execution model (NoCalibModel) validation
+
+    
+    if isinstance(agent.model, NoCalibModel):
+        logger.info("Running validation for NoCalibModel (Single Exec)")
+        # Execute model run and post-process results
+        with pushd(agent.job.workdir):
+            agent.model.execute_model()
+            agent.model.postprocess_single_validation_output(agent)
+        logger.info("[NoCalibModel] Validation complete.")
+        return
+
+    # -----------------------------------------
+    # Regular calibrated model validation
+    # -----------------------------------------
+
     shutil.copy(agent.realization_file, os.path.join(agent.job.workdir, os.path.basename(agent.realization_file)))
 
     # read nwm retrospective streamflow if exists
@@ -53,23 +68,24 @@ def run_valid_ctrl_best(agent: 'Agent') -> None:
         with pushd(agent.job.workdir):
             logger.info(f'Running simulation for {agent.run_name}')
             _execute(agent)
-            time_period = {'calib': calibration_object.evaluation_range, 'valid': calibration_object.valid_evaluation_range, 
+            time_period = {'calib': calibration_object.evaluation_range, 'valid': calibration_object.valid_evaluation_range,
                            'full': calibration_object.full_evaluation_range}
+
             outputs = [calibration_object.output]
             runs = [agent.run_name]
-            if agent.run_name != 'valid_control':                                
+            if agent.run_name != 'valid_control':
                 if agent.nwmflow is not None:
                     outputs.append(agent.nwmflow)
                     runs.append('nwm_retro')
-            
+
             for out1,run1 in zip(outputs,runs):
                 metrics = pd.DataFrame()
-                logger.info(f'Computing metrics for {run1}') 
+                logger.info(f'Computing metrics for out1 : {out1}, run1: {run1}')
                 for key, value in time_period.items():
                     result = _calc_metrics(out1, calibration_object.observed, value, calibration_object.threshold)
                     tmp = {**{'run': run1, 'period': key}, **result}
                     metrics = pd.concat([metrics, pd.DataFrame([tmp])], ignore_index=True)
-                    metric_out_file = os.path.join(agent.workdir, '{}'.format(calibration_object.basinID) + '_metrics_{}.csv'.format(run1))      
+                    metric_out_file = os.path.join(agent.workdir, '{}'.format(calibration_object.basinID) + '_metrics_{}.csv'.format(run1))
                     metrics.to_csv(metric_out_file, index=False)
 
             # Save and move output
@@ -83,8 +99,10 @@ def run_valid_ctrl_best(agent: 'Agent') -> None:
                 if agent.run_name != 'valid_best':
                     runs.append(agent.run_name)
                 logger.info(f'Generating plots comparing {runs}')
-                plot_valid_output(calibration_object, agent, runs, time_period)        
 
-            # Indicate completion 
+                plot_valid_output(calibration_object, agent, runs, time_period)
+
+            # Indicate completion
             calibration_object.write_run_complete_file(agent.run_name, agent.workdir)
             complete_msg(calibration_object.basinID, agent.run_name, agent.workdir, calibration_object.user)
+
