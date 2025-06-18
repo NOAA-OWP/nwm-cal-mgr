@@ -2265,8 +2265,6 @@ def create_calib_config_file(
                 f"{par_file} is not a valid file or folder with calibration parameter files for the chosen modules"
             )
 
-            raise Exception(f'{par_file} is not a valid file or folder with calibration parameter files for the chosen modules')
-
 
     params_range_dict = {}
     # Create configuration
