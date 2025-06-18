@@ -2264,12 +2264,6 @@ def create_calib_config_file(
                 f"{par_file} is not a valid file or folder with calibration parameter files for the chosen modules"
             )
 
-    if len(df_params) == 0:
-        raise Exception(f"No calibratable parameters found for the list of modules: {modules}")
-
-    df_params.set_index("param", inplace=True)
-    calib_params = df_params.groupby("model").groups
-
     params_range_dict = {}
     # Create configuration
     basin_yaml = {'general': general_dict}
@@ -2297,8 +2291,6 @@ def create_calib_config_file(
         os.remove(ngen_file_link)
     os.symlink(model_dict["binary"], ngen_file_link)
 
-    os.symlink(model_dict['binary'], ngen_file_link)
-
     model_dict['binary'] = ngen_file_link
     basin_yaml['model'] = model_dict
     if 'lstm' not in modules:
@@ -2308,7 +2300,7 @@ def create_calib_config_file(
 
     # Save configuration into yaml file
     with open(config_yaml_file, 'w') as file:
-        yaml.dump(basin_yaml, file, sort_keys=False, default_flow_style=False, indent=2, Dumper=UnquotedDumper)
+        yaml.dump(basin_yaml, file, sort_keys=False, default_flow_style=False, indent=2)
     logger.info(f'Calibration config file is created at: {config_yaml_file}')
 
 
