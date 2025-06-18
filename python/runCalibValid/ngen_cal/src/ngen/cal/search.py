@@ -48,6 +48,12 @@ def _execute(meta: 'Agent', i: int = None) -> None:
     i : Current iteration, default None
 
     """
+    # This is a critical file used by the server to identify which worker goes with which validation run
+    if i is None:
+        # Only do this for validation jobs
+        with open(os.path.join(meta.job.workdir, 'worker_id.txt'), 'w') as id_file:
+            id_file.write(f'{meta.run_name}')
+
     if meta.job.log_file is None:
         subprocess.check_call(meta.cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=True, cwd=meta.job.workdir)
     else:
@@ -56,7 +62,7 @@ def _execute(meta: 'Agent', i: int = None) -> None:
             with open(run_log_file, 'w') as log_file:
                 log_file.write('Starting ' + '{}'.format(meta.run_name).capitalize() + ' Run\n')
         if i is not None:
-            with open(run_log_file, 'a+') as log_file:
+            with open(run_log_file, 'w') as log_file:
                 log_file.write('------ Iteration = {}'.format(i) + ' ------\n')
         with open(run_log_file, 'a+') as log_file:
             subprocess.check_call(meta.cmd, stdout=log_file, stderr=log_file, shell=True, cwd=meta.job.workdir)
