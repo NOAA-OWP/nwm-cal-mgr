@@ -298,10 +298,9 @@ def single_exec(agent: 'Agent') -> None:
         agent.model.realization = realization_dst
 
         # Build and run ngen command
-        cmd = agent.cmd
-        logger.info(f"Executing single-run model: {cmd}")
+        logger.info(f"Executing single-run model: {agent.cmd}")
         try:
-            subprocess.check_call(cmd, shell=True, cwd=agent.job.workdir)
+            _execute(agent)
         except subprocess.CalledProcessError as e:
             logger.error(f"NGen execution failed with return code {e.returncode}")
             raise
