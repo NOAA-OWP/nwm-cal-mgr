@@ -9,7 +9,6 @@ logger = logging.getLogger(__name__)
 from .plot_output import plot_valid_output
 from .search import _execute, _calc_metrics
 from .utils import pushd, complete_msg 
-
 if TYPE_CHECKING:
     from ngen.cal.agent import Agent
 
@@ -35,10 +34,12 @@ def run_valid_ctrl_best(agent):
 
     
     if isinstance(agent.model, NoCalibModel):
-        logger.info("Running validation for NoCalibModel (Single Exec)")
+        logger.info(f"Running validation for NoCalibModel (Single Exec) : {agent.run_name}")
         # Execute model run and post-process results
         with pushd(agent.job.workdir):
-            agent.model.execute_model()
+            logger.info(agent.cmd)
+            _execute(agent)
+            #agent.model.execute_model()
             agent.model.postprocess_single_validation_output(agent)
         logger.info("[NoCalibModel] Validation complete.")
         return

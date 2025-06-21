@@ -1078,6 +1078,7 @@ def create_lstm_input(
             'time_step': '1 hour',
             'initial_state': 'zero',
             'basin_name': catID,
+            'basin_id': catID,
             'verbose': 1,
         }
 
@@ -2110,7 +2111,7 @@ def create_realization_file(
                                   "params": {
                                              "python_type": "lstm.bmi_lstm.bmi_LSTM",
                                              "model_type_name": get_model_type_name('lstm'),
-                                             "main_output_variable": "land_surface_water__runoff_volume_flux",
+                                             "main_output_variable": "land_surface_water__runoff_depth",
                                              "init_config": os.path.join(bmi_dir['lstm'], '{{id}}.yml'),
                                              "allow_exceed_end_time": True,
                                              "uses_forcing_file": False}}
@@ -2131,7 +2132,7 @@ def create_realization_file(
         var_maps['output']['sm_out'] = ''
 
         # module output variable for input to t-route
-        main_output_variable = "land_surface_water__runoff_volume_flux"
+        main_output_variable = "land_surface_water__runoff_depth"
 
     # Combine configurations
     model_type_name = "_".join([m1 for m1 in modules if m1 not in ["sloth", "troute"]])
