@@ -2150,6 +2150,7 @@ def create_realization_file(
 
     # Output section
     output_config = {"output_variables": [], "output_header_fields": []}
+    
     for key, value in output_dict.items():
         if key == "output_swe" and var_maps["output"]["swe_out"] != "":
             if value:
@@ -2299,9 +2300,9 @@ def create_calib_config_file(
         basin_yaml['model']['type'] = 'nocalib'
 
     # Save configuration into yaml file
-    with open(config_yaml_file, 'w') as file:
+    with open(config_yaml_file, "w") as file:
         yaml.dump(basin_yaml, file, sort_keys=False, default_flow_style=False, indent=2)
-    logger.info(f'Calibration config file is created at: {config_yaml_file}')
+    logger.info(f"Calibration config file is created at: {config_yaml_file}")
 
 
 def create_partition_file(
