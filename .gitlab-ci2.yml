@@ -1,0 +1,81 @@
+build:
+  stage: build
+  variables:
+    GIT_DEPTH: 100  # ensure we can detect ancestry properly with enough history
+  rules:
+    # Run for protected branches, MR pipelines targeting protected branches, and tag pipelines
+    - if: '$CI_PIPELINE_SOURCE == "trigger"'
+    - when: on_success
+    - if: '$CI_COMMIT_REF_PROTECTED == "true"'
+      when: on_success
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME =~ /^(development|release-candidate|master)$/'
+      when: on_success
+    - if: '$CI_COMMIT_TAG'
+      when: on_success
+    # Also run for direct feature branch pushes (but skip deploy/release)
+    - if: '$CI_COMMIT_BRANCH && $CI_PIPELINE_SOURCE == "push"'
+      when: on_success
+  script:
+  - |
+    echo "Logging in to Gitlab Container Registry to push this project image..."
+    echo $CI_JOB_TOKEN | docker login -u $CI_REGISTRY_USER --password-stdin $CI_REGISTRY
+
+    echo "Logging in to Gitlab Container Registry to pull ngen base image with deploy token..."
+    echo "$DOCKER_AUTH_PASS" | docker login -u "$DOCKER_AUTH_USER" --password-stdin registry.sh.nextgenwaterprediction.com
+
+    echo "Detecting base protected branch for ngen image..."
+
+    # Mark this directory as safe for Git (required in Git 2.35+ in container environments)
+    git config --global --add safe.directory "$CI_PROJECT_DIR"
+    # Fetch the latest state of the known protected branches
+    git fetch origin development release-candidate master
+
+    # Initialize to empty to detect fallback case later
+    BASE_NGEN_IMAGE=""
+
+    # Check if the current branch is descended from one of the protected branches
+    for BRANCH in development release-candidate master; do
+      if git merge-base --is-ancestor origin/$BRANCH HEAD; then
+        echo "This branch is based on $BRANCH"
+        BASE_NGEN_IMAGE="$BRANCH"
+        break
+      fi
+    done
+
+    # Fallback to development with a warning if no base branch was detected
+    if [[ -z "$BASE_NGEN_IMAGE" ]]; then
+      echo "WARNING: Could not determine base protected branch — defaulting to 'development'"
+      BASE_NGEN_IMAGE="development"
+    fi
+
+    # Diagnostics
+    echo "=== Diagnostics ==="
+    echo "CI_PROJECT_NAME: $CI_PROJECT_NAME"
+    echo "CI_COMMIT_REF_NAME: $CI_COMMIT_REF_NAME"
+    echo "CI_PIPELINE_SOURCE: $CI_PIPELINE_SOURCE"
+    echo "CI_MERGE_REQUEST_TARGET_BRANCH_NAME: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
+    echo "DOCKER_IMAGE_NAME: $DOCKER_IMAGE_NAME"
+    echo "DOCKER_IMAGE_TAG: $DOCKER_IMAGE_TAG"
+    echo "BASE_NGEN_IMAGE: $BASE_NGEN_IMAGE"
+    echo "Attempting to pull image: registry.sh.nextgenwaterprediction.com/ngwpc/nwm-ngen/ngen:$BASE_NGEN_IMAGE"
+    echo "==================="
+
+    if ! docker pull registry.sh.nextgenwaterprediction.com/ngwpc/nwm-ngen/ngen:$BASE_NGEN_IMAGE; then
+      echo "ERROR: Failed to pull base ngen image: registry.sh.nextgenwaterprediction.com/ngwpc/nwm-ngen/ngen:$BASE_NGEN_IMAGE"
+      exit 1
+    fi
+
+    # Use the actual branch name for tagging the built image
+    echo "Building ${CI_PROJECT_NAME} docker image..."
+    echo "Running [ docker build --no-cache --build-arg CI_COMMIT_REF_NAME=${CI_COMMIT_REF_NAME} --build-arg IMAGE_TAG=${BASE_NGEN_IMAGE} --secret id=GITLAB_TOKEN,env=GITLAB_TOKEN --tag ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG} . ]"
+
+    # Build the docker image using the selected base image and tag
+    docker build --no-cache \
+      --build-arg CI_COMMIT_REF_NAME=${CI_COMMIT_REF_NAME} \
+      --build-arg IMAGE_TAG=${BASE_NGEN_IMAGE} \
+      --secret id=GITLAB_TOKEN,env=GITLAB_TOKEN \
+      --tag "$DOCKER_IMAGE_NAME:$DOCKER_IMAGE_TAG" .
+
+    docker push "$DOCKER_IMAGE_NAME:$DOCKER_IMAGE_TAG"
+    echo "Docker push complete: $DOCKER_IMAGE_NAME:$DOCKER_IMAGE_TAG"
+    docker logout
