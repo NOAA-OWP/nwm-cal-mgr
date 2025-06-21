@@ -1,7 +1,10 @@
-# GitLab CI/CD configuration file for ngen repository
+# GitLab CI/CD configuration file for ngen-cal repository
+
+# Include GitLab's official Container Scanning template
 include:
   - template: Jobs/Container-Scanning.gitlab-ci.yml
 
+# Define CI pipeline stages
 stages:
   - build
   - unit_test
@@ -10,43 +13,102 @@ stages:
   - deploy
   - release
 
+# Base image for all jobs (can be overridden per job)
 image: registry.sh.nextgenwaterprediction.com/infrastructure/docker/docker:latest
 
 variables:
-    DOCKER_IMAGE_NAME: $CI_REGISTRY_IMAGE
-    DOCKER_IMAGE_TAG: $CI_COMMIT_REF_NAME-test
+  DOCKER_IMAGE_NAME: $CI_REGISTRY_IMAGE
+  DOCKER_IMAGE_TAG: $CI_COMMIT_REF_NAME-test
 
 build:
   stage: build
+  variables:
+    GIT_DEPTH: 100  # ensure we can detect ancestry properly with enough history
+  rules:
+    # Run for protected branches, MR pipelines targeting protected branches, and tag pipelines
+    - if: '$CI_COMMIT_REF_PROTECTED == "true"'
+      when: on_success
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME =~ /^(development|release-candidate|master)$/'
+      when: on_success
+    - if: '$CI_COMMIT_TAG'
+      when: on_success
+    # Also run for direct feature branch pushes (but skip deploy/release)
+    - if: '$CI_COMMIT_BRANCH && $CI_PIPELINE_SOURCE == "push"'
+      when: on_success
   script:
     - echo "Logging in to Gitlab Container Registry..."
     - echo $CI_JOB_TOKEN | docker login -u $CI_REGISTRY_USER --password-stdin $CI_REGISTRY
-    - echo "Building ${CI_PROJECT_NAME} docker image.. "
+
+    - echo "Detecting base protected branch for ngen image..."
+
+    # Mark this directory as safe for Git (required in Git 2.35+ in container environments)
+    - git config --global --add safe.directory "$CI_PROJECT_DIR"
+    # Fetch the latest state of the known protected branches
+    - git fetch origin development release-candidate master
     - |
-      DOCKER_ARG_PARAM=""
-      if [[ -n "$CI_COMMIT_TAG" ]]; then
-        DOCKER_ARG_PARAM="$CI_COMMIT_TAG"
+      # Initialize to empty to detect fallback case later
+      BASE_NGEN_IMAGE=""
+
+      # Check if the current branch is descended from one of the protected branches
+      for BRANCH in development release-candidate master; do
+        if git merge-base --is-ancestor origin/$BRANCH HEAD; then
+          echo "This branch is based on $BRANCH"
+          BASE_NGEN_IMAGE="$BRANCH"
+          break
+        fi
+      done
+
+      # Fallback to development with a warning if no base branch was detected
+      if [[ -z "$BASE_NGEN_IMAGE" ]]; then
+        echo "WARNING: Could not determine base protected branch — defaulting to 'development'"
+        BASE_NGEN_IMAGE="development"
       fi
-      if [[ "$CI_COMMIT_BRANCH" == "release-candidate" ]] || [[ "$CI_COMMIT_BRANCH" == "master" ]]; then
-        DOCKER_ARG_PARAM="$CI_COMMIT_BRANCH"
+
+      echo "Using ngen image tag: $BASE_NGEN_IMAGE"
+    
+      # Explicitly try pulling the ngen base image to detect errors early
+      echo "Checking if ngen base image exists and is accessible..."
+      if ! docker pull registry.sh.nextgenwaterprediction.com/ngwpc/nwm-ngen/ngen:$BASE_NGEN_IMAGE; then
+        echo "ERROR: Failed to pull base ngen image: registry.sh.nextgenwaterprediction.com/ngwpc/nwm-ngen/ngen:$BASE_NGEN_IMAGE"
+        echo "Make sure the image exists and you have permission to access it."
+        exit 1
       fi
-      if [[ -n "$DOCKER_ARG_PARAM" ]]; then
-        echo "Running [ docker build --no-cache CI_COMMIT_REF_NAME=${CI_COMMIT_REF_NAME} --secret id=GITLAB_TOKEN,env=GITLAB_TOKEN --build-arg IMAGE_TAG=${DOCKER_ARG_PARAM} --tag "$DOCKER_IMAGE_NAME:$DOCKER_IMAGE_TAG" . ]"
-        docker build --no-cache --build-arg CI_COMMIT_REF_NAME=${CI_COMMIT_REF_NAME} --secret id=GITLAB_TOKEN,env=GITLAB_TOKEN --build-arg IMAGE_TAG=${DOCKER_ARG_PARAM} --tag "$DOCKER_IMAGE_NAME:$DOCKER_IMAGE_TAG" .
-      else
-        echo "Running [ docker build --no-cache --build-arg CI_COMMIT_REF_NAME=${CI_COMMIT_REF_NAME} --secret id=GITLAB_TOKEN,env=GITLAB_TOKEN --tag "$DOCKER_IMAGE_NAME:$DOCKER_IMAGE_TAG" . ]"
-        docker build --no-cache --build-arg CI_COMMIT_REF_NAME=${CI_COMMIT_REF_NAME} --secret id=GITLAB_TOKEN,env=GITLAB_TOKEN --tag "$DOCKER_IMAGE_NAME:$DOCKER_IMAGE_TAG" .
-      fi
+
+      # Use the actual branch name for tagging the built image
+    - echo "Building ${CI_PROJECT_NAME} docker image..."
+
+      # Display full docker build command with arguments
+    - echo "Running [ docker build --no-cache --build-arg CI_COMMIT_REF_NAME=${CI_COMMIT_REF_NAME} --build-arg IMAGE_TAG=${BASE_NGEN_IMAGE} --secret id=GITLAB_TOKEN,env=GITLAB_TOKEN --tag ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG} . ]"
+
+      # Build the docker image using the selected base image and tag
+    - |
+      docker build --no-cache \
+        --build-arg CI_COMMIT_REF_NAME=${CI_COMMIT_REF_NAME} \
+        --build-arg IMAGE_TAG=${BASE_NGEN_IMAGE} \
+        --secret id=GITLAB_TOKEN,env=GITLAB_TOKEN \
+        --tag "$DOCKER_IMAGE_NAME:$DOCKER_IMAGE_TAG" .
+
     - docker push $DOCKER_IMAGE_NAME:$DOCKER_IMAGE_TAG
     - docker logout
 
 unit-test:
   stage: unit_test
   image: $DOCKER_IMAGE_NAME:$DOCKER_IMAGE_TAG
+  needs: [build]
+  rules:
+    - if: '$CI_COMMIT_REF_PROTECTED == "true"'
+      when: on_success
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME =~ /^(development|release-candidate|master)$/'
+      when: on_success
+    - if: '$CI_COMMIT_TAG'
+      when: on_success
+    - if: '$CI_COMMIT_BRANCH && $CI_PIPELINE_SOURCE == "push"'
+      when: on_success
+
   script:
     - echo "Running Unit Tests..."
     - cd /ngen-app/ngen-cal
-   # Debugging commands to check the current commit
+    # Debugging commands to check the current commit
     - echo "Current Git commit hash:"
     - git rev-parse HEAD  # Shows the current commit hash being used
     - echo "Last commit log:"
@@ -69,14 +131,28 @@ sonarqube:
     key: "${CI_JOB_NAME}"
     paths:
       - .sonar/cache
+  needs: [build]
+  rules:
+    - if: '$CI_COMMIT_REF_PROTECTED == "true"'
+      when: on_success
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME =~ /^(development|release-candidate|master)$/'
+      when: on_success
+    - if: '$CI_COMMIT_TAG'
+      when: on_success
   script:
     - sonar-scanner -X -Dsonar.verbose=true
-  allow_failure: true # FIXME
+  allow_failure: true
 
 container_scanning:
   stage: test
-  needs:
-    - build
+  needs: [build]
+  rules:
+    - if: '$CI_COMMIT_REF_PROTECTED == "true"'
+      when: on_success
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME =~ /^(development|release-candidate|master)$/'
+      when: on_success
+    - if: '$CI_COMMIT_TAG'
+      when: on_success
   variables:
     SECURE_LOG_LEVEL: info
     CS_SEVERITY_THRESHOLD: UNKNOWN
@@ -84,6 +160,12 @@ container_scanning:
 
 deploy:
   stage: deploy
+  needs: [build]
+  rules:
+    - if: '$CI_COMMIT_REF_PROTECTED == "true"'
+      when: on_success
+    - if: '$CI_COMMIT_TAG'
+      when: on_success
   script:
     - echo "Logging in to Gitlab Container Registry to push the image..."
     - echo $CI_JOB_TOKEN | docker login -u $CI_REGISTRY_USER --password-stdin $CI_REGISTRY
@@ -91,11 +173,13 @@ deploy:
     - docker tag $DOCKER_IMAGE_NAME:$DOCKER_IMAGE_TAG $DOCKER_IMAGE_NAME:latest
     - docker push $DOCKER_IMAGE_NAME:latest
     - docker logout
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "development"'
 
 release:
   stage: release
+  needs: [build]
+  rules:
+    - if: '$CI_COMMIT_TAG'
+      when: on_success
   script:
     - echo "Logging in to Gitlab Container Registry to push the image..."
     - echo $CI_JOB_TOKEN | docker login -u $CI_REGISTRY_USER --password-stdin $CI_REGISTRY
@@ -103,5 +187,4 @@ release:
     - docker tag $DOCKER_IMAGE_NAME:$DOCKER_IMAGE_TAG $DOCKER_IMAGE_NAME:$CI_COMMIT_TAG
     - docker push $DOCKER_IMAGE_NAME:$CI_COMMIT_TAG
     - docker logout
-  rules:
-    - if: $CI_COMMIT_TAG
+
