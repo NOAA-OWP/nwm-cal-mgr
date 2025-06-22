@@ -65,9 +65,8 @@ build:
     - echo "Detecting base protected branch for ngen image..."
     - git config --global --add safe.directory "$CI_PROJECT_DIR"
     - git fetch origin development release-candidate master
-
-    - BASE_NGEN_IMAGE=""
     - |
+      BASE_NGEN_IMAGE=""
       for BRANCH in development release-candidate master; do
         if git merge-base --is-ancestor origin/$BRANCH HEAD; then
           echo "This branch is based on $BRANCH"
@@ -75,32 +74,26 @@ build:
           break
         fi
       done
-    - |
       if [[ -z "$BASE_NGEN_IMAGE" ]]; then
         echo "WARNING: Could not determine base protected branch — defaulting to 'development'"
         BASE_NGEN_IMAGE="development"
       fi
-
-    # Show basic CI context for debugging
-    - echo "=== Diagnostics ==="
-    - echo "CI_PROJECT_NAME: $CI_PROJECT_NAME"
-    - echo "CI_COMMIT_REF_NAME: $CI_COMMIT_REF_NAME"
-    - echo "BASE_NGEN_IMAGE: $BASE_NGEN_IMAGE"
-    - echo "==================="
-
-    # Pull base image for context-aware Docker builds
-    - docker pull registry.sh.nextgenwaterprediction.com/ngwpc/nwm-ngen/ngen:$BASE_NGEN_IMAGE
-
-    - echo "Building ${CI_PROJECT_NAME} Docker image..."
-    - docker build --no-cache \
+      echo "=== Diagnostics ==="
+      echo "CI_PROJECT_NAME: $CI_PROJECT_NAME"
+      echo "CI_COMMIT_REF_NAME: $CI_COMMIT_REF_NAME"
+      echo "BASE_NGEN_IMAGE: $BASE_NGEN_IMAGE"
+      echo "==================="
+      docker pull registry.sh.nextgenwaterprediction.com/ngwpc/nwm-ngen/ngen:$BASE_NGEN_IMAGE
+      echo "Building ${CI_PROJECT_NAME} Docker image..."
+      docker build --no-cache \
         --build-arg CI_COMMIT_REF_NAME=${CI_COMMIT_REF_NAME} \
         --build-arg IMAGE_TAG=${BASE_NGEN_IMAGE} \
         --secret id=GITLAB_TOKEN,env=GITLAB_TOKEN \
         --tag "$DOCKER_IMAGE_NAME:$DOCKER_IMAGE_TAG" .
 
-    - docker push "$DOCKER_IMAGE_NAME:$DOCKER_IMAGE_TAG"
-    - echo "Docker push complete: $DOCKER_IMAGE_NAME:$DOCKER_IMAGE_TAG"
-    - docker logout
+      docker push "$DOCKER_IMAGE_NAME:$DOCKER_IMAGE_TAG"
+      echo "Docker push complete: $DOCKER_IMAGE_NAME:$DOCKER_IMAGE_TAG"
+      docker logout
 
 # ------------------------------------------------------------------------------
 # Unit Test Stage
@@ -140,7 +133,7 @@ sonarqube:
   needs: [build]
   script:
     - sonar-scanner -X -Dsonar.verbose=true
-  allow_failure: true  # Static analysis should not block pipeline
+  allow_failure: true
 
 # ------------------------------------------------------------------------------
 # Container Security Scanning
