@@ -19,6 +19,7 @@ image: registry.sh.nextgenwaterprediction.com/infrastructure/docker/docker:lates
 variables:
   DOCKER_IMAGE_NAME: $CI_REGISTRY_IMAGE
   DOCKER_IMAGE_TAG: $CI_COMMIT_REF_NAME
+  NGEN_IMAGE_TAG: ${NGEN_IMAGE_TAG:-development}  # default fallback
 
 # ------------------------------------------------------------------------
 # Required Credentials for ngen Docker Image Pull
@@ -81,23 +82,39 @@ build:
     - echo "=== Logging in to GitLab Container Registry (for ngen image pull) ==="
     - echo "$DOCKER_AUTH_PASS" | docker login -u "$DOCKER_AUTH_USER" --password-stdin registry.sh.nextgenwaterprediction.com
 
-    - echo "=== Detecting base protected branch for ngen image ==="
+    - echo "=== Detecting base ngen image tag ==="
     - git config --global --add safe.directory "$CI_PROJECT_DIR"
     - git fetch origin development release-candidate master
 
     - |
-      BASE_NGEN_IMAGE=""
-      for BRANCH in development release-candidate master; do
-        if git merge-base --is-ancestor origin/$BRANCH HEAD; then
-          echo "This branch is based on $BRANCH"
-          BASE_NGEN_IMAGE="$BRANCH"
-          break
-        fi
-      done
+      # ----------------------------------------------------------------------
+      # Determine which ngen image to use as a base:
+      #
+      #   1. If this pipeline was triggered by ngen (e.g. on a tag),
+      #      then the triggering job can explicitly pass in NGEN_IMAGE_TAG.
+      #
+      #   2. Otherwise, infer the most likely ngen image to use based on
+      #      ancestry with one of the protected branches.
+      #
+      #   3. If no ancestry match is found, fall back to 'development'.
+      # ----------------------------------------------------------------------
+      if [[ -n "$NGEN_IMAGE_TAG" ]]; then
+        BASE_NGEN_IMAGE="$NGEN_IMAGE_TAG"
+        echo "Using passed-in NGEN_IMAGE_TAG: $BASE_NGEN_IMAGE"
+      else
+        BASE_NGEN_IMAGE=""
+        for BRANCH in development release-candidate master; do
+          if git merge-base --is-ancestor origin/$BRANCH HEAD; then
+            echo "This branch is based on $BRANCH"
+            BASE_NGEN_IMAGE="$BRANCH"
+            break
+          fi
+        done
 
-      if [[ -z "$BASE_NGEN_IMAGE" ]]; then
-        echo "WARNING: Could not determine base protected branch — defaulting to 'development'"
-        BASE_NGEN_IMAGE="development"
+        if [[ -z "$BASE_NGEN_IMAGE" ]]; then
+          echo "WARNING: Could not determine base protected branch — defaulting to 'development'"
+          BASE_NGEN_IMAGE="development"
+        fi
       fi
 
      echo "=== Diagnostics ==="
