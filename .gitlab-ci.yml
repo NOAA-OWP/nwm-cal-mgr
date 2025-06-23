@@ -89,14 +89,9 @@ build:
     - |
       # ----------------------------------------------------------------------
       # Determine which ngen image to use as a base:
-      #
-      #   1. If this pipeline was triggered by ngen (e.g. on a tag),
-      #      then the triggering job can explicitly pass in NGEN_IMAGE_TAG.
-      #
-      #   2. Otherwise, infer the most likely ngen image to use based on
-      #      ancestry with one of the protected branches.
-      #
-      #   3. If no ancestry match is found, fall back to 'development'.
+      #   1. If passed in via NGEN_IMAGE_TAG (e.g. from triggered pipeline), use that.
+      #   2. Otherwise, infer from ancestry.
+      #   3. Fallback to 'development'.
       # ----------------------------------------------------------------------
       if [[ -n "$NGEN_IMAGE_TAG" ]]; then
         BASE_NGEN_IMAGE="$NGEN_IMAGE_TAG"
@@ -117,7 +112,7 @@ build:
         fi
       fi
 
-     echo "=== Diagnostics ==="
+      echo "=== Diagnostics ==="
       echo "CI_PROJECT_NAME: $CI_PROJECT_NAME"
       echo "CI_COMMIT_REF_NAME: $CI_COMMIT_REF_NAME"
       echo "CI_PIPELINE_SOURCE: $CI_PIPELINE_SOURCE"
@@ -127,29 +122,34 @@ build:
       echo "Computed DOCKER_IMAGE_TAG: $DOCKER_IMAGE_TAG"
       echo "==================="
 
-    - echo "Pulling ngen base image..."
-    - docker pull registry.sh.nextgenwaterprediction.com/ngwpc/nwm-ngen/ngen:$BASE_NGEN_IMAGE
-
-    - echo "Logging out of ngen image registry..."
-    - docker logout registry.sh.nextgenwaterprediction.com
-
-    - echo "=== Logging in to GitLab Registry for push ==="
-    - echo $CI_JOB_TOKEN | docker login -u $CI_REGISTRY_USER --password-stdin $CI_REGISTRY
-
     - |
-      echo "Building ${CI_PROJECT_NAME} Docker image..."
-      docker build --no-cache \
-        --build-arg CI_COMMIT_REF_NAME="${CI_COMMIT_REF_NAME}" \
-        --build-arg IMAGE_TAG="${BASE_NGEN_IMAGE}" \
-        --secret id=GITLAB_TOKEN,env=GITLAB_TOKEN \
-        --tag "$DOCKER_IMAGE_NAME:$DOCKER_IMAGE_TAG" .
+      echo "Pulling ngen base image: $BASE_NGEN_IMAGE"
+      docker pull registry.sh.nextgenwaterprediction.com/ngwpc/nwm-ngen/ngen:$BASE_NGEN_IMAGE
 
-    - echo "Pushing ${CI_PROJECT_NAME} Docker image..."
-    - docker push "$DOCKER_IMAGE_NAME:$DOCKER_IMAGE_TAG"
+      echo "Logging out of ngen image registry..."
+      docker logout registry.sh.nextgenwaterprediction.com
 
-    - echo "Logging out of Docker registries..."
-    - docker logout "$CI_REGISTRY"
-    - docker logout registry.sh.nextgenwaterprediction.com
+      echo "=== Logging in to GitLab Registry for push ==="
+      echo "$CI_JOB_TOKEN" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+
+      echo "Building Docker image: $DOCKER_IMAGE_NAME:$DOCKER_IMAGE_TAG"
+      docker build --build-arg CI_COMMIT_REF_NAME="${CI_COMMIT_REF_NAME}" \
+                   --build-arg IMAGE_TAG="${BASE_NGEN_IMAGE}" \
+                   --secret id=GITLAB_TOKEN,env=GITLAB_TOKEN \
+                   --tag "$DOCKER_IMAGE_NAME:$DOCKER_IMAGE_TAG" .
+
+      echo "Pushing Docker image: $DOCKER_IMAGE_NAME:$DOCKER_IMAGE_TAG"
+      docker push "$DOCKER_IMAGE_NAME:$DOCKER_IMAGE_TAG"
+
+      if [[ "$CI_COMMIT_REF_PROTECTED" == "true" && "$CI_PIPELINE_SOURCE" == "push" && "$CI_COMMIT_REF_NAME" == "development" ]]; then
+        echo "Also tagging and pushing as :latest"
+        docker tag "$DOCKER_IMAGE_NAME:$DOCKER_IMAGE_TAG" "$DOCKER_IMAGE_NAME:latest"
+        docker push "$DOCKER_IMAGE_NAME:latest"
+      fi
+
+      docker logout "$CI_REGISTRY"
+      docker logout
+
 
 # ------------------------------------------------------------------------
 # Unit Test Stage
