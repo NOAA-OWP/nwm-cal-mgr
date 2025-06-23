@@ -21,6 +21,28 @@ variables:
   DOCKER_IMAGE_TAG: $CI_COMMIT_REF_NAME
 
 # ------------------------------------------------------------------------
+# Required Credentials for ngen Docker Image Pull
+# ------------------------------------------------------------------------
+# The ngen-cal build stage pulls the ngen image from the private registry:
+#   registry.sh.nextgenwaterprediction.com/ngwpc/nwm-ngen/ngen
+#
+# This requires read access using credentials defined as GitLab CI/CD variables:
+#
+#   DOCKER_AUTH_USER - A GitLab deploy token username or personal access token username
+#   DOCKER_AUTH_PASS - The matching deploy token or personal access token value
+#
+# To create a deploy token (recommended):
+#   1. Go to the ngen project repository in GitLab
+#   2. Go to Settings > Repository > Deploy Tokens
+#   3. Add a token with at least `read_registry` scope
+#   4. Add the token name and secret to this project’s CI/CD variables as:
+#       DOCKER_AUTH_USER = <token username>
+#       DOCKER_AUTH_PASS = <token password>
+#
+# These variables must be defined at the project or group level in GitLab.
+# ------------------------------------------------------------------------
+
+# ------------------------------------------------------------------------
 # Pipeline trigger rules — when the pipeline should run at all
 # ------------------------------------------------------------------------
 workflow:
@@ -78,12 +100,14 @@ build:
         BASE_NGEN_IMAGE="development"
       fi
 
-      echo "=== Diagnostics ==="
+     echo "=== Diagnostics ==="
       echo "CI_PROJECT_NAME: $CI_PROJECT_NAME"
       echo "CI_COMMIT_REF_NAME: $CI_COMMIT_REF_NAME"
-      echo "BASE_NGEN_IMAGE: $BASE_NGEN_IMAGE"
+      echo "CI_PIPELINE_SOURCE: $CI_PIPELINE_SOURCE"
+      echo "CI_MERGE_REQUEST_TARGET_BRANCH_NAME: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
       echo "DOCKER_IMAGE_NAME: $DOCKER_IMAGE_NAME"
       echo "DOCKER_IMAGE_TAG: $DOCKER_IMAGE_TAG"
+      echo "Computed DOCKER_IMAGE_TAG: $DOCKER_IMAGE_TAG"
       echo "==================="
 
     - echo "Pulling ngen base image..."
@@ -98,8 +122,8 @@ build:
     - |
       echo "Building ${CI_PROJECT_NAME} Docker image..."
       docker build --no-cache \
-        --build-arg CI_COMMIT_REF_NAME=${CI_COMMIT_REF_NAME} \
-        --build-arg IMAGE_TAG=${BASE_NGEN_IMAGE} \
+        --build-arg CI_COMMIT_REF_NAME="${CI_COMMIT_REF_NAME}" \
+        --build-arg IMAGE_TAG="${BASE_NGEN_IMAGE}" \
         --secret id=GITLAB_TOKEN,env=GITLAB_TOKEN \
         --tag "$DOCKER_IMAGE_NAME:$DOCKER_IMAGE_TAG" .
 
@@ -168,7 +192,7 @@ deploy:
   script:
     - echo "Logging in to GitLab Container Registry to push the image..."
     - echo $CI_JOB_TOKEN | docker login -u $CI_REGISTRY_USER --password-stdin $CI_REGISTRY
-    - echo "Pushing latest tag to registry..."
+    - echo "Pushing to the docker registry"
     - docker tag $DOCKER_IMAGE_NAME:$DOCKER_IMAGE_TAG $DOCKER_IMAGE_NAME:latest
     - docker push $DOCKER_IMAGE_NAME:latest
     - docker logout
@@ -185,7 +209,7 @@ release:
   script:
     - echo "Logging in to GitLab Container Registry to push the image..."
     - echo $CI_JOB_TOKEN | docker login -u $CI_REGISTRY_USER --password-stdin $CI_REGISTRY
-    - echo "Pushing tagged release to registry..."
+    - echo "Pushing to the docker registry"
     - docker tag $DOCKER_IMAGE_NAME:$DOCKER_IMAGE_TAG $DOCKER_IMAGE_NAME:$CI_COMMIT_TAG
     - docker push $DOCKER_IMAGE_NAME:$CI_COMMIT_TAG
     - docker logout
