@@ -25,8 +25,6 @@ if not logging.getLogger().hasHandlers():
         datefmt="%Y-%m-%d %H:%M:%S"
     )
 
-logger.info('info log from create_input')
-
 from createInput import ginputfunc as gfun
 from createInput import settings
 
