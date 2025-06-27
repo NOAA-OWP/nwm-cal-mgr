@@ -2266,7 +2266,6 @@ def create_calib_config_file(
                 f"{par_file} is not a valid file or folder with calibration parameter files for the chosen modules"
             )
 
-
     params_range_dict = {}
     # Create configuration
     basin_yaml = {'general': general_dict}
@@ -2292,7 +2291,7 @@ def create_calib_config_file(
     ngen_file_link = os.path.join(workdir, "Input/" + os.path.basename(model_dict["binary"])[0:4])
     if os.path.exists(ngen_file_link):
         os.remove(ngen_file_link)
-    os.symlink(model_dict['binary'], ngen_file_link)
+    os.symlink(model_dict["binary"], ngen_file_link)
 
     model_dict['binary'] = ngen_file_link
     basin_yaml['model'] = model_dict
