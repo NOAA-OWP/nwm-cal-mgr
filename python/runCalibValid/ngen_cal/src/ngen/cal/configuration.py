@@ -140,14 +140,6 @@ class NoCalibModel(ModelExec):
     evaluation_range: Optional[List[datetime]] = None
     metrics: Optional[Dict[str, float]] = None
 
-    def execute_model(self):
-        """
-        Execute the model run for single-execution validation.
-        This mirrors the interface of calibrated models.
-        """
-        logger.info("[NoCalibModel] Executing model (validation run)")
-        self.run(self.get_args())
-
     def create_validation_configs(self, agent):
         """
         For NoCalibModel, generate dummy 'valid_control' and 'valid_best' config YAMLs

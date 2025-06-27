@@ -35,10 +35,11 @@ def run_valid_ctrl_best(agent):
 
     
     if isinstance(agent.model, NoCalibModel):
-        logger.info("Running validation for NoCalibModel (Single Exec)")
+        logger.info(f"Running validation for NoCalibModel (Single Exec): {agent.run_name}")
         # Execute model run and post-process results
         with pushd(agent.job.workdir):
-            agent.model.execute_model()
+            logger.info(agent.cmd)
+            _execute(agent)
             agent.model.postprocess_single_validation_output(agent)
         logger.info("[NoCalibModel] Validation complete.")
         return
