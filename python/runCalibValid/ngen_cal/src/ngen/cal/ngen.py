@@ -244,7 +244,11 @@ class NgenBase(ModelExec):
             custom_args = True
 
         if( parallel is not None and partitions is not None):
-            binary = f'mpirun -n {parallel} {binary}'
+            #Don't prefix the mpirun command if it already exists.
+            #This prevent inserting redundant mpirun command in situations
+            #such as cloning a Ngen object from another Ngen object
+            if not binary.startswith('mpirun -n'):
+               binary = f'mpirun -n {parallel} {binary}'
             if not custom_args:
                 # only append this if args weren't already custom defined by user
                 args += f' {partitions}'
