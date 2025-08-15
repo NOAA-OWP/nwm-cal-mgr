@@ -1,86 +1,192 @@
-#!/usr/bin/env python
-import yaml
-from os import chdir
+"""
+This is the main script to read calibration configuration file and execute calibration run.
+
+@author: Nels Frazer and Xia Feng
+"""
+
+import argparse
+import logging
+import os
+import sys
+import time
+from datetime import datetime, timezone
 from pathlib import Path
-from ngen.cal.configuration import General
-from ngen.cal.search import dds, dds_set, pso_search
-from ngen.cal.strategy import Algorithm
-from ngen.cal.agent import Agent
 
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from typing import Mapping, Any
+import yaml
+from calib.agent import Agent
+from calib.configuration import General, NoCalibModel
+from calib.git_util import print_git_info_all
+from calib.search import dds, dds_set, gwo_search, pso_search, single_exec
+from calib.strategy import Algorithm
 
-def main(general: General, model_conf: Mapping[str, Any]):
-    #seed the random number generators if requested
+LOG = logging.getLogger(__name__)
+
+
+def create_timestamp() -> str:
+    now = datetime.now(timezone.utc)
+    return now.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3]
+
+
+def log_level_set():
+    """
+    Set logging level and specify logger configuration.
+
+    Arguments
+    ---------
+    input_parameters (dict): User input logging parameters
+
+    Returns
+    -------
+    None
+
+    Notes
+    -----
+    In the absense of user-specified logging level, level defaults to DEBUG
+    See also https://docs.python.org/3/library/logging.html
+
+    """
+
+    log_level = "DEBUG"
+    if True:
+        BASE_DIR = Path(__file__).resolve().parent.parent
+
+        if Path("/ngencerf/data").exists():
+            log_file_dir = Path(
+                f"/ngencerf/data/run-logs/ngen_cal_{create_timestamp()}/"
+            )
+        else:
+            log_file_dir = Path(BASE_DIR) / f"run-logs/ngen_cal_{create_timestamp()}/"
+
+        log_file_name = "ngen_cal.log"
+        os.makedirs(log_file_dir, exist_ok=True)
+        logFilePath = os.path.join(log_file_dir, log_file_name)
+        try:
+            logFile = open(logFilePath, "a")
+            print(f"Logging into: {logFilePath}")
+        except IOError:
+            print(
+                f"Can't Open local directory Log File: {logFilePath}", file=sys.stderr
+            )
+
+        logging.Formatter.converter = time.gmtime
+        logging.basicConfig(
+            force=True,
+            level=log_level,
+            format="%(asctime)s.%(msecs)03d NGEN_CAL %(levelname)s    %(message)s",
+            datefmt="%Y-%m-%dT%H:%M:%S",
+            handlers=[
+                logging.FileHandler(logFilePath, mode="a"),  # Log to a file
+                logging.StreamHandler(sys.stdout),
+            ],
+        )
+    else:
+        logging.basicConfig(
+            level=log_level,
+            format="%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)s - %(funcName)s]: %(message)s",
+            stream=sys.stderr,
+        )
+
+
+def main(general: General, model_conf):
+    # Seed the random number generators if requested
     if general.random_seed is not None:
         import random
+
         random.seed(general.random_seed)
         import numpy as np
+
         np.random.seed(general.random_seed)
 
-    print("Starting calib")
+    # setup logging
+    log_level_set()
+
+    LOG.info("Starting calib")
 
     """
     TODO calibrate each "catcment" independely, but there may be something interesting in grouping various formulation params
     into a single variable vector and calibrating a set of heterogenous formultions...
     """
     start_iteration = 0
-    #Initialize the starting agent
-    agent = Agent(model_conf, general.workdir, general.log, general.restart, general.strategy.parameters)
+
+    # Initialize the starting agent
+    agent = Agent(model_conf, general.calib_path, general, general.log, general.restart)
+
+    # set environment variable for ngencerf backend
+    os.environ["NGEN_RESULTS_DIR"] = str(Path(agent.workdir).parent.parent)
+    logging.info(
+        f"Set environment variable NGEN_RESULTS_DIR to: {os.environ['NGEN_RESULTS_DIR']}"
+    )
+
+    import numpy as np
+
     if general.strategy.algorithm == Algorithm.dds:
-        func = dds_set #FIXME what about explicit/dds
         start_iteration = general.start_iteration
         if general.restart:
             start_iteration = agent.restart()
-    elif general.strategy.algorithm == Algorithm.pso: #TODO how to restart PSO?
+        func = dds_set  # FIXME what about explicit/dds
+    elif general.strategy.algorithm == Algorithm.pso:  # TODO how to restart PSO?
         if agent.model.strategy != "uniform":
-            print("Can only use PSO with the uniform model strategy")
+            LOG.warning("Can only use PSO with the uniform model strategy")
             return
         if general.restart:
-            print("Restart not supported for PSO search, starting at 0")
+            LOG.warning("Restart not supported for PSO search, starting at 0")
         func = pso_search
+    elif general.strategy.algorithm == Algorithm.gwo:
+        if agent.model.strategy != "uniform":
+            LOG.warning("Can only use GWO with the uniform model strategy")
+            return
+        if general.restart:
+            start_iteration = agent.restart()
+        func = gwo_search
 
-    print("Starting Iteration: {}".format(start_iteration))
-    # print("Starting Best param: {}".format(meta.best_params))
-    # print("Starting Best score: {}".format(meta.best_score))
-    print("Starting calibration loop")
+    LOG.info("Starting Iteration: {}".format(start_iteration))
+    LOG.info("Starting calibration loop")
+    if general.strategy.algorithm in [Algorithm.pso, Algorithm.gwo]:
+        LOG.info(
+            f"The full set of plots are only produced for the first worker at: {agent.job.workdir}"
+        )
 
+    # NOTE this assumes we calibrate each catchment independently, it may be possible to design an "aggregate" calibration
+    # that works in a more sophisticated manner.
+    if isinstance(agent.model, NoCalibModel):
+        LOG.info("Running Single Execution Model Calibration (NoCalibModel)")
+        single_exec(agent)
 
-    #NOTE this assumes we calibrate each catchment independently, it may be possible to design an "aggregate" calibration
-    #that works in a more sophisticated manner.
-    if agent.model.strategy == 'explicit': #FIXME this needs a refactor...should be able to use a calibration_set with explicit loading
+        LOG.info("Calibration complete.")
+    # FIXME this needs a refactor...should be able to use a calibration_set with explicit loading
+    elif agent.model.strategy.strategy == "explicit":
         for catchment in agent.model.adjustables:
             dds(start_iteration, general.iterations, catchment, agent)
 
-    elif agent.model.strategy == 'independent':
-        #for catchment_set in agent.model.adjustables:
+    elif agent.model.strategy.strategy == "independent":
+        # for catchment_set in agent.model.adjustables:
         func(start_iteration, general.iterations, agent)
 
-    elif agent.model.strategy == 'uniform':
-        #for catchment_set in agent.model.adjustables:
-        #    func(start_iteration, general.iterations, catchment_set, agent)
+    elif agent.model.strategy.strategy == "uniform":
         func(start_iteration, general.iterations, agent)
+
 
 if __name__ == "__main__":
+    print_git_info_all()
 
-
-    import argparse
-
-    # get the command line parser
+    # Create the command line parser
     parser = argparse.ArgumentParser(
-        description='Calibrate catchments in NGEN NWM architecture.')
-    parser.add_argument('config_file', type=Path,
-                        help='The configuration yaml file for catchments to be operated on')
+        description="Calibrate catchments in NGEN architecture."
+    )
+    parser.add_argument(
+        "config_file",
+        type=Path,
+        help="The configuration yaml file for catchments to be operated on",
+    )
 
     args = parser.parse_args()
-    
+
     with open(args.config_file) as file:
         conf = yaml.safe_load(file)
-    
-    general = General(**conf['general'])
-    # change directory to workdir
-    chdir(general.workdir)
 
-    #model = Model(model=conf['model']).model
-    main(general, conf['model'])
+    general = General(**conf["general"])
+
+    # Change directory to workdir
+    os.chdir(general.workdir)
+
+    main(general, conf["model"])

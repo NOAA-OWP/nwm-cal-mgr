@@ -1,13 +1,10 @@
 # NGen Calibration
 
-**Description**:  Supporting code/workflows for automated calibration of [NGen](https://github.com/noaa-owp/ngen) Formulations using Dynamic Dimensioned Search (DDS)
-
-  - **Technology stack**: Python based workflow for generating [NGen](https://github.com/noaa-owp/ngen) parameter formulation permutations and running these through the [NGen](https://github.com/noaa-owp/ngen) framework driver.
-  - **Status**:  This work is in pre-release development, for more details see the [CHANGELOG](CHANGELOG.md).
+**Description**:  Supporting code/workflows for automated calibration of [NGen](https://github.com/noaa-owp/ngen) Formulations using Dynamic Dimensioned Search (DDS), Grey Wolf Optimizer(GWO), and Particle Swarm Optimizer (PSO)
 
 ## Dependencies
 
-Unit testing done with [pytest](https://github.com/pytest-dev/pytest).  See [requirements.txt](requirements.txt) for other specific python dependencies.
+See [calib/requirements.txt](python/calib/requirements.txt) and [config/requirements.txt](python/config/requirements.txt) for specific python dependencies.
 
 ## Installation
 
@@ -23,20 +20,9 @@ Unit testing done with [pytest](https://github.com/pytest-dev/pytest).  See [req
 
 ## How to test the software
 
+`TODO`
 
-Install `pytest` and other python dependencies (`pip install -r python/requirements.txt`)
-Or create a virtual environment:
-```
-mkdir venv
-virtualenv ./venv
-source ./venv/bin/activate
-pip install -r python/requirements.txt
-```
-Then use `pytest` to run the tests:
-`pytest --log-cli-level 0 python/ngen-cal/test/`
 ## Known issues
-## Known issues
-
 
 ## Getting help
 
