@@ -7,6 +7,8 @@ This is the main script to read calibration configuration file and execute calib
 import argparse
 import logging
 import os
+import pwd
+import stat
 import sys
 import time
 from datetime import datetime, timezone
@@ -60,6 +62,39 @@ def log_level_set():
             log_file_dir = Path(BASE_DIR) / f"run-logs/ngen_cal_{create_timestamp()}/"
 
         log_file_name = "ngen_cal.log"
+
+        # -- diagnostics
+
+        print(f"[DEBUG] Attempting to create log dir: {log_file_dir}")
+        print(f"[DEBUG] Current working dir: {os.getcwd()}")
+
+        # who am I inside the container?
+        try:
+            run_user = pwd.getpwuid(os.getuid()).pw_name
+        except KeyError:
+            run_user = f"unknown-user (uid {os.getuid()})"
+        print(f"[DEBUG] Running as UID: {os.getuid()} ({run_user})")
+
+        # Check both parent dir and the target
+        path = Path(log_file_dir)
+        for level in [path.parent, path]:
+            if not level.exists():
+                print(f"[LOG] {level} → does not exist yet — skipping stat()")
+                continue
+
+            s = level.stat()
+            perms = stat.filemode(s.st_mode)
+            can_write = os.access(level, os.W_OK)
+            can_traverse = os.access(level, os.X_OK)
+            try:
+                owner_name = pwd.getpwuid(s.st_uid).pw_name
+            except KeyError:
+                owner_name = f"unknown-user (uid {s.st_uid})"
+            print(f"[DEBUG] {level} → owner={owner_name}, perms={perms}, "
+                  f"writable={can_write}, traversable={can_traverse}")
+
+        print("[DEBUG] Proceeding to makedirs()")
+
         os.makedirs(log_file_dir, exist_ok=True)
         logFilePath = os.path.join(log_file_dir, log_file_name)
         try:
