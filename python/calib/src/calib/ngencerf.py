@@ -12,8 +12,8 @@ NGENCERF_URL = os.environ.get("NGENCERF_URL", "http://localhost:8000/")
 NGENCERF_REPORT_ITERATION_ENDPOINT = "calibration/report_iteration/"
 
 # Retry configuration (same semantics as the Bash script)
-RETRY_DELAY = 300  # seconds between retries (5 minutes)
-MAX_RETRIES = 144  # 12 hours total retry window
+RETRY_DELAY = 3  # seconds between retries (5 minutes)
+MAX_RETRIES = 1  # 12 hours total retry window
 
 logger = logging.getLogger(__name__)
 
