@@ -28,7 +28,7 @@ class CatchmentRealization(Realization):
 class NgenRealization(BaseModel):
     """A complete ngen realization confiiguration model, including global and catchment overrides"""
 
-    global_config: Realization = Field(default_factory=Realization, alias="global")
+    global_config: Realization = Field(alias="global")
     time: Time
     routing: Optional[Routing] = None
     # FIXME have not tested catchments...
@@ -51,5 +51,5 @@ class NgenRealization(BaseModel):
         self.global_config.resolve_paths()
         for k, v in self.catchments.items():
             v.resolve_paths()
-        if self.routing != None:
+        if self.routing is not None:
             self.routing.resolve_paths()
