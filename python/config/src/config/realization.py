@@ -28,7 +28,7 @@ class CatchmentRealization(Realization):
 class NgenRealization(BaseModel):
     """A complete ngen realization confiiguration model, including global and catchment overrides"""
 
-    global_config: Realization = Field(alias="global")
+    global_config: Realization = Field(default_factory=Realization, alias="global")
     time: Time
     routing: Optional[Routing] = None
     # FIXME have not tested catchments...

@@ -1,0 +1,163 @@
+{
+    "time": {
+        "start_time": "2015-10-01 00:00:00", 
+        "end_time": "2016-09-30 23:00:00", 
+        "output_interval": 3600
+    }, 
+    "routing": {
+        "t_route_config_file_with_path": "~/ngwpc/run_ngen/kge_dds/icefabric/01123000/Input/01123000_troute_config_calib.yaml"
+    }, 
+    "formulation_groups": {
+        "group_1": [
+            {
+                "name": "bmi_multi", 
+                "params": {
+                    "name": "bmi_multi", 
+                    "model_type_name": "bmi_multi", 
+                    "init_config": "", 
+                    "allow_exceed_end_time": false, 
+                    "fixed_time_step": false, 
+                    "uses_forcing_file": false, 
+                    "main_output_variable": "Q_OUT", 
+                    "output_variables": [
+                        "SNEQV"
+                    ], 
+                    "output_header_fields": [
+                        "SWE_mm"
+                    ], 
+                    "modules": [
+                        {
+                            "name": "bmi_c++", 
+                            "params": {
+                                "name": "bmi_c++", 
+                                "model_type_name": "SLOTH", 
+                                "main_output_variable": "z", 
+                                "library_file": "~/ngwpc/run_ngen/kge_dds/icefabric/01123000/Input/libslothmodel.so", 
+                                "init_config": "/dev/null", 
+                                "allow_exceed_end_time": true, 
+                                "fixed_time_step": false, 
+                                "uses_forcing_file": false, 
+                                "model_params": {
+                                    "sloth_ice_fraction_schaake(1,double,1,node)": 0.0, 
+                                    "sloth_ice_fraction_xinanjiang(1,double,1,node)": 0.0, 
+                                    "sloth_smp(1,double,1,node)": 0.0
+                                }
+                            }
+                        }, 
+                        {
+                            "name": "bmi_fortran", 
+                            "params": {
+                                "name": "bmi_fortran", 
+                                "model_type_name": "NoahOWP", 
+                                "main_output_variable": "QINSUR", 
+                                "library_file": "~/ngwpc/run_ngen/kge_dds/icefabric/01123000/Input/libsurfacebmi.so", 
+                                "init_config": "~/ngwpc/run_ngen/kge_dds/icefabric/01123000/Input/noah-owp-modular_input/{{id}}_calib.input", 
+                                "allow_exceed_end_time": true, 
+                                "fixed_time_step": false, 
+                                "uses_forcing_file": false, 
+                                "variables_names_map": {
+                                    "PRCPNONC": "atmosphere_water__liquid_equivalent_precipitation_rate", 
+                                    "Q2": "atmosphere_air_water~vapor__relative_saturation", 
+                                    "SFCTMP": "land_surface_air__temperature", 
+                                    "UU": "land_surface_wind__x_component_of_velocity", 
+                                    "VV": "land_surface_wind__y_component_of_velocity", 
+                                    "LWDN": "land_surface_radiation~incoming~longwave__energy_flux", 
+                                    "SOLDN": "land_surface_radiation~incoming~shortwave__energy_flux", 
+                                    "SFCPRS": "land_surface_air__pressure"
+                                }
+                            }
+                        }, 
+                        {
+                            "name": "bmi_c", 
+                            "params": {
+                                "name": "bmi_c", 
+                                "model_type_name": "CFE", 
+                                "main_output_variable": "Q_OUT", 
+                                "library_file": "~/ngwpc/run_ngen/kge_dds/icefabric/01123000/Input/libcfebmi.so", 
+                                "init_config": "~/ngwpc/run_ngen/kge_dds/icefabric/01123000/Input/cfe-s_input/{{id}}_bmi_config_cfe.txt", 
+                                "allow_exceed_end_time": true, 
+                                "fixed_time_step": false, 
+                                "uses_forcing_file": false, 
+                                "registration_function": "register_bmi_cfe", 
+                                "variables_names_map": {
+                                    "ice_fraction_schaake": "sloth_ice_fraction_schaake", 
+                                    "ice_fraction_xinanjiang": "sloth_ice_fraction_xinanjiang", 
+                                    "soil_moisture_profile": "sloth_smp", 
+                                    "water_potential_evaporation_flux": "EVAPOTRANS", 
+                                    "atmosphere_water__liquid_equivalent_precipitation_rate": "QINSUR"
+                                }
+                            }
+                        }
+                    ]
+                }
+            }
+        ], 
+        "group_2": [
+            {
+                "name": "bmi_multi", 
+                "params": {
+                    "name": "bmi_multi", 
+                    "model_type_name": "bmi_multi", 
+                    "init_config": "", 
+                    "allow_exceed_end_time": false, 
+                    "fixed_time_step": false, 
+                    "uses_forcing_file": false, 
+                    "main_output_variable": "channel_water_x-section__volume_flow_rate", 
+                    "modules": [
+                        {
+                            "name": "bmi_python", 
+                            "params": {
+                                "python_type": "topoflow_glacier.bmi.bmi_topoflow_glacier.BmiTopoflowGlacier", 
+                                "model_type_name": "BmiTopoflowGlacier", 
+                                "init_config": "~/ngwpc/run_ngen/kge_dds/icefabric/01123000/Input/topoflow_input/{{id}}.yaml", 
+                                "main_output_variable": "channel_water_x-section__volume_flow_rate", 
+                                "uses_forcing_file": "false", 
+                                "variables_names_map": {
+                                    "streamflow_cms": "channel_water_x-section__volume_flow_rate", 
+                                    "atmosphere_water__precipitation_leq-volume_flux": "atmosphere_water__liquid_equivalent_precipitation_rate"
+                                }
+                            }
+                        }
+                    ]
+                }
+            }
+        ]
+    }, 
+    "forcing_groups": {
+        "forcing_grp1": {
+            "file_pattern": ".*{{id}}.*.csv", 
+            "path": "~/ngwpc/run_ngen/kge_dds/icefabric/01123000/Input/forcing", 
+            "provider": "CsvPerFeature"
+        }
+    }, 
+    "catchments": {
+        "cat-11466": {
+            "formulations": "group_1", 
+            "forcing": "forcing_grp1"
+        }, 
+        "cat-11467": {
+            "formulations": "group_1", 
+            "forcing": "forcing_grp1"
+        }, 
+        "cat-11468": {
+            "formulations": "group_1", 
+            "forcing": "forcing_grp1"
+        }, 
+        "cat-11469": {
+            "formulations": "group_1", 
+            "forcing": "forcing_grp1"
+        }, 
+        "cat-11470": {
+            "formulations": "group_2", 
+            "forcing": "forcing_grp1"
+        }, 
+        "cat-11475": {
+            "formulations": "group_2", 
+            "forcing": "forcing_grp1"
+        }, 
+        "cat-11476": {
+            "formulations": "group_2", 
+            "forcing": "forcing_grp1"
+        }
+    }
+}
