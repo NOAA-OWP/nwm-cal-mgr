@@ -4,7 +4,6 @@ This module contains methods to read and save formulation configurations.
 @author: Nels Frazer, Xia Feng
 """
 
-import glob
 import json
 from datetime import datetime
 from enum import Enum
@@ -19,7 +18,7 @@ import re
 import shutil
 import sys
 from pathlib import Path
-from typing import Annotated, Any, Dict, Mapping, Optional, Sequence, Union
+from typing import Annotated, Any, Dict, Mapping, Optional, Sequence, Union, List
 
 try:  # to get literal in python 3.7, it was added to typing in 3.8
     from typing import Literal
@@ -47,6 +46,7 @@ class NgenStrategy(str, Enum):
     uniform = "uniform"
     explicit = "explicit"
     independent = "independent"
+    grouped = "grouped"
 
 
 def _params_as_df(params: Mapping[str, Parameters], name: str = None):
@@ -637,6 +637,82 @@ class NgenUniform(NgenBase):
         )
 
 
+class NgenGrouped(NgenBase):
+    """
+    Uses a grouped ngen configuration and permutes parameter values within each formulation
+    """
+
+    strategy: Literal[NgenStrategy.grouped]
+    groups: Dict[str, Dict] = Field(...)
+
+    formulation_groups: Dict[str, List[str]] = {}
+    grp_to_cat: Dict[str, List[str]] = {}
+    grp_params_map: Dict[str, pd.DataFrame] = {}
+    cat_to_grp: Dict[str, str] = {}
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    # Extract formulation groups from realization file
+    self._extract_formulation_groups()
+
+    # Validate formulation groups and map parameters to groups
+    self._map_group_params()
+
+    # Create calibration sets for groups
+    self._build_grouped_cal_sets()
+
+    def _extract_formulation_groups(self) -> None:
+        """
+        Extract formulation groups from realization file and map catchments to formulation groups
+        """
+        if not hasattr(self.ngen_realization, 'formulation_groups'):
+            raise ValueError(
+                "Realization file must contain 'formulation_groups' section for grouped strategy"
+            )
+
+        if not hasattr(self.ngen_realization, 'catchments'):
+            raise ValueError(
+                "Realization file must contain 'catchments' section for grouped strategy"
+            )
+
+        # Retrieve formulations for each group
+        for grp_name in self.ngen_realization.formulation_groups.keys():
+            self.formulation_groups[grp_name] = self.ngen_realization.formulation_groups[grp_name]
+
+        # Build catchment-to-group mapping
+        for catchment_id, catchment_config in self.ngen_realization.catchments.items():
+            if hasattr(catchment_config, 'formulations'):
+                grp_name = catchment_config.formulations
+                if grp_name not in self.formulation_groups:
+                    raise ValueError(
+                        f"Catchment '{catchment_id}' references unknown formulation group '{grp_name}'"
+                    )
+                self.cat_to_grp[catchment_id] = grp_name
+
+    def _map_group_params(self) -> None:
+        """
+        Validate group formulations and build parameter mappings
+        """
+
+        for grp_name, grp_config in self.groups.items():
+            # Map groups to catchments
+            cat_in_grp = [cat_id for cat_id, grp in self.cat_to_grp.items() if grp == grp_name]
+            self.grp_to_cat[grp_name] = cat_in_grp
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
 # class Ngen(BaseModel, Configurable, smart_union=True):
 #    __root__: Union[NgenExplicit, NgenIndependent, NgenUniform] = Field(discriminator="strategy")
 
@@ -647,7 +723,7 @@ class Ngen(BaseModel, Configurable):
     type: Literal["ngen"]
 
     strategy: Annotated[
-        Union[NgenExplicit, NgenIndependent, NgenUniform],
+        Union[NgenExplicit, NgenIndependent, NgenUniform, NgenGrouped],
         Field(discriminator="strategy"),
     ]
 
@@ -665,6 +741,8 @@ class Ngen(BaseModel, Configurable):
                 values["strategy"] = NgenExplicit(**values)
             elif strat == "independent":
                 values["strategy"] = NgenIndependent(**values)
+            elif strat == "grouped":
+                values["strategy"] = NgenGrouped(**values)
             else:
                 raise ValueError(f"Unknown strategy '{strat}'")
         return values

@@ -167,6 +167,9 @@ def main(general: General, model_conf):
     elif agent.model.strategy.strategy == "uniform":
         func(start_iteration, general.iterations, agent)
 
+    elif agent.model.strategy.strategy == "grouped":
+        func(start_iteration, general.iterations, agent)
+
 
 if __name__ == "__main__":
     print_git_info_all()
