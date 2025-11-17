@@ -18,7 +18,7 @@ import re
 import shutil
 import sys
 from pathlib import Path
-from typing import Annotated, Any, Dict, Mapping, Optional, Sequence, Union, List
+from typing import Annotated, Any, Dict, Mapping, Optional, Sequence, Union, List, Set
 
 try:  # to get literal in python 3.7, it was added to typing in 3.8
     from typing import Literal
@@ -188,7 +188,7 @@ class NgenBase(ModelExec):
             data = json.load(fp)
         self.ngen_realization = NgenRealization(**data)
 
-        if self.ngen_realization.global_config.forcing.provider == 'CsvPerFeature':
+        if hasattr(self.ngen_realization.globalconfig, "forcing") and self.ngen_realization.global_config.forcing.provider == 'CsvPerFeature':
             # Read precipitation forcing
             start_date = datetime.strftime(
                 self.ngen_realization.time.start_time, "%Y-%m-%d %H:%M:%S"
@@ -291,7 +291,7 @@ class NgenBase(ModelExec):
         return values
 
     def update_config(
-        self, i: int, params: "pd.DataFrame", id: str = None, path=Path("./")
+        self, i: int, params: "pd.DataFrame", id: str = None, path=Path("./"), **kwargs
     ):
         """_summary_
 
@@ -299,12 +299,22 @@ class NgenBase(ModelExec):
             i (int): _description_
             params (pd.DataFrame): _description_
             id (str): _description_
+            **kwards: Additional arguments
         """
 
         if id is None:  # Update global
             module = self.ngen_realization.global_config.formulations[0].params
-        else:  # update specific catchment
-            module = self.ngen_realization.catchments[id].formulations[0].params
+        else:  # update specific catchment or formulation group
+            # Try to update catchment specific config
+            if hasattr(self.ngen_realization, 'catchments') and id in self.ngen_realization.catchments:
+                module = self.ngen_realization.catchments[id].formulations[0].params
+            elif hasattr(self.ngen_realization, 'formulation_groups') and id in self.ngen_realization.formulation_groups:
+                formulation_configs = self.ngen_realization.formulation_groups[id]
+                if not formulation_configs or len(formulation_configs) == 0:
+                    raise ValueError(f"No formulation configuration found for group '{id}'")
+                module = formulation_configs[0].params
+            else:
+                raise ValueError(f"Could not find configuration for id: {id}")
 
         if hasattr(module, "modules"):
             modules = [m.params.model_name for m in module.modules]
@@ -649,18 +659,19 @@ class NgenGrouped(NgenBase):
     grp_to_cat: Dict[str, List[str]] = {}
     grp_params_map: Dict[str, pd.DataFrame] = {}
     cat_to_grp: Dict[str, str] = {}
+    grp_models: Dict[str, Set[str]] = {}
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-    # Extract formulation groups from realization file
-    self._extract_formulation_groups()
+        # Extract formulation groups from realization file
+        self._extract_formulation_groups()
 
-    # Validate formulation groups and map parameters to groups
-    self._map_group_params()
+        # Validate formulation groups and map parameters to groups
+        self._map_group_params()
 
-    # Create calibration sets for groups
-    self._build_grouped_cal_sets()
+        # Create calibration sets for groups
+        self._build_grouped_cal_sets()
 
     def _extract_formulation_groups(self) -> None:
         """
@@ -690,18 +701,153 @@ class NgenGrouped(NgenBase):
                     )
                 self.cat_to_grp[catchment_id] = grp_name
 
+        # Retrieve models used in each group
+        for grp_name, grp_config in self.formulation_groups.items():
+            model_names = set()
+            for config in grp_config:
+                # Retrieve module param section of group formulation
+                module_param = config.params
+                for mod in module_param.modules:
+                    model_name = mod.params.model_name
+                    model_names.add(model_name)
+            self.grp_models[grp_name] = model_names
+
+    def _get_params_for_grp(self, grp_name: str) -> Dict[str, List[Parameter]]:
+        """"
+        Retrieve parameters for a specific formulation group
+        """
+
+        # Retrieve modules for a given group that are calibratable
+        cal_models = (self.grp_models.get(grp_name, set()) & set(self.params.keys()))
+
+        # Filter parameters to calibratable models in group
+        params_for_grp = {}
+        for model_name in cal_models:
+            if model_name in self.params:
+                params_for_grp[model_name] = self.params[model_name]
+
+        return params_for_grp
+
     def _map_group_params(self) -> None:
         """
-        Validate group formulations and build parameter mappings
+        Validate group formulations and create group parameter mappings
         """
 
-        for grp_name, grp_config in self.groups.items():
-            # Map groups to catchments
+        for grp_name in self.formulation_groups.keys():
+
+            # Retrieve catchments for formulation group
             cat_in_grp = [cat_id for cat_id, grp in self.cat_to_grp.items() if grp == grp_name]
             self.grp_to_cat[grp_name] = cat_in_grp
-    
 
+            # Retrieve parameters for formulation group
+            params_for_grp = self._get_params_for_grp(grp_name)
+            params_dict = {model: [Parameter(**p) for p in params] for model, params in params_for_grp.items()}
 
+            # Map params to realization format
+            self.grp_params_map[grp_name] = _map_params_to_realization(params_dict, self.ngen_realization)
+
+    def _find_basin_gage_nexus(self) -> Optional[tuple]:
+        """
+        Find the single gage nexus for the basin
+        """
+        # Search for gage in the crosswalk
+        for id_key, nwis in self._x_walk.items():
+            if not nwis and nwis != "":
+                continue
+
+            # Adaptively find corresponding catchment
+            cat_id = None
+            if id_key in self._catchment_hydro_fabric.index:
+                cat_id = id_key
+            elif id_key.replace("wb", "cat") in self._catchment_hydro_fabric.index:
+                cat_id = id_key.replace("wb", "cat")
+            else:
+                continue
+
+            # Map catchment to nexus
+            try:
+                fabric = self._catchment_hydro_fabric.log[cat_id]
+                nexus_data = self._nexus_hydro_fabric.loc[fabric["toid"]]
+                location = NWISLocation(nwis, nexus_data.name, nexus_data.geometry)
+                nexus = Nexus(nexus_data.name, location, (), id)
+                return (nexus, nwis)
+            except KeyError as e:
+                print(f"Could not map catchment {cat_id} to nexus: {e}")
+                continue
+
+    def _build_grouped_cal_sets(self) -> None:
+        """
+        Create calibration parameter sets for each formulation group
+        """
+        start_t = self.ngen_realization.time.start_time
+        end_t = self.ngen_realization.time.end_time
+
+        # Find single basin gage nexus for all groups
+        basin_gage = self._find_basin_gage_nexus()
+        if not basin_gage:
+            raise RuntimeError(
+                "No gage found in crosswalk for evaluation"
+            )
+        eval_nexus, nwis_id = basin_gage
+
+        # Generate timestamped routing output file
+        self.routing_output = "troute_output_" + start_t.strftime("%Y%m%d%M%H") + ".nc"
+
+        # Identify rivers draining to the stream gage
+        gage_cat_id = eval_nexus.catchment_id if hasattr(eval_nexus, 'catchment_id') else None
+        if gage_cat_id:
+            fabric = self._catchment_hydro_fabric.loc[gage_cat_id]
+            nexus_id = fabric["toid"]
+            # Get catchments draining to this nexus
+            self._wb_lst = list(
+                self._catchment_hydro_fabric.query("toid==@nexus_id").index
+            )
+
+        # Construct calibration set for group
+        for grp_name, grp_catchments in self.grp_to_cat.items():
+            grp_params = self.grp_params_map[grp_name]
+            catchments = []
+
+            # Process nexus/adjustable object for each catchment
+            for cat_id in grp_catchments:
+                try:
+                    fabric = self._catchment_hydro_fabric.loc[cat_id]
+                except KeyError:
+                    continue
+
+                try:
+                    nexus_data = self._nexus_hydro_fabric.loc[fabric["toid"]]
+                except KeyError:
+                    raise RuntimeError(f"No nexus found for catchment {cat_id}")
+
+                # Create adjustable catchment object
+                nexus = Nexus(nexus_data.name, None, cat_id)
+                catchments.append(
+                    AdjustableCatchment(
+                        self.workdir,
+                        cat_id,
+                        nexus,
+                        grp_params
+                    )
+                )
+
+            # Create calibration set for each group
+            grp_eval_params = self.eval_params.model_copy()
+            grp_eval_params.id = grp_name
+
+            self._catchments.append(
+                CalibrationSet(
+                    catchments=catchments,
+                    eval_nexus=eval_nexus,
+                    routing_output=self.routing_output,
+                    start_time=start_t,
+                    end_time=end_t,
+                    eval_params=grp_eval_params,
+                    obsflow_file=self.obsflow,
+                    nwmflow_file=self.nwmflow,
+                    wb_lst=self._wb_lst,
+                )
+            )
 
 
 
