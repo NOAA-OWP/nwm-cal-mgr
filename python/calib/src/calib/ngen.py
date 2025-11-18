@@ -73,18 +73,37 @@ def _params_as_df(params: Mapping[str, Parameters], name: str = None):
 
 
 def _map_params_to_realization(
-    params: Mapping[str, Parameters], realization: Realization
+    params: Mapping[str, Parameters], realization: Any, group_name: str = None
 ):
-    # don't even think about calibration multiple formulations at once just yet..
-    module = realization.formulations[0].params
+    # Map params to global realization
+    if hasattr(realization, "formulations"):
+        module = realization.formulations[0].params
 
-    if isinstance(module, MultiBMI):
+        if isinstance(module, MultiBMI):
+            dfs = []
+            for m in module.modules:
+                dfs.append(_params_as_df(params, m.params.model_name))
+            return pd.concat(dfs)
+        else:
+            return _params_as_df(params, module.model_name)
+
+    # Map params to grouped realization
+    elif hasattr(realization, "formulation_groups"):
+        if group_name is None:
+            raise ValueError("Must provide 'group_name' for grouped realization parameter mapping")
+
+        group_formulations = realization.formulation_groups[group_name]
         dfs = []
-        for m in module.modules:
-            dfs.append(_params_as_df(params, m.params.model_name))
+
+        for formulation in group_formulations:
+            module = formulation.params
+            if isinstance(module, MultiBMI):
+                for m in module.modules:
+                    dfs.append(_params_as_df(params, m.params.model_name))
+                else:
+                    dfs.append(_params_as_df(params, module.model_name))
+
         return pd.concat(dfs)
-    else:
-        return _params_as_df(params, module.model_name)
 
 
 class NgenBase(ModelExec):
@@ -188,7 +207,7 @@ class NgenBase(ModelExec):
             data = json.load(fp)
         self.ngen_realization = NgenRealization(**data)
 
-        if hasattr(self.ngen_realization.globalconfig, "forcing") and self.ngen_realization.global_config.forcing.provider == 'CsvPerFeature':
+        if hasattr(self.ngen_realization.global_config, "forcing") and self.ngen_realization.global_config.forcing.provider == 'CsvPerFeature':
             # Read precipitation forcing
             start_date = datetime.strftime(
                 self.ngen_realization.time.start_time, "%Y-%m-%d %H:%M:%S"
@@ -653,11 +672,11 @@ class NgenGrouped(NgenBase):
     """
 
     strategy: Literal[NgenStrategy.grouped]
-    groups: Dict[str, Dict] = Field(...)
+    # groups: Dict[str, Dict] = Field(...)
 
     formulation_groups: Dict[str, List[str]] = {}
     grp_to_cat: Dict[str, List[str]] = {}
-    grp_params_map: Dict[str, pd.DataFrame] = {}
+    grp_params_map: Dict[str, Any] = {}
     cat_to_grp: Dict[str, str] = {}
     grp_models: Dict[str, Set[str]] = {}
 
@@ -741,10 +760,10 @@ class NgenGrouped(NgenBase):
 
             # Retrieve parameters for formulation group
             params_for_grp = self._get_params_for_grp(grp_name)
-            params_dict = {model: [Parameter(**p) for p in params] for model, params in params_for_grp.items()}
+            params_dict = {model: params for model, params in params_for_grp.items()}
 
             # Map params to realization format
-            self.grp_params_map[grp_name] = _map_params_to_realization(params_dict, self.ngen_realization)
+            self.grp_params_map[grp_name] = _map_params_to_realization(params_dict, self.ngen_realization, grp_name)
 
     def _find_basin_gage_nexus(self) -> Optional[tuple]:
         """
@@ -797,7 +816,7 @@ class NgenGrouped(NgenBase):
         gage_cat_id = eval_nexus.catchment_id if hasattr(eval_nexus, 'catchment_id') else None
         if gage_cat_id:
             fabric = self._catchment_hydro_fabric.loc[gage_cat_id]
-            nexus_id = fabric["toid"]
+            # nexus_id = fabric["toid"]
             # Get catchments draining to this nexus
             self._wb_lst = list(
                 self._catchment_hydro_fabric.query("toid==@nexus_id").index
@@ -848,16 +867,6 @@ class NgenGrouped(NgenBase):
                     wb_lst=self._wb_lst,
                 )
             )
-
-
-
-
-
-
-
-
-
-
 
 # class Ngen(BaseModel, Configurable, smart_union=True):
 #    __root__: Union[NgenExplicit, NgenIndependent, NgenUniform] = Field(discriminator="strategy")
