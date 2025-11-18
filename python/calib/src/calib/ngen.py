@@ -99,11 +99,19 @@ def _map_params_to_realization(
             module = formulation.params
             if isinstance(module, MultiBMI):
                 for m in module.modules:
-                    dfs.append(_params_as_df(params, m.params.model_name))
+                    model_name = m.params.model_name
+                    # Only process if model is in calibratable params
+                    if model_name in params:
+                        dfs.append(_params_as_df(params, m.params.model_name))
                 else:
-                    dfs.append(_params_as_df(params, module.model_name))
+                    model_name = module.model_name
+                    if model_name in params:
+                        dfs.append(_params_as_df(params, module.model_name))
 
-        return pd.concat(dfs)
+        if dfs:
+            return pd.concat(dfs)
+        else:
+            return pd.DataFrame()
 
 
 class NgenBase(ModelExec):
@@ -268,7 +276,8 @@ class NgenBase(ModelExec):
             args = '{} "all" {} "all" {}'.format(
                 Path(catchments).resolve(),
                 Path(nexus).resolve(),
-                Path(realization).name,
+                #Path(realization).name,
+                Path(realization).resolve()
             )
             values["args"] = args
         else:
@@ -769,15 +778,20 @@ class NgenGrouped(NgenBase):
         """
         Find the single gage nexus for the basin
         """
+
         # Search for gage in the crosswalk
         for id_key, nwis in self._x_walk.items():
-            if not nwis and nwis != "":
+            print(f"id_key:  {id_key}")
+            print(f"nwis: {nwis}")
+            if not nwis and nwis == "":
                 continue
 
             # Adaptively find corresponding catchment
             cat_id = None
             if id_key in self._catchment_hydro_fabric.index:
                 cat_id = id_key
+            elif id_key.replace("cat", "wb") in self._catchment_hydro_fabric.index:
+                cat_id = id_key.replace("cat", "wb")
             elif id_key.replace("wb", "cat") in self._catchment_hydro_fabric.index:
                 cat_id = id_key.replace("wb", "cat")
             else:
@@ -785,10 +799,10 @@ class NgenGrouped(NgenBase):
 
             # Map catchment to nexus
             try:
-                fabric = self._catchment_hydro_fabric.log[cat_id]
+                fabric = self._catchment_hydro_fabric.loc[cat_id]
                 nexus_data = self._nexus_hydro_fabric.loc[fabric["toid"]]
                 location = NWISLocation(nwis, nexus_data.name, nexus_data.geometry)
-                nexus = Nexus(nexus_data.name, location, (), id)
+                nexus = Nexus(nexus_data.name, location, (), cat_id)
                 return (nexus, nwis)
             except KeyError as e:
                 print(f"Could not map catchment {cat_id} to nexus: {e}")
@@ -813,14 +827,17 @@ class NgenGrouped(NgenBase):
         self.routing_output = "troute_output_" + start_t.strftime("%Y%m%d%M%H") + ".nc"
 
         # Identify rivers draining to the stream gage
-        gage_cat_id = eval_nexus.catchment_id if hasattr(eval_nexus, 'catchment_id') else None
-        if gage_cat_id:
-            fabric = self._catchment_hydro_fabric.loc[gage_cat_id]
-            # nexus_id = fabric["toid"]
-            # Get catchments draining to this nexus
+        self._wb_lst = []
+        try:
+            # Get catchments draining to nexus
+            gage_nexus_id = eval_nexus.id
             self._wb_lst = list(
-                self._catchment_hydro_fabric.query("toid==@nexus_id").index
+                self._catchment_hydro_fabric.query("toid==@gage_nexus_id").index
             )
+        except (KeyError, Exception) as e:
+            # Include all catchments in wb_lst as fallback
+            self._wb_lst = list(self._catchment_hydro_fabric.index)
+            print(f"Could not identify downstream catchments for nexus: {e}")
 
         # Construct calibration set for group
         for grp_name, grp_catchments in self.grp_to_cat.items():
@@ -856,7 +873,7 @@ class NgenGrouped(NgenBase):
 
             self._catchments.append(
                 CalibrationSet(
-                    catchments=catchments,
+                    adjustables=catchments,
                     eval_nexus=eval_nexus,
                     routing_output=self.routing_output,
                     start_time=start_t,

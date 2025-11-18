@@ -63,9 +63,5 @@ class NgenRealization(BaseModel):
         for grp, forcing in self.forcing_groups.items():
             forcing.resolve_paths()
 
-        # Resolve catchment paths
-        for k, v in self.catchments.items():
-            v.resolve_paths()
-
         if self.routing:
             self.routing.resolve_paths()
