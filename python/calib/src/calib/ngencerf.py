@@ -87,12 +87,11 @@ def report(
             time.sleep(RETRY_DELAY)
 
         except requests.exceptions.HTTPError as e:
-            # HTTP error: server responded, but with an error code (4xx/5xx)
-            # We do NOT retry these because the server is reachable and aware of the request
+            # Server responded (4xx or 5xx). Retry will NOT fix this.
             logger.error(f"Call to NgenCerf Server {url} failed with {str(e)}.")
             if response is not None:
                 logger.error(f"Response from NgenCerf Server: {response.text}")
-            return
+            raise
 
         except Exception as e:
             # Catch-all for any other unexpected errors (e.g., JSON decoding issue)
