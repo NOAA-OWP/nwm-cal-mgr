@@ -337,7 +337,11 @@ class UniformCalibrationSet(CalibrationSet, Adjustable):
         # does not exist during runtime (should have been created earlier)
         for valid_path in [valid_path1, valid_path2, valid_path3]:
             if not os.path.exists(valid_path):
-                msg = f"Output path does not exist: {valid_path} for basin {basinid} and run {run_name}"
+                msg = (
+                    f"Inaccessible output location during validation. "
+                    f"Output path does not exist: {valid_path} "
+                    f"for basin {basinid} and run {run_name}"
+                )
                 logger.error(msg)
                 raise FileNotFoundError(msg)
 
