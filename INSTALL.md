@@ -8,7 +8,7 @@ in your local workspace, respectively.
 
 ```bash
 cd [NWM_ROOT]
-git clone -b development --recurse-submodules https://github.com/NGWPC/nwm-cal-mgr.git
+git clone -b development --recurse-submodules https://github.com/NOAA-OWP/nwm-cal-mgr.git
 ```
 
 2. create python venv
@@ -31,7 +31,7 @@ pip install . #or use "pip install -e ." to install the package as an editable
 - clone mswm
 ```bash
 cd [NWM_ROOT]
-git clone -b development --recurse-submodules https://github.com/NGWPC/nwm-msw-mgr.git
+git clone -b development --recurse-submodules https://github.com/NOAA-OWP/nwm-msw-mgr.git
 ```
 
 - install mswm
@@ -48,7 +48,7 @@ After installation, the scripts can be executed in two ways:
 
 1) set up input configuration (e.g., input.config)
 
-Refer to one of the sample input config files in [sample_input_config](https://github.com/NGWPC/nwm-cal-mgr/tree/nwm-cal-mgr/sample_input_config) to 
+Refer to one of the sample input config files in [sample_input_config](https://github.com/NOAA-OWP/nwm-cal-mgr/tree/nwm-cal-mgr/sample_input_config) to 
 set up your configuration for calibration/validation.
 
 2) run model setup workflow (nwm-msw-mgr) to produce input files

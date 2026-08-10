@@ -2,9 +2,9 @@ name: CI/CD Pipeline
 
 on:
   pull_request:
-    branches: [ngwpc-candidate, ngwpc-release, main, nwm-main, development, release-candidate]
+    branches: [main, nwm-main, development, release-candidate]
   push:
-    branches: [ngwpc-candidate, ngwpc-release, main, nwm-main, development, release-candidate]
+    branches: [main, nwm-main, development, release-candidate]
   release:
     types: [published]
 
@@ -111,7 +111,7 @@ jobs:
           if-no-files-found: error
 
   sonarqube-internal:
-    if: (github.event_name == 'pull_request' || github.event_name == 'push') && github.repository_owner == 'NGWPC'
+    if: (github.event_name == 'pull_request' || github.event_name == 'push') && github.repository_owner == 'NOAA-OWP'
     runs-on: self-hosted
     needs: [setup, build, unit-test]
     continue-on-error: true

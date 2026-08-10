@@ -2,8 +2,7 @@ geopandas
 hydrotools.events==1.1.5
 hydrotools.metrics==1.3.3
 hydrotools.nwis_client==3.3.1
-hypy@git+https://github.com/NGWPC/hypy.git@development#egg=hypy&subdirectory=python
-#hypy@git+https://gitlab.sh.nextgenwaterprediction.com/NGWPC/hypy.git@development#egg=hypy&subdirectory=python
+hypy@git+https://github.com/NOAA-OWP/hypy.git@master#egg=hypy&subdirectory=python
 matplotlib
 netCDF4==1.6.3
 numpy==1.26.4

@@ -22,7 +22,7 @@ setup(
     description="NWM Calibration Manager (config package)",
     long_description=open("../../README.md").read(),
     long_description_content_type="text/markdown",
-    url="https://github.com/NGWPC/nwm-cal-mgr/python/config",
+    url="https://github.com/NOAA-OWP/nwm-cal-mgr/python/config",
     packages=find_packages(where="src"),
     package_dir={"": "src"},
     include_package_data=True,

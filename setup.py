@@ -43,7 +43,7 @@ setup(
     description="NWM Calibration Manager with calib, config packages and executable scripts",
     long_description=open("README.md").read(),
     long_description_content_type="text/markdown",
-    url="https://github.com/NGWPC/nwm-cal-mgr",
+    url="https://github.com/NOAA-OWP/nwm-cal-mgr",
     # Packages from both calib and config src directories
     packages=all_packages,
     package_dir=package_dir,

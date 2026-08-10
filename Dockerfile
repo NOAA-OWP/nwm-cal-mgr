@@ -1,7 +1,9 @@
 # syntax=docker/dockerfile:1.4
 
 ARG NGEN_IMAGE_TAG=latest
-FROM ghcr.io/ngwpc/ngen:${NGEN_IMAGE_TAG}
+
+# WARNING: ghcr.io/noaa-owp is not guaranteed to exist and the base image is not guaranteed to be there
+FROM ghcr.io/noaa-owp/ngen:${NGEN_IMAGE_TAG}
 # Uncomment when building ngen locally
 #FROM ngen
 
@@ -33,7 +35,7 @@ RUN set -eux; \
     pip3 install . ; \
     \
     # Install mswm package
-    pip3 install mswm@git+https://github.com/NGWPC/nwm-msw-mgr.git@development ; \
+    pip3 install mswm@git+https://github.com/NOAA-OWP/nwm-msw-mgr.git@development ; \
     \
     # Install dependencies for runCalibValid module
     cd /ngen-app/nwm-cal-mgr/python/config && \

@@ -4,6 +4,9 @@ The Dockerfile within this project will allow you to run the nwm-cal-mgr applica
 
 ## Requirements
 
+> [!CAUTION]
+> This is no longer valid as NGWPC GitLab is not accessible/usable by the wider world
+
 To build and run nwm-cal-mgr, you will need the following software installed and running on your system:
 - Docker Engine
 
