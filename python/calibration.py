@@ -29,13 +29,15 @@ def create_timestamp() -> str:
     return now.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3]
 
 
-def log_level_set():
+def log_level_set(log_path_overwrite: str | None = None):
     """
     Set logging level and specify logger configuration.
 
     Arguments
     ---------
-    input_parameters (dict): User input logging parameters
+    log_path_overwrite (str | None) (optional):
+        Log file path to write to. File will be overwritten.
+        If not provided, the program will decide a log file path on the fly.
 
     Returns
     -------
@@ -50,25 +52,36 @@ def log_level_set():
 
     log_level = "DEBUG"
     if True:
-        BASE_DIR = Path(__file__).resolve().parent.parent
+        if log_path_overwrite:
+            logFilePath = log_path_overwrite
+            print(f"log_path_overwrite = {repr(log_path_overwrite)}, deleting file if already exists, to start a new log file")
+            try:
+                os.remove(logFilePath)
+            except FileNotFoundError:
+                pass
+            os.makedirs(os.path.dirname(logFilePath), exist_ok=True)
 
-        if Path("/ngencerf/data").exists():
-            log_file_dir = Path(
-                f"/ngencerf/data/run-logs/ngen_cal_{create_timestamp()}/"
-            )
         else:
-            log_file_dir = Path(BASE_DIR) / f"run-logs/ngen_cal_{create_timestamp()}/"
+            BASE_DIR = Path(__file__).resolve().parent.parent
 
-        log_file_name = "ngen_cal.log"
-        os.makedirs(log_file_dir, exist_ok=True)
-        logFilePath = os.path.join(log_file_dir, log_file_name)
-        try:
-            logFile = open(logFilePath, "a")
-            print(f"Logging into: {logFilePath}")
-        except IOError:
-            print(
-                f"Can't Open local directory Log File: {logFilePath}", file=sys.stderr
-            )
+            if Path("/ngencerf/data").exists():
+                log_file_dir = Path(
+                    f"/ngencerf/data/run-logs/ngen_cal_{create_timestamp()}/"
+                )
+            else:
+                log_file_dir = Path(BASE_DIR) / f"run-logs/ngen_cal_{create_timestamp()}/"
+
+            log_file_name = "ngen_cal.log"
+            os.makedirs(log_file_dir, exist_ok=True)
+            logFilePath = os.path.join(log_file_dir, log_file_name)
+
+            try:
+                logFile = open(logFilePath, "a")
+                print(f"Logging into: {logFilePath}")
+            except IOError:
+                print(
+                    f"Can't Open local directory Log File: {logFilePath}", file=sys.stderr
+                )
 
         logging.Formatter.converter = time.gmtime
         logging.basicConfig(
@@ -89,7 +102,7 @@ def log_level_set():
         )
 
 
-def main(general: General, model_conf):
+def main(general: General, model_conf, log_path_overwrite: str | None = None):
     # Seed the random number generators if requested
     if general.random_seed is not None:
         import random
@@ -100,7 +113,7 @@ def main(general: General, model_conf):
         np.random.seed(general.random_seed)
 
     # setup logging
-    log_level_set()
+    log_level_set(log_path_overwrite=log_path_overwrite)
 
     LOG.info("Starting calib")
 
@@ -168,7 +181,8 @@ def main(general: General, model_conf):
         func(start_iteration, general.iterations, agent)
 
 
-if __name__ == "__main__":
+def cli():
+    """Command-line interface entry point for nwm-calibration."""
     print_git_info_all()
 
     # Create the command line parser
@@ -180,6 +194,9 @@ if __name__ == "__main__":
         type=Path,
         help="The configuration yaml file for catchments to be operated on",
     )
+    parser.add_argument("--log_path_overwrite", required=False, type=str, help="""
+        If provided, this file path will be used for logging (the file will be overwritten).
+        If not provided, a log file path will be decided by the program.""")
 
     args = parser.parse_args()
 
@@ -191,4 +208,8 @@ if __name__ == "__main__":
     # Change directory to workdir
     os.chdir(general.workdir)
 
-    main(general, conf["model"])
+    main(general, conf["model"], log_path_overwrite=args.log_path_overwrite)
+
+
+if __name__ == "__main__":
+    cli()

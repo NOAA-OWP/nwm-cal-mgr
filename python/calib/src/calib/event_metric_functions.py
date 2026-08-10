@@ -12,6 +12,7 @@ from typing import Dict, Optional
 import numpy as np
 import pandas as pd
 from hydrotools.events.event_detection import decomposition as ev
+from scipy.signal import find_peaks
 
 __all__ = [
     "identify_events",
@@ -167,88 +168,115 @@ def separate_compound_events(events: pd.DataFrame, data: pd.Series) -> pd.DataFr
     return events_new
 
 
+def _validate_event_dataframe(
+    df: pd.DataFrame,
+    name: str,
+    required_columns: set[str],
+):
+    """Validate required columns and start/end ordering."""
+    missing = required_columns - set(df.columns)
+    if missing:
+        raise ValueError(f"{name} is missing required columns: {sorted(missing)}")
+
+    # Ensure start/end are datetime
+    for col in ["start", "end"]:
+        if not pd.api.types.is_datetime64_any_dtype(df[col]):
+            df[col] = pd.to_datetime(df[col], errors="raise")
+
+    # Enforce start < end
+    invalid = df[df["start"] >= df["end"]]
+    if not invalid.empty:
+        raise ValueError(f"{name} contains {len(invalid)} events where start >= end")
+
+
 def pair_events(
-    events1: pd.DataFrame, events2: pd.DataFrame, threshold: np.float64
+    obs_events: pd.DataFrame,
+    mod_events: pd.DataFrame,
+    peak_threshold: float,
 ) -> pd.DataFrame:
-    """
-    Pair observed events with model events
+    """Pair observed events with model events.
 
-    For every observed event that's above the defined threshold, identify the model events that overlap with
-    the observed event and combine the model events if there is more than one. If no model event identified,
-    set the model event start/end times to the observed event start/end times.
+    Observed events with peak_value >= peak_threshold are considered.
+    Model events overlapping an observed event are combined.
+    If no model event overlaps, a virtual model event is created using the observed event timing.
 
-    Parameters
-    ----------
-    events1: events for observed streamflow
-    events2 : events for model streamflow
-    threshold: non-exceedance probablility threshold for events; events with peak magnitude below the threshold are ignored.
+    Unpaired model events above the threshold are added as symmetric observed–model events.
 
     Returns
     -------
-    Paired events with columns: obs_start, obs_end, mod_start, mod_end
+    DataFrame with columns:
+    obs_start, obs_end, mod_start, mod_end
 
     """
+    # check model and observed event dataframes (required columns and start/end ordering)
+    _validate_event_dataframe(
+        obs_events,
+        "obs_events",
+        {"start", "end", "peak_value"},
+    )
+    _validate_event_dataframe(
+        mod_events,
+        "mod_events",
+        {"start", "end", "peak_value"},
+    )
 
-    # start with labelling all model events as unpaired
-    events2_new = events2.copy(deep=True)
-    events2_new["paired"] = False
+    if peak_threshold < 0:
+        raise ValueError("peak_threshold must be non-negative")
 
-    # process only observed events that are above the defined threshold
-    events1_new = events1.loc[events1["peak_value"] >= threshold]
+    # initialize
+    obs_events = obs_events.copy()
+    mod_events = mod_events.copy()
+    mod_events["paired"] = False
 
-    # create a dataframe for the paired events
-    events = events1_new[["start", "end"]].copy(deep=True)
-    events.columns = ["obs_" + s1 for s1 in events.columns]
-    events["mod_start"] = np.NaN
-    events["mod_end"] = np.NaN
+    # filter observed events by magnitude (ignore small events)
+    obs_events = obs_events.loc[obs_events["peak_value"] >= peak_threshold]
 
-    # loop through observed events
-    for e in events1_new.itertuples():
-        # identify model events that are overlapping with the current observed event
-        # if more than one model events ientified for a given obs event, combine the model events
-        events2_new1 = events2_new.loc[~events2_new.paired].copy(deep=True)
-        for e1 in events2_new1.itertuples():
-            if max(e.start, e1.start) < min(e.end, e1.end):
-                events2_new.at[e1.Index, "paired"] = True
-                events.at[e.Index, "mod_start"] = (
-                    e1.start
-                    if pd.isna(events.loc[e.Index, "mod_start"])
-                    else min(e1.start, events.loc[e.Index, "mod_start"])
-                )
-                events.at[e.Index, "mod_end"] = (
-                    e1.end
-                    if pd.isna(events.loc[e.Index, "mod_end"])
-                    else max(e1.end, events.loc[e.Index, "mod_end"])
-                )
-                # events.at[e.Index,'mod_peak'] = e1.peak if pd.isna(events.loc[e.Index,'mod_peak']) \
-                #    else max(e1.peak, events.loc[e.Index,'mod_peak'])
+    # initialize output dataframe
+    events = pd.DataFrame(
+        {
+            "obs_start": obs_events["start"].values,
+            "obs_end": obs_events["end"].values,
+            "mod_start": pd.NaT,
+            "mod_end": pd.NaT,
+        }
+    )
 
-        # if no model events found, create a virtual model event based on the observed event start/end times
-        if pd.isna(events.loc[e.Index, "mod_start"]):
-            events.at[e.Index, "mod_start"] = events.at[e.Index, "obs_start"]
-            events.at[e.Index, "mod_end"] = events.at[e.Index, "obs_end"]
+    # pair observed with model events
+    for i, obs in events.iterrows():
+        overlapping = mod_events.loc[
+            (~mod_events["paired"])
+            & (mod_events["start"] < obs.obs_end)
+            & (mod_events["end"] > obs.obs_start)
+        ]
 
-    # for each unpaired model event (that is above threshold), add an observed event with the same start/end time as the model event
-    events2_new1 = events2_new.loc[~events2_new.paired].copy(deep=True)
-    if len(events2_new1) > 0:
-        events2_new1 = events2_new1.loc[events2_new1["peak_value"] >= threshold]
-        if events2_new1.shape[0] > 0:
-            for e1 in events2_new1.itertuples():
-                new_event = pd.DataFrame(
-                    [
-                        {
-                            "obs_start": e1.start,
-                            "obs_end": e1.end,
-                            "mod_start": e1.start,
-                            "mod_end": e1.end,
-                        }
-                    ]
-                )
-                events = pd.concat([events, new_event], ignore_index=True)
+        if not overlapping.empty:
+            mod_events.loc[overlapping.index, "paired"] = True
+            events.at[i, "mod_start"] = overlapping["start"].min()
+            events.at[i, "mod_end"] = overlapping["end"].max()
+        else:
+            # Virtual model event
+            events.at[i, "mod_start"] = obs.obs_start
+            events.at[i, "mod_end"] = obs.obs_end
+
+    # unpaired model events
+    unpaired = mod_events.loc[
+        (~mod_events["paired"]) & (mod_events["peak_value"] >= peak_threshold)
+    ]
+
+    if not unpaired.empty:
+        # add symmetric observed–model events for unpaired model events
+        extra_events = pd.DataFrame(
+            {
+                "obs_start": unpaired["start"].values,
+                "obs_end": unpaired["end"].values,
+                "mod_start": unpaired["start"].values,
+                "mod_end": unpaired["end"].values,
+            }
+        )
+        events = pd.concat([events, extra_events], ignore_index=True)
 
     # sort paired events by start time
-    events = events.sort_values(by=["obs_start"])
-    events = events.reset_index(drop=True)
+    events = events.sort_values("obs_start").reset_index(drop=True)
 
     return events
 
@@ -259,50 +287,61 @@ def compute_event_metrics(
     data_mod: pd.Series,
     aggregation: str,
 ) -> Dict[str, float]:
-    """
+    """Compute event-based metrics.
+
     Given the event pairs identified, compute the three event-based metrics (peak bias, peak timing error,
     event volumn bias). Return either the mean or median of metrics calculated for all events.
 
-    Parameters:
-    ----------------
-    events_pairs: paried model and observed events from pair_events()
+    Parameters
+    ----------
+    event_pairs: paired model and observed events from pair_events()
     data_obs: observed streamflow time series
     data_mod: model streamflow time series
     aggregation: aggregation method (mean or median) for metrics calculated for all events
+
+    Returns
+    -------
+    Dictionary of event-based metrics: peak_bias, ptime_err, event_bias
 
     """
     if len(event_pairs) == 0:
         peak_bias = ptime_err = event_bias = np.NaN
     else:
         # get peak magnitude for paired events
-        y_pred = event_pairs.apply(
-            lambda e: data_obs.loc[e.obs_start : e.obs_end].max(), axis=1
-        )
-        y_true = event_pairs.apply(
+        y_pred_peak = event_pairs.apply(
             lambda e: data_mod.loc[e.mod_start : e.mod_end].max(), axis=1
+        )
+        y_true_peak = event_pairs.apply(
+            lambda e: data_obs.loc[e.obs_start : e.obs_end].max(), axis=1
         )
 
         # get peak timing for paired events
         y_pred_time = event_pairs.apply(
-            lambda e: data_obs.loc[e.obs_start : e.obs_end].idxmax(), axis=1
+            lambda e: data_mod.loc[e.mod_start : e.mod_end].idxmax(), axis=1
         )
         y_true_time = event_pairs.apply(
-            lambda e: data_mod.loc[e.mod_start : e.mod_end].idxmax(), axis=1
+            lambda e: data_obs.loc[e.obs_start : e.obs_end].idxmax(), axis=1
         )
 
         # comptue event volume bias
         pbias = pd.Series(index=range(len(event_pairs)))
-        for i1, e1 in enumerate(event_pairs.itertuples(), 1):
+        for i1, e1 in enumerate(event_pairs.itertuples()):
             y_pred = data_mod.loc[e1.mod_start : e1.mod_end]
             y_true = data_obs.loc[e1.obs_start : e1.obs_end]
-            pbias[i1 - 1] = np.abs(y_pred.sum() - y_true.sum()) / y_true.sum() * 100
+            pbias[i1] = np.abs(y_pred.sum() - y_true.sum()) / y_true.sum() * 100
 
         if aggregation == "mean":
-            peak_bias = np.mean(np.absolute(np.subtract(y_pred, y_true) / y_true)) * 100
+            peak_bias = (
+                np.nanmean(
+                    np.absolute(np.subtract(y_pred_peak, y_true_peak) / y_true_peak)
+                )
+                * 100
+            )
             ptime_err = (
                 pd.Timedelta(
                     np.timedelta64(
-                        np.mean(np.absolute(np.subtract(y_pred_time, y_true_time))), "h"
+                        np.nanmean(np.absolute(np.subtract(y_pred_time, y_true_time))),
+                        "h",
                     )
                 ).total_seconds()
                 / 3600
@@ -310,7 +349,10 @@ def compute_event_metrics(
             event_bias = pbias.mean()
         elif aggregation == "median":
             peak_bias = (
-                np.nanmedian(np.absolute(np.subtract(y_pred, y_true) / y_true)) * 100
+                np.nanmedian(
+                    np.absolute(np.subtract(y_pred_peak, y_true_peak) / y_true_peak)
+                )
+                * 100
             )
             ptime_err = (
                 pd.Timedelta(

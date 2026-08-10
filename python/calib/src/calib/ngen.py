@@ -188,7 +188,7 @@ class NgenBase(ModelExec):
             data = json.load(fp)
         self.ngen_realization = NgenRealization(**data)
 
-        if self.ngen_realization.global_config.forcing.provider == 'CsvPerFeature':
+        if self.ngen_realization.global_config.forcing.provider == "CsvPerFeature":
             # Read precipitation forcing
             start_date = datetime.strftime(
                 self.ngen_realization.time.start_time, "%Y-%m-%d %H:%M:%S"
@@ -196,7 +196,6 @@ class NgenBase(ModelExec):
             end_date = datetime.strftime(
                 self.ngen_realization.time.end_time, "%Y-%m-%d %H:%M:%S"
             )
-
 
     @property
     def config_file(self) -> Path:
@@ -378,11 +377,14 @@ class NgenBase(ModelExec):
             safe_dict = convert(model)
             return json.dumps(safe_dict, indent=indent)
 
+        # if path does not exist, issue an error (since the path should have been created prior to this call)
+        if not path.exists():
+            msg = f"Path '{path}' does not exist to save the realization file"
+            logging.error(msg)
+            raise FileNotFoundError(msg)
+
         with open(path / self.realization.name, "w") as fp:
             fp.write(
-                # self.ngen_realization.json(
-                #     by_alias=True, exclude_none=True, indent=4
-                # )
                 safe_model_dump_json(
                     self.ngen_realization, by_alias=True, exclude_none=True, indent=4
                 )

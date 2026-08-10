@@ -55,7 +55,7 @@ class BMIParams(BaseModel):
     name_map: Mapping[str, str] = Field(None, alias="variables_names_map")
 
     # strictly optional fields (null/none) by default
-    output_vars: Optional[Sequence[str]] = Field(None, alias="output_variables")
+    output_vars: Optional[Sequence[Union[str, Mapping[str, str]]]] = Field(None, alias="output_variables")
     output_headers: Optional[Sequence[str]] = Field(None, alias="output_header_fields")
     model_params: Optional[Mapping[str, str]]
 
@@ -89,8 +89,9 @@ class BMIParams(BaseModel):
             dict: The values dict with `output_headers` and `output_vars` set from `output_map` if provided.
         """
         output_map = values.get("output_map", {})
-        output_headers = values.get("output_headers", [])
-        output_vars = values.get("output_vars", [])
+        output_headers = values.get("output_header_fields", [])
+        output_vars = values.get("output_variables", [])
+
         if output_map:
             if output_vars:
                 logger.info(
@@ -106,6 +107,7 @@ class BMIParams(BaseModel):
                     output_headers.append(k)
             values["output_vars"] = output_vars
             values["output_headers"] = output_headers
+
         return values
 
     @field_validator("name_map", mode="before")

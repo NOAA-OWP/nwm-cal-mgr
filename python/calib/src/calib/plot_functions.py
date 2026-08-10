@@ -115,6 +115,14 @@ def plot_streamflow(
     ax.grid(True, color="0.8", linewidth=0.4)
     ax.legend(loc="upper right", fontsize=12, frameon=False)
 
+    # if path to save plot does not exist, issue an error since the path should have been created beforehand
+    if not os.path.exists(os.path.dirname(plotfile)):
+        msg = (
+            f"Inaccessible output location during calibration. "
+            f"Path {os.path.dirname(plotfile)} does not exist."
+        )
+        logger.error(msg)
+        raise FileNotFoundError(msg)
     fig.savefig(plotfile)
     plt.close()
 
@@ -461,6 +469,7 @@ def scatterplot_objfun(
     metric_file: Union[str, os.PathLike],
     plotfile: Union[str, os.PathLike],
     objective_fun_column: str,
+    objective_fun_label: str,
     best_iteration: Optional[int] = None,
     title: Optional[str] = None,
 ) -> None:
@@ -470,11 +479,13 @@ def scatterplot_objfun(
     ----------
     metric_file : File containing metrics including objective function at each iteration
     plotfile : Image file
+    objective_fun_column : Column name for objective function
+    objective_fun_label : Label for objective function on y-axis, to better describe the objective function
     best_iteration : Best iteration
     title : Gage station name
 
-    Returns:
-    ----------
+    Returns
+    -------
     None
 
     """
@@ -508,7 +519,7 @@ def scatterplot_objfun(
         )
 
     ax.set_xlabel("Iteration", fontsize=15)
-    ax.set_ylabel("Objective Function", fontsize=15)
+    ax.set_ylabel(f"Objective Function: {objective_fun_label}", fontsize=15)
     if title is not None:
         ax.set_title(title, weight="bold", fontsize=12)
     else:
@@ -621,6 +632,7 @@ def scatterplot_var(
 def scatterplot_objfun_metric(
     var_file: Union[str, os.PathLike],
     plotfile: Union[str, os.PathLike],
+    objective_fun_label: str,
     best_iteration: Optional[int] = None,
     title: Optional[str] = None,
 ) -> None:
@@ -630,6 +642,7 @@ def scatterplot_objfun_metric(
     ----------
     var_file : File containing calibration metrics for each iteration
     plotfile : Image file
+    objective_fun_label : Label for objective function on x-axis, to better describe the objective function
     best_iteration : Best iteration
     title : Gage station name
 
@@ -700,7 +713,7 @@ def scatterplot_objfun_metric(
         left=False,
         right=False,
     )
-    plt.xlabel("Objective Function", fontsize=16)
+    plt.xlabel(f"Objective Function: {objective_fun_label}", fontsize=16)
 
     plt.suptitle(title, size=20, weight="bold")
     plt.subplots_adjust(
@@ -940,6 +953,7 @@ def plot_fdc_valid(
 def plot_cost_hist(
     cost_file: Union[str, os.PathLike],
     plotfile: Union[str, os.PathLike],
+    objective_fun_label: str,
     title: Optional[str] = None,
     algorithm: Optional[str] = None,
     calib_iter: Optional[bool] = False,
@@ -950,6 +964,7 @@ def plot_cost_hist(
     ----------
     cost_file : File containing global best and mean local best cost at each iteration
     plotfile : Image file
+    objective_fun_label : Label for objective function on y-axis, to better describe the objective function
     title : Figure title
     algorithm : Optimzation algorithm
     calib_iter : Whether plot for each iteration or after all iterations are finished, default False
@@ -987,7 +1002,7 @@ def plot_cost_hist(
         )
 
     ax.set_xlabel("Iteration", fontsize=15)
-    ax.set_ylabel("Objective Function", fontsize=15)
+    ax.set_ylabel(f"Objective Function: {objective_fun_label}", fontsize=15)
     ax.legend(fontsize=10, loc="upper right", frameon=False)
     if title is not None:
         ax.set_title(title, weight="bold", fontsize=10)

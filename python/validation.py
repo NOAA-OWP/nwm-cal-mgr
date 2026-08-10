@@ -48,7 +48,8 @@ def main(general: General, model_conf):
     run_valid_ctrl_best(agent)
 
 
-if __name__ == "__main__":
+def cli():
+    """Command-line interface entry point for nwm-validation."""
     print_git_info_all()
 
     # Create command line parser
@@ -66,3 +67,7 @@ if __name__ == "__main__":
     os.chdir(general.workdir)
 
     main(general, conf["model"])
+
+
+if __name__ == "__main__":
+    cli()

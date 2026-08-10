@@ -34,7 +34,9 @@ def run_valid_ctrl_best(agent):
     # Single-execution model (NoCalibModel) validation
 
     if isinstance(agent.model, NoCalibModel):
-        logger.info(f"Running validation for NoCalibModel (Single Exec): {agent.run_name}")
+        logger.info(
+            f"Running validation for NoCalibModel (Single Exec): {agent.run_name}"
+        )
         # Execute model run and post-process results
         with pushd(agent.job.workdir):
             logger.info(agent.cmd)
@@ -56,7 +58,9 @@ def run_valid_ctrl_best(agent):
     if agent.run_name != "valid_control":
         if agent.nwmflow_file != "":
             if os.path.exists(agent.nwmflow_file):
-                logger.info(f"Read NWM retrospective streamflow simulation from: {agent.nwmflow_file}")
+                logger.info(
+                    f"Read NWM retrospective streamflow simulation from: {agent.nwmflow_file}"
+                )
                 nwm = pd.read_csv(agent.nwmflow_file)
                 nwm.columns = ["value_date", "sim_flow"]
                 nwm["value_date"] = pd.DatetimeIndex(nwm["value_date"])
@@ -93,12 +97,16 @@ def run_valid_ctrl_best(agent):
                         calibration_object.observed,
                         value,
                         calibration_object.threshold,
+                        calibration_object.peak_flow_threshold,
                     )
                     tmp = {**{"run": run1, "period": key}, **result}
-                    metrics = pd.concat([metrics, pd.DataFrame([tmp])], ignore_index=True)
+                    metrics = pd.concat(
+                        [metrics, pd.DataFrame([tmp])], ignore_index=True
+                    )
                     metric_out_file = os.path.join(
                         agent.workdir,
-                        "{}".format(calibration_object.basinID) + "_metrics_{}.csv".format(run1),
+                        "{}".format(calibration_object.basinID)
+                        + "_metrics_{}.csv".format(run1),
                     )
                     metrics.to_csv(metric_out_file, index=False)
 

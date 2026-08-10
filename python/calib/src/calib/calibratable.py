@@ -263,6 +263,11 @@ class Evaluatable(ABC):
         return self.eval_params.threshold
 
     @property
+    def peak_flow_threshold(self) -> float:
+        """peak flow threshold for calculation of categorical scores"""
+        return self.eval_params.peak_flow_threshold
+
+    @property
     def user(self) -> str:
         """User's email address to receieve run complete message"""
         return self.eval_params.user

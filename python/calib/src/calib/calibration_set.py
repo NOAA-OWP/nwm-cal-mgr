@@ -9,6 +9,7 @@ runs and perform evaluation for a set of calibration catchments.
 import glob
 import os
 import shutil
+import tempfile
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional, Sequence
@@ -116,44 +117,68 @@ class CalibrationSet(Evaluatable):
 
     @property
     def output(self) -> "DataFrame":
-        """
-        The model output hydrograph for this catchment
-        This re-reads the output file each call, as the output for given calibration catchment changes
-        for each calibration iteration. If it doesn't exist, should return None
-        """
-        try:
-            # Read the routed flow at the eval_nexus
-            ncvar = netCDF4.Dataset(self._output_file, "r")
-            fid_index = [
-                list(ncvar["feature_id"][0:]).index(int(fid)) for fid in self._wb_lst
-            ]
-            self._output = pd.DataFrame(
-                data={
-                    "sim_flow": pd.DataFrame(
-                        ncvar["flow"][fid_index], index=fid_index
-                    ).T.sum(axis=1)
-                }
-            )
+        """The model output hydrograph for this catchment.
 
-            # Get date
-            tnx_file = list(Path(self._output_file).parent.glob("nex*.csv"))[0]
-            tnx_df = pd.read_csv(
-                tnx_file, index_col=0, parse_dates=[1], names=["ts", "time", "Q"]
-            ).set_index("time")
-            dt_range = pd.date_range(
-                tnx_df.index[1], tnx_df.index[-1], len(self._output.index)
-            ).round("min")
-            self._output.index = dt_range
-            self._output.index.name = "Time"
-            self._output = self._output.resample("1h").first()
-            logger.debug("Simulation results ready (DataFrame populated)")
-            hydrograph = self._output
+        Reads the output file safely, making a temporary copy to avoid parallel HDF5 issues.
+        Returns None if the file does not exist.
+        """
+        if not Path(self._output_file).exists():
+            logger.info("Output file does not exist.")
+            return None
 
-        except FileNotFoundError:
-            logger.info("Output is currently empty.")
-            hydrograph = None
-        except Exception as e:
-            raise (e)
+        max_attempts = 5  # Retries up to max_attempts in case of transient HDF5 errors.
+        delay = 0.5  # seconds
+        hydrograph = None
+
+        for attempt in range(max_attempts):
+            try:
+                # Copy to temporary file before reading, avoiding simultaneous access conflicts.
+                with tempfile.NamedTemporaryFile(suffix=".nc") as tmp_file:
+                    shutil.copy(self._output_file, tmp_file.name)
+                    ncvar = netCDF4.Dataset(tmp_file.name, "r")
+
+                    # Extract the flow at the evaluation nexus
+                    fid_index = [
+                        list(ncvar["feature_id"][0:]).index(int(fid))
+                        for fid in self._wb_lst
+                    ]
+                    self._output = pd.DataFrame(
+                        data={
+                            "sim_flow": pd.DataFrame(
+                                ncvar["flow"][fid_index], index=fid_index
+                            ).T.sum(axis=1)
+                        }
+                    )
+
+                    # Get date from tnx file
+                    tnx_file = list(Path(self._output_file).parent.glob("nex*.csv"))[0]
+                    tnx_df = pd.read_csv(
+                        tnx_file,
+                        index_col=0,
+                        parse_dates=[1],
+                        names=["ts", "time", "Q"],
+                    ).set_index("time")
+                    dt_range = pd.date_range(
+                        tnx_df.index[1], tnx_df.index[-1], len(self._output.index)
+                    ).round("min")
+                    self._output.index = dt_range
+                    self._output.index.name = "Time"
+                    self._output = self._output.resample("1h").first()
+
+                    logger.debug("Simulation results ready (DataFrame populated)")
+                    hydrograph = self._output
+
+                break  # success, exit retry loop
+
+            except OSError as e:
+                # Handle transient HDF5 errors
+                logger.warning(f"Attempt {attempt + 1} failed to read NetCDF file: {e}")
+                time.sleep(delay)
+            except Exception as e:
+                raise e
+
+        if hydrograph is None:
+            logger.info("Output could not be read after multiple attempts.")
 
         return hydrograph
 

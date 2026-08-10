@@ -9,6 +9,7 @@ from typing import Dict, Optional, Union
 warnings.simplefilter(action="ignore", category=FutureWarning)
 
 import logging
+from typing import Dict, Optional
 
 import numpy as np
 import pandas as pd
@@ -480,6 +481,7 @@ def categorical_score(
     y_pred : Modeled values or simulations
     threshold : threshold value
 
+
     Returns
     -------
     Dictionary of  categorical score values
@@ -501,7 +503,7 @@ def event_based_metrics(
     y_true: pd.Series,
     y_pred: pd.Series,
     threshold: Optional[float] = 0.9,
-    aggregation: Optional[str] = "median",
+    aggregation: Optional[str] = "mean",
 ) -> Dict[str, float]:
     """Compute event-based metrics, including 1) absolute peak flow bias (PKBIAS), 2)absolute peak timing error (PKTE), and
     3) absolute event volume bias (EVBIAS).

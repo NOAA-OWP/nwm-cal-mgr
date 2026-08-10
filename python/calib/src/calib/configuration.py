@@ -330,7 +330,10 @@ class NoCalibModel(ModelExec):
             df_all = pd.merge(obs_df, sim_df, left_index=True, right_index=True)
 
             metrics = mf.calculate_all_metrics(
-                df_all[obs_flow_col], df_all[sim_streamflow_col]
+                df_all[obs_flow_col],
+                df_all[sim_streamflow_col],
+                self.eval_params.threshold,
+                self.eval_params.peak_flow_threshold / 100.0,
             )
             metrics_df = pd.DataFrame([metrics])
             metrics_df.insert(0, "iteration", 0, True)
@@ -399,6 +402,7 @@ class NoCalibModel(ModelExec):
             calibration_object = SimpleNamespace(
                 output=output,
                 threshold=self.eval_params.threshold,
+                peak_flow_threshold=self.eval_params.peak_flow_threshold,
                 streamflow_name=sim_streamflow_col,
                 observed=observed,
                 station_name=basin_id,
@@ -523,6 +527,7 @@ class NoCalibModel(ModelExec):
                 full_evaluation_range=self.eval_params._full_eval_range,
                 streamflow_name=sim_streamflow_col,
                 threshold=self.eval_params.threshold,
+                peak_flow_threshold=self.eval_params.peak_flow_threshold,
             )
             time_period = {
                 "calib": calibration_object.evaluation_range,
@@ -538,6 +543,7 @@ class NoCalibModel(ModelExec):
                     calibration_object.observed,
                     date_range,
                     calibration_object.threshold,
+                    calibration_object.peak_flow_threshold,
                 )
                 row = {"run": valid_suffix, "period": period_name, **result}
                 metrics = pd.concat([metrics, pd.DataFrame([row])], ignore_index=True)
@@ -611,6 +617,7 @@ class NoCalibModel(ModelExec):
                     observed,
                     date_range,
                     calibration_object.threshold,
+                    calibration_object.peak_flow_threshold,
                 )
                 nwm_row = {
                     "run": "nwm_retro",
@@ -663,7 +670,6 @@ class NoCalibModel(ModelExec):
             logger.info(traceback.format_exc())
 
         try:
-
             # Clone the agent with all fields + override df_precip
             agent_fixed = SimpleNamespace(
                 **vars(agent),
@@ -716,6 +722,10 @@ class NoCalibModel(ModelExec):
     @property
     def threshold(self):
         return self.eval_params.threshold
+
+    @property
+    def peak_flow_threshold(self):
+        return self.eval_params.peak_flow_threshold
 
     @property
     def realization_file(self) -> Path:

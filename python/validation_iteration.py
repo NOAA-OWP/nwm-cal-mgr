@@ -29,13 +29,15 @@ def main(general: General, model_conf, worker: str, iteration: int):
 
     # set environment variable for ngencerf backend
     os.environ["NGEN_RESULTS_DIR"] = str(Path(agent.workdir).parent.parent)
-    logging.info(f"Set environment variable NGEN_RESULTS_DIR to: {os.environ['NGEN_RESULTS_DIR']}")
+    logging.info(
+        f"Set environment variable NGEN_RESULTS_DIR to: {os.environ['NGEN_RESULTS_DIR']}"
+    )
 
     # read the parameter values from the *params_iteration.csv file
     file1 = Path(
         agent.calib_path,
         "ngen_" + worker + "_worker",
-        conf["model"]["eval_params"]["basinID"] + "_params_iteration.csv",
+        model_conf["eval_params"]["basinID"] + "_params_iteration.csv",
     )
     if not os.path.exists(file1):
         raise FileNotFoundError("File does not exist: " + str(file1))
@@ -58,8 +60,12 @@ def main(general: General, model_conf, worker: str, iteration: int):
             )
 
     # create t-route config file for the validation run
-    configfl = os.path.join(agent.valid_path, os.path.basename(str(agent.realization_file)))
-    valid_file = os.path.join(agent.valid_path, os.path.basename(configfl).replace("calib", general.name))
+    configfl = os.path.join(
+        agent.valid_path, os.path.basename(str(agent.realization_file))
+    )
+    valid_file = os.path.join(
+        agent.valid_path, os.path.basename(configfl).replace("calib", general.name)
+    )
     if not os.path.exists(valid_file):
         raise FileNotFoundError("File does not exist: " + str(valid_file))
     with open(valid_file) as fp:
@@ -72,7 +78,10 @@ def main(general: General, model_conf, worker: str, iteration: int):
     shutil.copy(troute_config_best, troute_config)
 
     # read validation config file
-    config_file_valid = os.path.join(agent.valid_path, os.path.basename(agent.yaml_file).replace("calib", general.name))
+    config_file_valid = os.path.join(
+        agent.valid_path,
+        os.path.basename(agent.yaml_file).replace("calib", general.name),
+    )
     if not os.path.exists(config_file_valid):
         raise FileNotFoundError("File does not exist: " + str(config_file_valid))
     with open(config_file_valid) as file:
@@ -86,11 +95,17 @@ def main(general: General, model_conf, worker: str, iteration: int):
 
     # Initialize agent
     agent_valid = Agent(
-        conf_valid["model"], general_valid.valid_path, general_valid, general_valid.log, general_valid.restart
+        conf_valid["model"],
+        general_valid.valid_path,
+        general_valid,
+        general_valid.log,
+        general_valid.restart,
     )
 
     if "nwmflow" not in model_conf.keys() or model_conf["nwmflow"] is None:
-        logger.info("No NWM retrospective streamflow simulation is available for this location")
+        logger.info(
+            "No NWM retrospective streamflow simulation is available for this location"
+        )
         agent_valid.nwmflow_file = ""
     else:
         agent_valid.nwmflow_file = model_conf["nwmflow"]
@@ -101,14 +116,21 @@ def main(general: General, model_conf, worker: str, iteration: int):
     logger.info("Validation completed")
 
 
-if __name__ == "__main__":
+def cli():
+    """Command-line interface entry point for nwm-validation-iteration."""
     print_git_info_all()
 
     # Create the command line parser
-    parser = argparse.ArgumentParser(description="Create validation inputs based on calibration config file")
-    parser.add_argument("config_file", type=Path, help="The configuration yaml file for calibration")
+    parser = argparse.ArgumentParser(
+        description="Create validation inputs based on calibration config file"
+    )
     parser.add_argument(
-        "worker_id", type=str, help="Worked ID as identified by the random string created during calibration"
+        "config_file", type=Path, help="The configuration yaml file for calibration"
+    )
+    parser.add_argument(
+        "worker_id",
+        type=str,
+        help="Worked ID as identified by the random string created during calibration",
     )
     parser.add_argument("iter_no", type=int, help="Iternation number")
 
@@ -121,3 +143,7 @@ if __name__ == "__main__":
     general.name = "valid_" + args.worker_id + "_iter" + str(args.iter_no)
 
     main(general, conf["model"], args.worker_id, args.iter_no)
+
+
+if __name__ == "__main__":
+    cli()
