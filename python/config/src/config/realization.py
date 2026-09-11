@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any, Mapping, Optional, Sequence
+from typing import Any, Mapping, Optional, Sequence, Dict, Union, List
 
 from pydantic import BaseModel, Field, field_serializer
 
@@ -25,19 +25,22 @@ class CatchmentRealization(Realization):
     forcing: Optional[Forcing]
 
 
-class NgenRealization(BaseModel):
-    """A complete ngen realization confiiguration model, including global and catchment overrides"""
+class CatchmentGroup(BaseModel):
+    formulations: str
+    forcing: Optional[str] = None
 
-    global_config: Realization = Field(alias="global")
+
+class NgenRealization(BaseModel):
+    """A complete ngen realization confiiguration model, including global, catchment, and grouped overrides"""
+
+    global_config: Optional[Realization] = Field(alias="global", default=None)
     time: Time
     routing: Optional[Routing] = None
-    # FIXME have not tested catchments...
-    catchments: Optional[Mapping[str, CatchmentRealization]] = Field(default_factory=dict)
+    formulation_groups: Optional[Dict[str, Sequence[Formulation]]] = Field(default_factory=dict)
+    forcing_groups: Dict[str, Forcing] = Field(default_factory=dict)
+    catchments: Optional[Mapping[str, Union[CatchmentRealization, CatchmentGroup]]] = Field(default_factory=dict)
+    output_format: Optional[List[str]] = None
 
-    # FIXME https://github.com/samuelcolvin/pydantic/issues/2277
-    # Until 1.10, it looks like nested encoder config doesn't apply
-    # so you have to define the encoder at the top level object that
-    # will be serialized...
     class Config:
         validate_by_name = True
 
@@ -48,8 +51,24 @@ class NgenRealization(BaseModel):
 
     def resolve_paths(self):
         """resolve possible relative paths in configuration"""
-        self.global_config.resolve_paths()
-        for k, v in self.catchments.items():
-            v.resolve_paths()
-        if self.routing != None:
+        # Resolve global formulation paths
+        if self.global_config is not None:
+            self.global_config.resolve_paths()
+
+        # Resolve grouped formulation paths
+        for grp, formulations in self.formulation_groups.items():
+            for f in formulations:
+                f.resolve_paths()
+
+        # Resolve forcing groups
+        for grp, forcing in self.forcing_groups.items():
+            forcing.resolve_paths()
+
+        # Resolve catchment formulations
+        if self.catchments:
+            for catchment_id, catchment_config in self.catchments.items():
+                if isinstance(catchment_config, CatchmentRealization):
+                    catchment_config.resolve_paths()
+
+        if self.routing:
             self.routing.resolve_paths()

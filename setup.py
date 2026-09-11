@@ -24,7 +24,8 @@ install_requires = load_requirements(
 # Find packages from both src directories
 calib_packages = find_packages(where="python/calib/src")
 config_packages = find_packages(where="python/config/src")
-all_packages = calib_packages + config_packages
+common_packages = find_packages(where="python/common/src")
+all_packages = calib_packages + config_packages + common_packages
 
 # Build package_dir mapping
 package_dir = {
@@ -34,6 +35,8 @@ for pkg in calib_packages:
     package_dir[pkg] = "python/calib/src/" + pkg
 for pkg in config_packages:
     package_dir[pkg] = "python/config/src/" + pkg
+for pkg in common_packages:
+    package_dir[pkg] = "python/common/src/" + pkg
 
 setup(
     name="nwm-cal-mgr",

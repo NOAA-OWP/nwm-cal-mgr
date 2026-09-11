@@ -6,7 +6,6 @@ This module implements several classes to hold generation confugrations.
 
 from __future__ import annotations  # for pydnaitc
 
-import logging
 import os
 from pathlib import Path
 from typing import Annotated, Dict, List, Optional, Union
@@ -16,23 +15,24 @@ try:  # to get literal in python 3.7, it was added to typing in 3.8
 except ImportError:
     from typing_extensions import Literal
 
-import glob
 import json
+import shutil
 import traceback
 from datetime import datetime
+from pathlib import Path
 
+import ewts
+import geopandas as gpd
+import netCDF4
 import pandas as pd
+from common import get_calmgr_logger
 from pydantic import BaseModel, DirectoryPath, Field, PrivateAttr
 
 from .model import ModelExec, PosInt
 from .ngen import Ngen
 from .strategy import Estimation, Sensitivity
 
-logging.basicConfig(
-    level=logging.DEBUG,
-    format="%(asctime)s,%(msecs)d %(levelname)s: %(message)s",
-    datefmt="%H:%M:%S",
-)
+logger = get_calmgr_logger()
 
 
 class General(BaseModel):
@@ -55,6 +55,7 @@ class General(BaseModel):
     calibration_run_id: Optional[int] = None
     ngen_cerf: Optional[bool] = None
     auth_token: Optional[str] = None
+    ngencerf_base_url: Optional[str] = None
     # Private
     _calib_path: Path
     _valid_path: Path
@@ -98,32 +99,10 @@ class NoModel(BaseModel):
 class Model(BaseModel):
     """Composition data class for defining a model configuration."""
 
-    # model: Union[Ngen, NoModel] = Field(discriminator='type')
-    # model: Union[Ngen, NoModel, NoCalibModel] = Field(discriminator="type")
     model: Annotated[
         Union[Ngen, NoModel, NoCalibModel],
         Field(discriminator="type"),  # <-- v2 style discriminated union
     ]
-
-
-import logging
-import shutil
-from pathlib import Path
-
-import geopandas as gpd
-import netCDF4
-
-logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
-
-
-# from .metrics import calculate_all_metrics
-from .model import BaseModel
-
-# logger = logging.getLogger("NGEN_CAL")
-
-
-# ... [existing imports and code above remain unchanged] ...
 
 
 class NoCalibModel(ModelExec):
@@ -246,17 +225,17 @@ class NoCalibModel(ModelExec):
                 }
             )
 
-            # Get date
-            tnx_file = list(Path(_output_file).parent.glob("nex*.csv"))[0]
-            tnx_df = pd.read_csv(
-                tnx_file, index_col=0, parse_dates=[1], names=["ts", "time", "Q"]
-            ).set_index("time")
-            dt_range = pd.date_range(
-                tnx_df.index[1], tnx_df.index[-1], len(_output.index)
-            ).round("min")
+            # Get date range
+            times = netCDF4.num2date(
+                ncvar["time"][:],
+                units=ncvar["time"].units,
+            )
+
+            dt_range = pd.DatetimeIndex([pd.Timestamp(t.isoformat()) for t in times])
             _output.index = dt_range
             _output.index.name = "Time"
             _output = _output.resample("1h").first()
+
             logger.info("Simulation results ready (DataFrame populated)")
             hydrograph = _output
 
@@ -267,6 +246,11 @@ class NoCalibModel(ModelExec):
         except Exception as e:
             raise (e)
 
+        if hydrograph is None or hydrograph.empty:
+            msg = "Simulated hydrograph is unavailable or empty."
+            logger.error(msg)
+            raise ValueError(msg)
+        
         return hydrograph
 
     def postprocess_single_calibration_output(self, agent):
@@ -277,8 +261,8 @@ class NoCalibModel(ModelExec):
         from types import SimpleNamespace
 
         import pandas as pd
+        from nwm_metrics.metric_functions import calculate_metrics
 
-        from calib import metric_functions as mf
         from calib.plot_output import plot_calib_output
         from calib.utils import report_to_ngencerf
 
@@ -290,7 +274,6 @@ class NoCalibModel(ModelExec):
         plot_iter_path.mkdir(exist_ok=True)
         output_iter_path.mkdir(parents=True, exist_ok=True)
 
-        logger = logging.getLogger("NGEN_CAL")
         output_dir = Path(workdir)
 
         sim_streamflow_col = "sim_flow"
@@ -317,6 +300,13 @@ class NoCalibModel(ModelExec):
 
             # Load observed data
             obs_df = pd.read_csv(self.obsflow, parse_dates=["value_date"])
+
+            # if obs is empty, raise an error
+            if obs_df.empty:
+                msg = f"Streamflow observation file is empty: {self.obsflow}"
+                logger.error(msg)
+                raise ValueError(msg)
+            
             obs_df = obs_df.rename(
                 columns={"value_date": "Time", obs_df.columns[1]: obs_flow_col}
             ).set_index("Time")
@@ -329,17 +319,15 @@ class NoCalibModel(ModelExec):
 
             df_all = pd.merge(obs_df, sim_df, left_index=True, right_index=True)
 
-            metrics = mf.calculate_all_metrics(
+            metrics = calculate_metrics(
                 df_all[obs_flow_col],
                 df_all[sim_streamflow_col],
-                self.eval_params.threshold,
-                self.eval_params.peak_flow_threshold / 100.0,
+                threshold_categorical=self.eval_params.threshold_categorical,
+                threshold_event=self.eval_params.threshold_event,
             )
             metrics_df = pd.DataFrame([metrics])
             metrics_df.insert(0, "iteration", 0, True)
 
-            # IS THIS CORRECT???????
-            # metrics_df["objFunVal"] = metrics_df[self.eval_params.objective.upper()]
             metrics_best_path = workdir / f"{basin_id}_metrics_iteration.csv"
             metrics_df.to_csv(metrics_best_path, index=False)
 
@@ -401,8 +389,8 @@ class NoCalibModel(ModelExec):
             # Create calibration_object with required fields
             calibration_object = SimpleNamespace(
                 output=output,
-                threshold=self.eval_params.threshold,
-                peak_flow_threshold=self.eval_params.peak_flow_threshold,
+                threshold_categorical=self.eval_params.threshold_categorical,
+                threshold_event=self.eval_params.threshold_event,
                 streamflow_name=sim_streamflow_col,
                 observed=observed,
                 station_name=basin_id,
@@ -526,8 +514,8 @@ class NoCalibModel(ModelExec):
                 valid_evaluation_range=self.eval_params._valid_eval_range,
                 full_evaluation_range=self.eval_params._full_eval_range,
                 streamflow_name=sim_streamflow_col,
-                threshold=self.eval_params.threshold,
-                peak_flow_threshold=self.eval_params.peak_flow_threshold,
+                threshold_categorical=self.eval_params.threshold_categorical,
+                threshold_event=self.eval_params.threshold_event,
             )
             time_period = {
                 "calib": calibration_object.evaluation_range,
@@ -542,8 +530,8 @@ class NoCalibModel(ModelExec):
                     calibration_object.output,
                     calibration_object.observed,
                     date_range,
-                    calibration_object.threshold,
-                    calibration_object.peak_flow_threshold,
+                    calibration_object.threshold_categorical,
+                    calibration_object.threshold_event,
                 )
                 row = {"run": valid_suffix, "period": period_name, **result}
                 metrics = pd.concat([metrics, pd.DataFrame([row])], ignore_index=True)
@@ -616,8 +604,8 @@ class NoCalibModel(ModelExec):
                     calibration_object.output,
                     observed,
                     date_range,
-                    calibration_object.threshold,
-                    calibration_object.peak_flow_threshold,
+                    calibration_object.threshold_categorical,
+                    calibration_object.threshold_event,
                 )
                 nwm_row = {
                     "run": "nwm_retro",
@@ -720,12 +708,12 @@ class NoCalibModel(ModelExec):
         return self.eval_params._eval_range
 
     @property
-    def threshold(self):
-        return self.eval_params.threshold
+    def threshold_categorical(self):
+        return self.eval_params.threshold_categorical
 
     @property
-    def peak_flow_threshold(self):
-        return self.eval_params.peak_flow_threshold
+    def threshold_event(self):
+        return self.eval_params.threshold_event
 
     @property
     def realization_file(self) -> Path:

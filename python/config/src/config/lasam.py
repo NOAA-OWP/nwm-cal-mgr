@@ -1,4 +1,4 @@
-from typing import ClassVar, Literal, Mapping, Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -18,8 +18,3 @@ class LASAM(BMICxx):
     registration_function: str = "none"
     main_output_variable: str = "precipitation_rate"
     model_name: Literal["LASAM"] = Field(default="LASAM", alias="model_type_name")
-
-    variable_names_map: ClassVar[Mapping[str, str]] = {
-        "precipitation_rate": "QINSUR",
-        "potential_evapotranspiration_rate": "EVAPOTRANS",
-    }

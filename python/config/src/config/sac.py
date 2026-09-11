@@ -1,4 +1,4 @@
-from typing import ClassVar, Literal, Mapping, Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -6,7 +6,7 @@ from .bmi_formulation import BMIFortran
 
 
 class SACParams(BaseModel):
-    """Class for validating snow17 Parameters"""
+    """Class for validating sac-sma Parameters"""
 
     # define params which can be adjusted here
     # see cfe.py for example
@@ -21,12 +21,7 @@ class SAC(BMIFortran):
 
     # NGEN complains about 'model_params' = {} in input...use none to remove it for now
     model_params: Optional[SACParams] = None
-    main_output_variable: str = "z"
+    main_output_variable: str = "tci_giuh"
+    registration_function: str = "register_bmi_sac"
     # NOTE aliases don't propagate to subclasses, so we have to repeat the alias
     model_name: Literal["sac"] = Field(default="sac", alias="model_type_name")
-
-    variable_names_map: ClassVar[Mapping[str, str]] = {
-        "precip": "atmosphere_water__liquid_equivalent_precipitation_rate",
-        "tair": "land_surface_air__temperature",
-        "pet": "water_potential_evaporation_flux",
-    }

@@ -1,8 +1,9 @@
 import json
-import logging
 
-logger = logging.getLogger(__name__)
+from common import get_calmgr_logger
 
+def _logger():
+    return get_calmgr_logger()
 
 def transform_component(component_git_info):
     """
@@ -53,17 +54,17 @@ def recursive_print(d: dict, indent: int = 0) -> None:
     """
     for key, value in d.items():
         if isinstance(value, dict):
-            logger.info(" " * indent + f"{key}:")
+            _logger().info(" " * indent + f"{key}:")
             recursive_print(value, indent + 2)
         elif isinstance(value, list):
-            logger.info(" " * indent + f"{key}:")
+            _logger().info(" " * indent + f"{key}:")
             for item in value:
                 if isinstance(item, dict):
                     recursive_print(item, indent + 2)
                 else:
-                    logger.info(" " * (indent + 2) + str(item))
+                    _logger().info(" " * (indent + 2) + str(item))
         else:
-            logger.info(" " * indent + f"{key}: {value}")
+            _logger().info(" " * indent + f"{key}: {value}")
 
 
 def print_git_info(git_info_file: str):
@@ -78,14 +79,14 @@ def print_git_info(git_info_file: str):
         with open(git_info_file, "r") as f:
             git_info = json.load(f)
     except FileNotFoundError:
-        logger.warning(f"{git_info_file} not found")
+        _logger().warning(f"{git_info_file} not found")
         return
     except json.decoder.JSONDecodeError as e:
-        logger.warning(f"Error reading {git_info_file}: {e}")
+        _logger().warning(f"Error reading {git_info_file}: {e}")
         return
 
     if not git_info:
-        logger.error(f"Failed to retrieve git information from {git_info_file}.")
+        _logger().error(f"Failed to retrieve git information from {git_info_file}.")
         return
 
     # Transform each top-level component without removing the keys.
@@ -102,4 +103,4 @@ def print_git_info_all():
     """
     print_git_info("/ngen-app/nwm-cal-mgr_git_info.json")
     print_git_info("/ngen-app/ngen_git_info.json")
-    logger.info(" ")
+    _logger().info(" ")

@@ -8,25 +8,11 @@ def ImportString_schema(cls, field_schema):
 
 ImportString.__modify_schema__ = classmethod(ImportString_schema)
 
-from . import gwo_global_best, gwo_swarms, metric_functions, plot_functions, plot_output
+from . import gwo_global_best, gwo_swarms, plot_functions, plot_output
 from .calibratable import Adjustable, Calibratable, Evaluatable
 from .calibration_set import CalibrationSet, UniformCalibrationSet
 from .configuration import General, Model
 from .meta import JobMeta
-from .metric_functions import (
-    KGE,
-    NSE,
-    Weighted_NSE,
-    calculate_all_metrics,
-    categorical_score,
-    mean_abs_error,
-    pbias_fdc,
-    pearson_corr,
-    percent_bias,
-    rmse_std_ratio,
-    root_mean_squared_error,
-    treat_values,
-)
 from .plot_functions import (
     barplot_metric,
     plot_cost_hist,

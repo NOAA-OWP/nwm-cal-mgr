@@ -83,8 +83,8 @@ def ngen_config(realization_config, workdir) -> Ngen:
         "type": "ngen",
         "strategy": "explicit",
         "realization": realization_config,
-        "catchments": Path(__file__).parent / "data/gauge_01073000/gauge_01073000.gpkg",
-        "nexus": Path(__file__).parent / "data/gauge_01073000/nexus.geojson",
+        "catchments": Path(__file__).parent / "data/gauge_01123000/gauge_01123000_nhf.gpkg",
+        "nexus": Path(__file__).parent / "data/gauge_01123000/gauge_01123000_nhf.gpkg",
         "crosswalk": Path(__file__).parent / "data/crosswalk.json",
         "binary": "echo ngen",
     }
@@ -134,7 +134,7 @@ def fabric():
     """
     Mock geoseries for defining catchment gemomentry/attributes
     """
-    catchment_data = Path(__file__).parent / "data/gauge_01073000/gauge_01073000.gpkg"
+    catchment_data = Path(__file__).parent / "data/gauge_01123000/gauge_01123000_nhf.gpkg"
     df = gpd.read_file(catchment_data, layer="divides")
     return df.loc[0]
 

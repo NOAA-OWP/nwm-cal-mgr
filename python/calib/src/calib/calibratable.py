@@ -78,6 +78,9 @@ class Adjustable(ABC):
         if iteration > 0:
             if filter_condition:
                 self.switch_param_name(["SFT", "SMP"], "smcmax", "maxsmc")
+            # Drop iteration column if it already exists to avoid duplicates
+            if str(iteration) in self._adf.columns:
+                self._adf = self._adf.drop(columns=[str(iteration)])
             mdf = pd.merge(self._adf, self._df[["param", str(iteration)]], on="param")
             mdf.sort_values(["model", "fac"], inplace=True)
             self._adf = mdf
@@ -258,14 +261,14 @@ class Evaluatable(ABC):
         return self.eval_params.basinID
 
     @property
-    def threshold(self) -> str:
+    def threshold_categorical(self) -> str:
         """streamflow threshold for calculation of categorical scores"""
-        return self.eval_params.threshold
+        return self.eval_params.threshold_categorical
 
     @property
-    def peak_flow_threshold(self) -> float:
-        """peak flow threshold for calculation of categorical scores"""
-        return self.eval_params.peak_flow_threshold
+    def threshold_event(self) -> float:
+        """peak flow threshold for calculation of event-based metrics"""
+        return self.eval_params.threshold_event
 
     @property
     def user(self) -> str:

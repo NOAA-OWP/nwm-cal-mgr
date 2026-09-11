@@ -1,4 +1,4 @@
-import logging
+import ewts
 from pathlib import Path
 from sys import platform
 from typing import Any, Literal, Mapping, Optional, Sequence, Union
@@ -12,9 +12,10 @@ from pydantic import (
 )
 from pydantic.types import ImportString
 
-logger = logging.getLogger("bmi_formulation")
-logger.addHandler(logging.StreamHandler())
-logger.setLevel(logging.INFO)
+from common import get_calmgr_logger
+
+def _logger():
+    return get_calmgr_logger()
 
 
 class BMIParams(BaseModel):
@@ -57,6 +58,7 @@ class BMIParams(BaseModel):
     # strictly optional fields (null/none) by default
     output_vars: Optional[Sequence[Union[str, Mapping[str, str]]]] = Field(None, alias="output_variables")
     output_headers: Optional[Sequence[str]] = Field(None, alias="output_header_fields")
+    output_units: Optional[Sequence[str]] = Field(None, alias="output_units")
     model_params: Optional[Mapping[str, str]]
 
     # non exposed fields, derived from fields and used to build up and validate certain components
@@ -91,22 +93,26 @@ class BMIParams(BaseModel):
         output_map = values.get("output_map", {})
         output_headers = values.get("output_header_fields", [])
         output_vars = values.get("output_variables", [])
+        output_units = values.get("output_units", [])
 
         if output_map:
             if output_vars:
-                logger.info(
+                _logger().info(
                     "BMIParams provided output map and output variables list.  List values will be ignored"
                 )
             output_vars = []
             output_headers = []
+            output_units = []
             for k, v in output_map.items():
                 output_vars.append(k)
                 if v != "":
                     output_headers.append(v)
                 else:
                     output_headers.append(k)
+                output_units.append("")
             values["output_vars"] = output_vars
             values["output_headers"] = output_headers
+            values["output_units"] = output_units
 
         return values
 

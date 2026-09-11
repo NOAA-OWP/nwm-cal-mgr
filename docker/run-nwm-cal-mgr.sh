@@ -1,174 +1,141 @@
 #!/bin/bash
 
-# Define valid commands
-VALID_COMMANDS=("calibration" "validation" "validation_iteration" "create_input")
+LOG_PREFIX="[run-nwm-cal-mgr.sh]"
 
-# This shell script lives in the nwm-cal-mgr repo.  It is used by CerfServer when calling nwm-cal-mgr
+# This shell script lives in the nwm-cal-mgr repo.
+# It is used by ngenCERF runtime containers to invoke nwm-cal-mgr scripts.
 
-# It is used by CerfServer directly when running in LOCAL mode.
-# It is used by the nwm-cal-mgr docker container when the server is running in DOCKER or PARALLEL_WORKS mode.
-
-CALIB_SCRIPT=/ngen-app/nwm-cal-mgr/python/calibration.py
-VALID_SCRIPT=/ngen-app/nwm-cal-mgr/python/validation.py
-VALID_ITERATION_SCRIPT=/ngen-app/nwm-cal-mgr/python/validation_iteration.py
-
-# I think we can get rid of this one
-CREATE_INPUT_SCRIPT=/ngen-app/ngen-python/lib/python3.10/site-packages/createInput/create_input.py
+VALID_COMMANDS=("mswm" "calibration" "validation" "validation_iteration")
 
 # Set the umask so files and directories are created with 777 permissions
 umask 000
 
-# Function to display help message
 show_help() {
-  echo "Usage: $(basename "$0") <command> <input_file> [worker_name iteration_number] [stdout_file] [venv_path]"
+  echo "Usage: $(basename "$0") <command> <input_file> [worker_name iteration_number] [stdout_file]"
   echo ""
   echo "COMMAND:"
-  echo "  calibration          Run calibration script."
-  echo "  validation           Run validation script."
-  echo "  validation_iteration Run validation iteration script (requires worker_name and iteration_number)."
-  echo "  create_input         Run create_input script."
+  echo "  mswm                 Run mswm to create inputs for calibration/validation."
+  echo "  calibration          Run calibration."
+  echo "  validation           Run validation."
+  echo "  validation_iteration Run validation for a specific iteration; requires worker_name and iteration_number."
   echo ""
-  echo "INPUT_FILE: Path to the input file required by the script."
-  echo "WORKER_NAME: (Required for validation_iteration) Name of the worker."
-  echo "ITERATION_NUMBER: (Required for validation_iteration) Iteration number."
-  echo "STDOUT_FILE (optional): Path to the stdout file where the script's console output will be saved.  Used when running in LOCAL or DOCKER environment"
-  echo "VENV_PATH (optional): Path to the Python virtual environment.  Used when running in the LOCAL environment."
+  echo "INPUT_FILE: Path to the configuration file required by the script."
+  echo "WORKER_NAME: Required for validation_iteration."
+  echo "ITERATION_NUMBER: Required for validation_iteration."
+  echo "STDOUT_FILE: Optional path where script console output will be saved."
   echo ""
   echo "Examples:"
-  echo "  $(basename "$0") calibration /path/to/input.csv"
-  echo "  $(basename "$0") validation /path/to/input.csv /path/to/output.log"
-  echo "  $(basename "$0") validation_iteration /path/to/input.csv worker1 5 /path/to/output.log /path/to/venv"
+  echo "  $(basename "$0") mswm /path/to/mswm_config.yaml"
+  echo "  $(basename "$0") calibration /path/to/calib_config.yaml"
+  echo "  $(basename "$0") validation /path/to/valid_config.yaml /path/to/output.log"
+  echo "  $(basename "$0") validation_iteration /path/to/calib_config.yaml worker1 5 /path/to/output.log"
   echo ""
   exit 1
 }
 
-# Show help if the user requests it with --help or -h
-if [[ "$1" == "--help" || "$1" == "-h" ]]; then
+if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
   show_help
+  exit 0
 fi
 
-# Check if the command for the script is provided as the first argument
-if [ -z "$1" ]; then
-  echo "[run-nwm-cal-mgr.sh] Error: No script command provided. Allowable commands are: ${VALID_COMMANDS[*]}."
+if [ -z "${1:-}" ]; then
+  echo "$LOG_PREFIX Error: No script command provided. Allowable commands are: ${VALID_COMMANDS[*]}."
   show_help
+  exit 1
 fi
 
-# Get the script command and select the corresponding script path
 SCRIPT_COMMAND=$1
 shift 1
 
 case "$SCRIPT_COMMAND" in
-  "calibration")
-    SCRIPT_PATH=$CALIB_SCRIPT
-    REQUIRED_ARGS=1
-    ;;
-  "validation")
-    SCRIPT_PATH=$VALID_SCRIPT
+  "mswm"|"calibration"|"validation")
     REQUIRED_ARGS=1
     ;;
   "validation_iteration")
-    SCRIPT_PATH=$VALID_ITERATION_SCRIPT
     REQUIRED_ARGS=3
     ;;
-  "create_input")
-    SCRIPT_PATH=$CREATE_INPUT_SCRIPT
-    REQUIRED_ARGS=1
-    ;;
   *)
-    echo "[run-nwm-cal-mgr.sh] Error: Invalid script command: '$SCRIPT_COMMAND'. Allowable commands are: ${VALID_COMMANDS[*]}."
+    echo "$LOG_PREFIX Error: Invalid script command: '$SCRIPT_COMMAND'. Allowable commands are: ${VALID_COMMANDS[*]}."
     show_help
     ;;
 esac
 
-# Check if the selected script exists
-if [ ! -f "$SCRIPT_PATH" ]; then
-  echo "Error: Script not found at $SCRIPT_PATH"
-  exit 1
-fi
-
 # Check if the correct number of arguments are provided for the selected command
-if [ $# -lt $REQUIRED_ARGS ]; then
-  echo "[run-nwm-cal-mgr.sh] Error: Insufficient arguments. $SCRIPT_COMMAND requires $REQUIRED_ARGS arguments."
+if [ $# -lt "$REQUIRED_ARGS" ]; then
+  echo "$LOG_PREFIX Error: Insufficient arguments. $SCRIPT_COMMAND requires $REQUIRED_ARGS arguments."
   show_help
 fi
 
 # Get the input file and additional parameters for validation_iteration
 INPUT_FILE=$1
 shift 1
-echo "        Input file: $INPUT_FILE"
+
+echo "$LOG_PREFIX Input file: $INPUT_FILE"
+if [ ! -f "$INPUT_FILE" ]; then
+  echo "$LOG_PREFIX Error: Input file not found: $INPUT_FILE"
+  exit 1
+fi
 
 if [ "$SCRIPT_COMMAND" == "validation_iteration" ]; then
   WORKER_NAME=$1
   ITERATION_NUMBER=$2
-  echo "           Worker name: $WORKER_NAME"
-  echo "     Iteration number: $ITERATION_NUMBER"
   shift 2
+
+  echo "$LOG_PREFIX Worker name: $WORKER_NAME"
+  echo "$LOG_PREFIX Iteration number: $ITERATION_NUMBER"
 fi
 
-# Check if the output file and venv path are provided
 STDOUT_FILE=""
 if [ $# -ge 1 ]; then
   STDOUT_FILE=$1
-  echo "      [run-nwm-cal-mgr.sh] Output file: $STDOUT_FILE"
+  shift 1
 
-  # Create output directory if it doesn't exist
+  echo "$LOG_PREFIX Output file: $STDOUT_FILE"
+
   STDOUT_DIR=$(dirname "$STDOUT_FILE")
-  if [ ! -d "$STDOUT_DIR" ]; then
-    mkdir --parents "$STDOUT_DIR"
-  fi
-
-  shift 1
+  mkdir --parents "$STDOUT_DIR"
 fi
 
-# Handle optional virtual environment
-VENV_PATH=""
-if [ $# -ge 1 ]; then
-  VENV_PATH=$1
-  echo "[run-nwm-cal-mgr.sh] Virtual environment: $VENV_PATH"
-  shift 1
+if [ $# -gt 0 ]; then
+  echo "$LOG_PREFIX Error: Unexpected extra arguments: $*"
+  show_help
 fi
 
-# Activate the virtual environment if provided
-if [ -n "$VENV_PATH" ]; then
-  if [ -d "$VENV_PATH/bin" ]; then
-    source "$VENV_PATH/bin/activate"
-  else
-    echo "[run-nwm-cal-mgr.sh] Fatal: Virtual environment path '$VENV_PATH' is invalid."
-    exit 1
-  fi
-else
-  echo "[run-nwm-cal-mgr.sh] No virtual environment provided, running with default Python environment."
-fi
+echo "$LOG_PREFIX Running $SCRIPT_COMMAND with input file: $INPUT_FILE"
 
-# Run the Python script, redirecting its output if an output file is provided
-echo "   [run-nwm-cal-mgr.sh] Running $(basename "$SCRIPT_PATH") with input file: $INPUT_FILE"
-if [ "$SCRIPT_COMMAND" == "validation_iteration" ]; then
+if [ "$SCRIPT_COMMAND" == "mswm" ]; then
   if [ -z "$STDOUT_FILE" ]; then
-    python "$SCRIPT_PATH" "$INPUT_FILE" "$WORKER_NAME" "$ITERATION_NUMBER"
+    python -m mswm.manager build_calib "$INPUT_FILE"
   else
-    python "$SCRIPT_PATH" "$INPUT_FILE" "$WORKER_NAME" "$ITERATION_NUMBER" &> "$STDOUT_FILE" 2>&1
+    python -m mswm.manager build_calib "$INPUT_FILE" > "$STDOUT_FILE" 2>&1
+  fi
+elif [ "$SCRIPT_COMMAND" == "validation_iteration" ]; then
+  if [ -z "$STDOUT_FILE" ]; then
+    "$SCRIPT_COMMAND" "$INPUT_FILE" "$WORKER_NAME" "$ITERATION_NUMBER"
+  else
+    "$SCRIPT_COMMAND" "$INPUT_FILE" "$WORKER_NAME" "$ITERATION_NUMBER" > "$STDOUT_FILE" 2>&1
   fi
 else
   if [ -z "$STDOUT_FILE" ]; then
-    python "$SCRIPT_PATH" "$INPUT_FILE"
+    "$SCRIPT_COMMAND" "$INPUT_FILE"
   else
-    python "$SCRIPT_PATH" "$INPUT_FILE" > "$STDOUT_FILE" 2>&1
+    "$SCRIPT_COMMAND" "$INPUT_FILE" > "$STDOUT_FILE" 2>&1
   fi
 fi
 
 python_exit_code=$?
+
 if [ $python_exit_code -ne 0 ]; then
-  echo "[run-nwm-cal-mgr.sh] $(basename "$SCRIPT_PATH") exited with code $python_exit_code"
+  echo "$LOG_PREFIX $SCRIPT_COMMAND exited with code $python_exit_code"
 fi
 
-# Display output if redirected to a file
 if [ -n "$STDOUT_FILE" ]; then
-  echo "Output from running $(basename "$SCRIPT_PATH")"
+  echo "$LOG_PREFIX Output from running $SCRIPT_COMMAND"
   echo "-------------- start of $STDOUT_FILE -----------------------------"
   cat "$STDOUT_FILE"
   echo "---------------- end of $STDOUT_FILE -----------------------------"
 fi
 
-echo "Done running $(basename "$SCRIPT_PATH")"
+echo "$LOG_PREFIX Done running $SCRIPT_COMMAND"
 
 exit $python_exit_code

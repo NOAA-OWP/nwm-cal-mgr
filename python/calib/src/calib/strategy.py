@@ -14,7 +14,7 @@ try:  # to get literal in python 3.7, it was added to typing in 3.8
 except ImportError:
     from typing_extensions import Literal
 
-from . import metric_functions
+from nwm_metrics import metric_functions
 
 # from . import objectives
 
@@ -32,10 +32,10 @@ class Objective(str, Enum):
     """Enumeration of supported objective functions."""
 
     __func_map__ = {
-        "kge": metric_functions.KGE,
-        "nse": metric_functions.NSE,
-        "nnse": metric_functions.NSE,
-        "nselog": metric_functions.NSE,
+        "kge": metric_functions.kge,
+        "nse": metric_functions.nse,
+        "nnse": metric_functions.nse,
+        "nselog": metric_functions.nse,
         "corr": metric_functions.pearson_corr,
         "rmse": metric_functions.root_mean_squared_error,
         "mae": metric_functions.mean_abs_error,

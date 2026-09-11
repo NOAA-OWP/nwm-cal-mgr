@@ -41,9 +41,13 @@ from pyswarms.utils.reporter import Reporter
 
 from .gwo_swarms import SwarmOptimizer
 
-logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
 
+import ewts
+from common import get_calmgr_logger
+logger = get_calmgr_logger()
+
+import logging
+from pathlib import Path
 
 class GlobalBestGWO(SwarmOptimizer):
     def __init__(
@@ -99,10 +103,13 @@ class GlobalBestGWO(SwarmOptimizer):
             basinid=basinid,
         )
 
-        # Initialize logger
-        self.rep = Reporter(logger=logging.getLogger(__name__))
+        
+        # Initialize pyswarms Reporter
+        self.rep = Reporter()
+        
         # Initialize the resettable attributes
         self.reset()
+        
         # Initialize the topology
         self.top = Star()
         self.name = __name__
@@ -167,7 +174,7 @@ class GlobalBestGWO(SwarmOptimizer):
             self.update_history(1)
             initial_iter = self.start_iter
         else:
-            logger.info("Restart at iteration", self.start_iter)
+            logger.info(f"Restart at iteration {self.start_iter}")
             alpha, beta, delta = (
                 self.swarm.leader_pos[0],
                 self.swarm.leader_pos[1],

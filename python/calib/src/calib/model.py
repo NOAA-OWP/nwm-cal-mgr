@@ -20,8 +20,7 @@ try:  # to get literal in python 3.7, it was added to typing in 3.8
 except ImportError:
     from typing_extensions import Literal
 
-import logging
-
+import ewts
 import pandas as pd
 import yaml
 from pydantic import (
@@ -35,8 +34,9 @@ from pydantic.types import ImportString
 
 from .strategy import Objective
 
-logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
+import ewts
+from common import get_calmgr_logger
+logger = get_calmgr_logger()
 
 
 # additional constrained types
@@ -90,8 +90,8 @@ class EvaluationOptions(BaseModel):
     _best_save_flag: bool = None
     id: Optional[str] = None
     basinID: Optional[str] = None
-    threshold: Optional[float] = None
-    peak_flow_threshold: Optional[float] = 90.0
+    threshold_categorical: Optional[dict] = {"value": 0.9, "type": "quantile"}
+    threshold_event: Optional[dict] = {"value": 0.9, "type": "quantile"}
     site_name: Optional[str] = None
     streamflow_name: Optional[str] = "sim_flow"
     save_output_iteration: Optional[bool] = False
@@ -638,7 +638,7 @@ class ModelExec(BaseModel, Configurable):
     binary: str
     args: Optional[str] = None
     workdir: DirectoryPath = Path("./")  # FIXME test the various workdirs
-    eval_params: Optional[EvaluationOptions] = Field(default=EvaluationOptions())
+    eval_params: Optional[EvaluationOptions] = Field(default_factory=EvaluationOptions)
 
     # FIXME formalize type: str = "ModelName"
     def get_binary(self) -> str:

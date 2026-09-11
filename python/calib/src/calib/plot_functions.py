@@ -2,10 +2,9 @@
 This module contains functions to plot output files from calibration and vallidation runs.
 @author: Xia Feng
 """
-
-import logging
 import math
 import os
+
 from typing import Dict, List, Optional, Union
 
 import matplotlib.pyplot as plt
@@ -13,9 +12,10 @@ import numpy as np
 import pandas as pd
 import scipy.stats as sp
 
-logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
+from common import get_calmgr_logger
 
+def _logger():
+    return get_calmgr_logger()
 
 __all__ = [
     "plot_streamflow",
@@ -57,7 +57,7 @@ def plot_streamflow(
     None
     """
 
-    logger.debug("---Plotting Streamflow Time Series---")
+    _logger().debug("---Plotting Streamflow Time Series---")
 
     # Obtain column names
     colname = list(df.columns)
@@ -121,7 +121,7 @@ def plot_streamflow(
             f"Inaccessible output location during calibration. "
             f"Path {os.path.dirname(plotfile)} does not exist."
         )
-        logger.error(msg)
+        _logger().error(msg)
         raise FileNotFoundError(msg)
     fig.savefig(plotfile)
     plt.close()
@@ -153,7 +153,7 @@ def plot_streamflow_precipitation(
     None
 
     """
-    logger.debug("---Plotting Streamflow Time Series with Precipitation---")
+    _logger().debug("---Plotting Streamflow Time Series with Precipitation---")
 
     # Obtain column names
     colname = list(df.columns)
@@ -170,7 +170,7 @@ def plot_streamflow_precipitation(
         # ts = pd.DatetimeIndex(dfp[colname[0]])
         dfp["Dates"] = ts
     except Exception as e:
-        logger.info(e)
+        _logger().info(e)
         ts = pd.DatetimeIndex(dfp.index)
         dfp["Dates"] = ts
 
@@ -294,7 +294,7 @@ def scatterplot_streamflow(
     None
 
     """
-    logger.debug(
+    _logger().debug(
         "---Plotting Scatterplot of Streamflow between Observation and Other Runs---"
     )
 
@@ -363,7 +363,7 @@ def plot_output(
     None
 
     """
-    logger.debug("---Plotting Output from Different Runs---")
+    _logger().debug("---Plotting Output from Different Runs---")
 
     # Change date column to datetime dtype
     ts = pd.DatetimeIndex(df["Time"])
@@ -489,13 +489,13 @@ def scatterplot_objfun(
     None
 
     """
-    logger.debug("---Plotting Scatterplot between Objective Funtion and Iteration---")
+    _logger().debug("---Plotting Scatterplot between Objective Funtion and Iteration---")
 
     # Read file
     df = pd.read_csv(metric_file)
 
     # Plot
-    fig, ax = plt.subplots(dpi=150, tight_layout=True)
+    fig, ax = plt.subplots(figsize=(10, 6), dpi=150, tight_layout=True)
     ax.plot(
         df.loc[:, ["iteration"]],
         df.loc[:, [objective_fun_column]],
@@ -558,7 +558,7 @@ def scatterplot_var(
     None
 
     """
-    logger.debug("---Plotting Scatterplot between Variables and Iteration---")
+    _logger().debug("---Plotting Scatterplot between Variables and Iteration---")
 
     # Read file
     df = pd.read_csv(var_file)
@@ -651,7 +651,7 @@ def scatterplot_objfun_metric(
     None
 
     """
-    logger.debug("---Plotting Scatterplot between Objective Function and Metric---")
+    _logger().debug("---Plotting Scatterplot between Objective Function and Metric---")
 
     # Read file
     df = pd.read_csv(var_file)
@@ -661,7 +661,7 @@ def scatterplot_objfun_metric(
     # make sure objfunc is not NaN
     df.dropna(subset=[objcol], inplace=True)
     if df.shape[0] == 0:
-        logger.info(
+        _logger().info(
             "Not valid objfuc value; scatterplot for mmetrics cannot be created"
         )
         return
@@ -742,7 +742,7 @@ def barplot_metric(
     None
 
     """
-    logger.debug("---Plotting Barplot of Metrics---")
+    _logger().debug("---Plotting Barplot of Metrics---")
 
     # Set index
     allcols = list(df.columns)
@@ -834,7 +834,7 @@ def plot_fdc_calib(
     None
 
     """
-    logger.debug("---Plotting FDC of Observation and Other Runs---")
+    _logger().debug("---Plotting FDC of Observation and Other Runs---")
 
     # Figure arguments
     colname = list(df.columns)[1:]
@@ -895,7 +895,7 @@ def plot_fdc_valid(
     None
 
     """
-    logger.debug("---Plotting FDC of Observation and Other Runs---")
+    _logger().debug("---Plotting FDC of Observation and Other Runs---")
     # Figure arguments
     colname = list(df.columns)[1:]
     # this treatment is moved to plot_calib_output & plot_valid_output in plot_functions.py
@@ -974,7 +974,7 @@ def plot_cost_hist(
     None
 
     """
-    logger.debug("---Plotting Convergence Curve for Global and Local Best Values---")
+    _logger().debug("---Plotting Convergence Curve for Global and Local Best Values---")
 
     # Read file
     df = pd.read_csv(cost_file)
@@ -1032,13 +1032,13 @@ def plot_obj_fun(agent, suffix="calib", output_dir=None):
 
     cost_file = work_dir / "Output_Calib" / f"{basin_id}_output_cost.csv"
     if not cost_file.exists():
-        logger.info(f"Cost file does not exist: {cost_file}")
+        _logger().info(f"Cost file does not exist: {cost_file}")
         return
 
     df = pd.read_csv(cost_file)
 
     if "value" not in df.columns or "iteration" not in df.columns:
-        logger.info(f"Required columns not found in {cost_file}")
+        _logger().info(f"Required columns not found in {cost_file}")
         return
 
     plt.style.use("ggplot")

@@ -5,8 +5,8 @@ properties related to configurations for executing calibration and validation ru
 @author: Nels Frazer, Xia Feng
 """
 
-import logging
 import os
+
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -18,8 +18,9 @@ from calib.meta import JobMeta
 from .configuration import Model
 from .utils import pushd
 
-logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
+import ewts
+from common import get_calmgr_logger
+logger = get_calmgr_logger()
 
 if TYPE_CHECKING:
     from typing import Any, Mapping, Sequence
@@ -86,6 +87,7 @@ class Agent(BaseAgent):
         log: bool = False,
         restart: bool = False,
         agent_counter=0,
+        worker_name: str | None = None,
     ):
         """Construct attributes for the Agent class."""
         self._workdir = workdir
@@ -102,7 +104,7 @@ class Agent(BaseAgent):
         worker_prefix = (
             "ngen" if model_conf["type"] == "nocalib" else model_conf["type"]
         )
-
+        
         if restart and "calib" in self._run_name:
             # find prior ngen workdirs
             # FIXME if a user starts with an independent calibration strategy
@@ -117,12 +119,10 @@ class Agent(BaseAgent):
             if len(workdirs) > 1 and self._algorithm == "pso":
                 logger.warning("More than one existing {} workdir, cannot restart")
             else:
-                self._job = JobMeta(
-                    worker_prefix, workdir, workdirs[agent_counter], log=log
-                )
+                self._job = JobMeta(worker_prefix, workdir, workdirs[agent_counter], log=log, worker_name=worker_name)
 
         if self._job is None:
-            self._job = JobMeta(worker_prefix, workdir, log=log)
+            self._job = JobMeta(worker_prefix, workdir, log=log, worker_name=worker_name)
 
         if "calib" in self._run_name:
             self._calib_path_output = os.path.join(self._job.workdir, "Output_Calib")
@@ -248,17 +248,30 @@ class Agent(BaseAgent):
         return self.model.realization_file
 
     def duplicate(self, restart_flag=False, agent_counter=0) -> "Agent":
-        # serialize a copy of the model
-        # FIXME ??? if you do self.model.resolve_paths() here, the duplicated agent
-        # doesn't have fully qualified paths...but if you do it in constructor, it works fine...
-        data = self.model.model_copy(deep=True)
-        # return a new agent, which has a unique Model instance
-        # and its own Job/workspace
-        return Agent(
-            data.model_dump(by_alias=True),
+        """Create a duplicate agent with independent workspace"""
+        # Create minimal model config just to create worker
+        # TODO: This reinitializes the NgenUniform/NgenGrouped code for each particle in PSO, which isn't efficient
+        minimal_model = {
+            "type": self.model.model_type,
+            "strategy": self.model.model_strategy,
+            "catchments": self.model.strategy.catchments,
+            "params": self.model.strategy.params,
+            "nexus": self.model.strategy.nexus,
+            "crosswalk": self.model.strategy.crosswalk,
+            "realization": self.model.strategy.realization
+        }
+
+        # Create new agent with minimal model
+        new_agent = Agent(
+            minimal_model,
             self._workdir,
             self._general,
             log=False,
             restart=restart_flag,
-            agent_counter=agent_counter,
+            agent_counter=agent_counter
         )
+
+        # Replace model with shared reference to original model
+        new_agent._model = self._model
+
+        return new_agent

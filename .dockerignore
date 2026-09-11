@@ -10,3 +10,4 @@ docker/ngen-cal-local.env
 .gitpod.Dockerfile
 .gitpod.yml 
 sonar-project.properties
+*_git_info.json
